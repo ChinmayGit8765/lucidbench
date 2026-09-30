@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Activity, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -13,8 +13,19 @@ const nav: { id: Page; label: string; icon: typeof Users }[] = [
   { id: "system", label: "System", icon: Activity },
 ]
 
+const pageFromPath = (): Page => (location.pathname === "/system" ? "system" : "accounts")
+
 export default function App() {
-  const [page, setPage] = useState<Page>("accounts")
+  const [page, setPageState] = useState<Page>(pageFromPath)
+  const setPage = (p: Page) => {
+    history.pushState(null, "", `/${p}`)
+    setPageState(p)
+  }
+  useEffect(() => {
+    const onPop = () => setPageState(pageFromPath())
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
   const health = useHealth()
   const ok = health?.status === "ok"
 
@@ -49,7 +60,7 @@ export default function App() {
           </span>
         </header>
         <main className="flex-1 overflow-auto p-6">
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-5xl">
             {page === "accounts" ? <Accounts /> : <System health={health} />}
           </div>
         </main>
