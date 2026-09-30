@@ -1,0 +1,53 @@
+# Lucidbench
+
+Lucidbench is an open-source, all-in-one AI workspace: your Claude, ChatGPT/Codex, Grok and Cursor accounts in one clear workspace, a cross-model council that lets models check each other, usage planning across all of them, Linear, GitHub and Obsidian integrations, and a Kubernetes job runner for agent work.
+
+**Status: pre-alpha, M0.** Only the skeleton exists: a Go daemon, a CLI and an empty web UI.
+
+## Quick start
+
+```sh
+docker compose up
+```
+
+Then open <http://localhost:7420>.
+
+## Development
+
+Requirements: Go 1.25, Node 22.
+
+```sh
+# Web UI (dev server on :5173, proxies /api to :7420)
+cd web
+npm install
+npm run dev
+
+# Daemon (serves the API and the embedded UI from web/dist)
+go run ./cmd/lucidd
+
+# CLI
+go run ./cmd/lucid version
+go run ./cmd/lucid health
+
+# Checks
+go vet ./... && go test ./...
+cd web && npm run build
+```
+
+`LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
+
+## Roadmap
+
+- **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
+- **M1**: accounts, council and clarity
+- **M2**: usage planner
+- **M3**: boards and integrations
+- **M4**: Kubernetes runner and acting agents
+- **M5**: conversational terminal
+- **M6**: public launch
+
+See [docs/STACK.md](docs/STACK.md) for the stack decision.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
