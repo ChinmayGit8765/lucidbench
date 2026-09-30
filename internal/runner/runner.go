@@ -9,8 +9,9 @@ import (
 	"strings"
 )
 
-// Image is the agent image tag.
-const Image = "lucidbench/agent:dev"
+// Image is the agent image tag. The daemon and CLI set it from config
+// (agent.image) at startup.
+var Image = "lucidbench/agent:dev"
 
 // HostProfile selects the host's own provider config dir.
 const HostProfile = "host"

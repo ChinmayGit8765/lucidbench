@@ -82,5 +82,11 @@ func ListVolumes() []Profile {
 
 // All returns host, env and volume profiles.
 func All(r Roots) []Profile {
-	return append(Detect(r), ListVolumes()...)
+	out := Detect(r)
+	for _, v := range ListVolumes() {
+		if r.On(v.Provider) {
+			out = append(out, v)
+		}
+	}
+	return out
 }

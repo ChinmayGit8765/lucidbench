@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
@@ -28,11 +29,17 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Version: version.Version})
 }
 
-// New returns the root handler: /api/* routes plus the embedded UI.
-func New() http.Handler {
+// New returns the root handler: /api/* routes plus the embedded UI. An
+// optional config (from config.Load) is applied; without one, defaults are used.
+func New(cfgs ...*config.Config) http.Handler {
+	cfg := config.Default()
+	if len(cfgs) > 0 {
+		cfg = cfgs[0]
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", HealthHandler)
-	mux.Handle("/api/accounts", accounts.Handler())
+	mux.Handle("/api/accounts", accounts.HandlerFor(func() accounts.Roots { return accounts.FromConfig(cfg) }))
+	mux.Handle("/api/config", config.Handler(cfg, nil))
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	mux.Handle("/api/", http.NotFoundHandler())

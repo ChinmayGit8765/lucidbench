@@ -11,19 +11,21 @@ import (
 	"sigs.k8s.io/kind/pkg/cmd"
 
 	kindcfg "github.com/ChinmayGit8765/lucidbench/deploy/kind"
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 )
 
-// Name is the kind cluster name.
-const Name = "lucidbench"
+// Name is the kind cluster name. The daemon and CLI set it from config
+// (cluster.name) at startup.
+var Name = "lucidbench"
 
 // KubeconfigPath is where Lucidbench keeps its kubeconfig, kept separate from
 // the user's default kubeconfig.
 func KubeconfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.DataDir()
 	if err != nil {
-		return "", fmt.Errorf("locate user config dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(dir, "lucidbench", "kubeconfig"), nil
+	return filepath.Join(dir, "kubeconfig"), nil
 }
 
 func provider() *cluster.Provider {

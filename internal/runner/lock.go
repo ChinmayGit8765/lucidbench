@@ -7,18 +7,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 )
 
 // Lock is an exclusive per-profile lock file.
 type Lock struct{ path string }
 
-// LockPath returns the lock file path under the user config dir.
+// LockPath returns the lock file path under the Lucidbench data dir.
 func LockPath(provider, profile string) (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.DataDir()
 	if err != nil {
 		return "", err
 	}
-	return LockPathIn(dir, provider, profile), nil
+	return filepath.Join(dir, "locks", provider+"-"+profile+".lock"), nil
 }
 
 // LockPathIn returns the lock path under an explicit config dir.

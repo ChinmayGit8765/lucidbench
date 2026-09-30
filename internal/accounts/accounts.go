@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 )
 
 // Location values for Profile.Location.
@@ -53,6 +55,34 @@ type Roots struct {
 	CodexHome       string // overrides Home/.codex when set
 	Getenv          func(string) string
 	Now             func() time.Time
+
+	// Disabled providers are skipped by detection; ExtraDirs holds additional
+	// config directories for codex and grok (Claude uses ExtraClaudeDirs).
+	Disabled  map[string]bool
+	ExtraDirs map[string][]string
+}
+
+// On reports whether a provider is enabled.
+func (r Roots) On(provider string) bool { return !r.Disabled[provider] }
+
+// FromConfig is FromEnv plus the user's provider settings.
+func FromConfig(c *config.Config) Roots {
+	r := FromEnv()
+	r.Disabled = map[string]bool{}
+	r.ExtraDirs = map[string][]string{}
+	for _, p := range config.Providers {
+		if !c.ProviderEnabled(p) {
+			r.Disabled[p] = true
+		}
+		r.ExtraDirs[p] = c.ExtraDirs(p)
+	}
+	// The config already folds in LUCID_CLAUDE_DIRS; CLAUDE_CONFIG_DIR stays.
+	dirs := append([]string(nil), c.ExtraDirs("claude")...)
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		dirs = append(dirs, d)
+	}
+	r.ExtraClaudeDirs = dirs
+	return r
 }
 
 // FromEnv builds Roots from the process environment.
@@ -81,25 +111,40 @@ func Detect(r Roots) []Profile {
 	}
 	var out []Profile
 
-	defClaude := filepath.Join(r.Home, ".claude")
-	out = append(out, claudeProfile(r, "default", defClaude))
-	seen := map[string]bool{filepath.Clean(defClaude): true}
-	for _, d := range r.ExtraClaudeDirs {
-		if d == "" || seen[filepath.Clean(d)] {
-			continue
+	if r.On("claude") {
+		defClaude := filepath.Join(r.Home, ".claude")
+		out = append(out, claudeProfile(r, "default", defClaude))
+		seen := map[string]bool{filepath.Clean(defClaude): true}
+		for _, d := range r.ExtraClaudeDirs {
+			if d == "" || seen[filepath.Clean(d)] {
+				continue
+			}
+			seen[filepath.Clean(d)] = true
+			out = append(out, claudeProfile(r, filepath.Base(d), d))
 		}
-		seen[filepath.Clean(d)] = true
-		out = append(out, claudeProfile(r, filepath.Base(d), d))
 	}
 
-	codexDir := r.CodexHome
-	if codexDir == "" {
-		codexDir = filepath.Join(r.Home, ".codex")
+	if r.On("codex") {
+		codexDir := r.CodexHome
+		if codexDir == "" {
+			codexDir = filepath.Join(r.Home, ".codex")
+		}
+		out = append(out, fileProfile(r, "codex", "default", codexDir, "auth.json"))
+		for _, d := range r.ExtraDirs["codex"] {
+			out = append(out, fileProfile(r, "codex", filepath.Base(d), d, "auth.json"))
+		}
 	}
-	out = append(out, fileProfile(r, "codex", "default", codexDir, "auth.json"))
-	// Grok has no known home override; extra Grok accounts live in volumes.
-	out = append(out, fileProfile(r, "grok", "default", filepath.Join(r.Home, ".grok"), "auth.json"))
-	out = append(out, cursorProfile(filepath.Join(r.Home, ".cursor")))
+	// Grok has no known home override; extra Grok accounts live in volumes
+	// or in configured extra_dirs.
+	if r.On("grok") {
+		out = append(out, fileProfile(r, "grok", "default", filepath.Join(r.Home, ".grok"), "auth.json"))
+		for _, d := range r.ExtraDirs["grok"] {
+			out = append(out, fileProfile(r, "grok", filepath.Base(d), d, "auth.json"))
+		}
+	}
+	if r.On("cursor") {
+		out = append(out, cursorProfile(filepath.Join(r.Home, ".cursor")))
+	}
 
 	for _, k := range []struct{ env, provider string }{
 		{"ANTHROPIC_API_KEY", "claude"},
@@ -107,7 +152,7 @@ func Detect(r Roots) []Profile {
 		{"XAI_API_KEY", "grok"},
 		{"CURSOR_API_KEY", "cursor"},
 	} {
-		if r.Getenv(k.env) != "" {
+		if r.On(k.provider) && r.Getenv(k.env) != "" {
 			out = append(out, Profile{Provider: k.provider, Name: k.env, Location: LocEnv,
 				Status: StatusLoggedIn, Detail: "API key set in environment"})
 		}
