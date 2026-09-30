@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
@@ -67,8 +66,7 @@ func runJob(args []string) {
 	}
 	switch sub {
 	case "hello":
-		name := fmt.Sprintf("hello-%d", time.Now().Unix())
-		j, err := r.Submit(ctx, name, "busybox:1.36", []string{"sh", "-c", "echo hello from lucidbench && date"})
+		j, err := r.SubmitHello(ctx)
 		if err != nil {
 			fail(err)
 		}

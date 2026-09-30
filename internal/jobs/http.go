@@ -7,16 +7,24 @@ import (
 	"strings"
 )
 
-// Handler serves GET /api/jobs (JSON list) and GET /api/jobs/{name}/logs (plain text).
-// It answers 503 when no local cluster is reachable.
+// connect is swapped in tests.
+var connect = Connect
+
+// Handler serves GET /api/jobs (JSON list), GET /api/jobs/{name}/logs (plain
+// text) and POST /api/jobs/hello (submit the hello job). It answers 503 when
+// no local cluster is reachable.
 func Handler(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
+	rest := strings.Trim(strings.TrimPrefix(req.URL.Path, "/api/jobs"), "/")
+	if req.Method == http.MethodPost && rest == "hello" {
+		submitHello(w, req)
+		return
+	}
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD, POST")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	rest := strings.Trim(strings.TrimPrefix(req.URL.Path, "/api/jobs"), "/")
-	r, err := Connect()
+	r, err := connect()
 	if err != nil {
 		unavailable(w, err)
 		return
@@ -39,6 +47,22 @@ func Handler(w http.ResponseWriter, req *http.Request) {
 	default:
 		http.NotFound(w, req)
 	}
+}
+
+func submitHello(w http.ResponseWriter, req *http.Request) {
+	r, err := connect()
+	if err != nil {
+		unavailable(w, err)
+		return
+	}
+	j, err := r.SubmitHello(req.Context())
+	if err != nil {
+		unavailable(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]string{"name": j.Name})
 }
 
 func unavailable(w http.ResponseWriter, err error) {
