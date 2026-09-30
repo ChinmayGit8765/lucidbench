@@ -4,26 +4,32 @@ package cluster
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/cmd"
 
 	kindcfg "github.com/ChinmayGit8765/lucidbench/deploy/kind"
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 )
 
-// Name is the kind cluster name.
-const Name = "lucidbench"
+// Name is the kind cluster name. The daemon and CLI set it from config
+// (cluster.name) at startup.
+var Name = "lucidbench"
 
 // KubeconfigPath is where Lucidbench keeps its kubeconfig, kept separate from
 // the user's default kubeconfig.
 func KubeconfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := config.DataDir()
 	if err != nil {
-		return "", fmt.Errorf("locate user config dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(dir, "lucidbench", "kubeconfig"), nil
+	return filepath.Join(dir, "kubeconfig"), nil
 }
 
 func provider() *cluster.Provider {
@@ -98,7 +104,40 @@ func InternalKubeconfig() (string, error) {
 	if err != nil || !ok {
 		return "", err
 	}
+	if err := joinKindNetwork(); err != nil {
+		return "", err
+	}
 	return p.KubeConfig(Name, true)
+}
+
+// KeepJoined joins the kind network as soon as the cluster exists and
+// re-checks every interval, so the join (which briefly drops open connections)
+// happens in the background rather than in the middle of an API request.
+func KeepJoined(every time.Duration) {
+	for {
+		if ok, err := exists(provider()); err == nil && ok {
+			if err := joinKindNetwork(); err != nil {
+				log.Print(err)
+			}
+		}
+		time.Sleep(every)
+	}
+}
+
+// joinKindNetwork attaches this container to the "kind" docker network so the
+// internal kubeconfig's server address resolves. Compose cannot declare the
+// network up front, because it only exists after `lucid cluster up`; joining
+// lazily lets `docker compose up` work on a machine with no cluster yet.
+func joinKindNetwork() error {
+	self, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("container hostname: %w", err)
+	}
+	out, err := exec.Command("docker", "network", "connect", "kind", self).CombinedOutput()
+	if err != nil && !strings.Contains(string(out), "already exists") {
+		return fmt.Errorf("join kind network: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // Info is the body of GET /api/cluster.

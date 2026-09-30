@@ -15,6 +15,14 @@ web/dist/*
 .env.*
 !.env.example
 
+# User config and data: these live in the user's own config dir, never here
+config.yaml
+*.local.yaml
+data/
+*.db
+*.sqlite
+kubeconfig
+
 # OS / editor
 .DS_Store
 Thumbs.db

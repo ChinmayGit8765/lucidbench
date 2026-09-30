@@ -10,16 +10,13 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
 )
 
-// agentImage is built by the agent-image slice.
-const agentImage = "lucidbench/agent:dev"
-
 func runAccounts(args []string) int {
 	fs := flag.NewFlagSet("accounts", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	ps := accounts.All(accounts.FromEnv())
+	ps := accounts.All(accounts.FromConfig(cfg))
 	if ps == nil {
 		ps = []accounts.Profile{}
 	}
@@ -70,6 +67,6 @@ func runLogin(args []string) int {
 		fmt.Printf("volume %s already exists\n", vol)
 	}
 	fmt.Println("Log in interactively by running:")
-	fmt.Printf("  docker run --rm -it -v %s:%s %s %s\n", vol, spec.MountPath, agentImage, spec.LoginCmd)
+	fmt.Printf("  docker run --rm -it -v %s:%s %s %s\n", vol, spec.MountPath, cfg.Agent.Image, spec.LoginCmd)
 	return 0
 }

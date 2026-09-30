@@ -14,7 +14,7 @@ Then open <http://localhost:7420>.
 
 ## Development
 
-Requirements: Go 1.25, Node 22.
+Requirements: Go 1.26, Node 22, Docker.
 
 ```sh
 # Web UI (dev server on :5173, proxies /api to :7420)
@@ -35,6 +35,10 @@ cd web && npm run build
 ```
 
 `LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
+
+## Configuration
+
+Everything user-specific lives in your own config directory or in `LUCID_*` environment variables, never in this repository. Run `go run ./cmd/lucid config init` to write a commented `config.yaml` (see `config.example.yaml`), and `lucid config show` to see the effective values. Secrets are never stored in the file; only `env:NAME` references are accepted. Details: [docs/CONFIG.md](docs/CONFIG.md).
 
 ## Accounts
 
@@ -73,14 +77,14 @@ The kubeconfig is written to `<user config dir>/lucidbench/kubeconfig`, never to
 
 The host kubeconfig points at `127.0.0.1`, which is unreachable from inside a container. With `LUCID_IN_CONTAINER=1` (set by `docker-compose.yml`) `lucidd` instead asks kind for an internal kubeconfig that addresses the control-plane container by name on the `kind` docker network. For that, the compose service:
 
-- joins the external docker network `kind`,
+- joins the `kind` docker network by itself (`docker network connect`) the first time it needs the cluster,
 - mounts `/var/run/docker.sock` (the image ships the docker CLI, which kind's docker provider shells out to) and runs as root to use it.
 
-Because `kind` is declared `external`, create the cluster first, otherwise `docker compose up` fails with "network kind declared as external, but could not be found":
+So `docker compose up` works with or without a cluster. Create one whenever you want jobs:
 
 ```sh
-go run ./cmd/lucid cluster up
 docker compose up -d --build
+go run ./cmd/lucid cluster up
 ```
 
 Mounting the docker socket gives the daemon control of your Docker engine. Only run it on a machine you trust.

@@ -10,13 +10,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
+	"github.com/ChinmayGit8765/lucidbench/internal/runner"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 )
 
+// loadConfig loads the user config once and applies it to the packages.
+func loadConfig() {
+	c, warns, err := config.Load()
+	for _, w := range warns {
+		fmt.Fprintln(os.Stderr, "warning:", w)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	cfg = c
+	cluster.Name = c.Cluster.Name
+	runner.Image = c.Agent.Image
+}
+
+// cfg is the effective config, loaded once in main for commands that need it.
+var cfg = config.Default()
+
 func daemonURL() string {
-	addr := os.Getenv("LUCID_ADDR")
-	if addr == "" {
-		addr = ":7420"
+	addr := cfg.Server.Addr
+	// A wildcard listen address is not a dialable host.
+	for _, w := range []string{"0.0.0.0:", "[::]:"} {
+		addr = strings.Replace(addr, w, ":", 1)
 	}
 	if strings.HasPrefix(addr, ":") {
 		addr = "localhost" + addr
@@ -47,10 +69,15 @@ func health() error {
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: lucid <version|health|accounts|login|run|image|cluster|job>")
+		fmt.Fprintln(os.Stderr, "usage: lucid <version|health|accounts|login|run|image|cluster|job|config>")
 	}
 	flag.Parse()
+	if cmd := flag.Arg(0); cmd != "version" && cmd != "config" {
+		loadConfig()
+	}
 	switch flag.Arg(0) {
+	case "config":
+		os.Exit(runConfig(flag.Args()[1:]))
 	case "version":
 		fmt.Println(version.Version)
 	case "health":
