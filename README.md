@@ -36,6 +36,24 @@ cd web && npm run build
 
 `LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
 
+## Accounts
+
+Lucidbench detects the provider accounts you are already signed in to, by presence only. It never reads, prints, logs or copies token values.
+
+```sh
+go run ./cmd/lucid accounts          # table: provider, name, location, status
+go run ./cmd/lucid accounts --json   # same, as JSON (also served at GET /api/accounts)
+go run ./cmd/lucid login claude --profile work   # also: codex, grok
+```
+
+Evidence checked: Claude `~/.claude/.credentials.json` (plus extra dirs in `LUCID_CLAUDE_DIRS` and `CLAUDE_CONFIG_DIR`), Codex `$CODEX_HOME` or `~/.codex` `auth.json`, Grok `~/.grok/auth.json`, Cursor `~/.cursor/cli-config.json` (detection only, status `unknown` unless an auth marker is present), and the API key variables `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, `CURSOR_API_KEY` (location `env`).
+
+Extra accounts live in Docker named volumes labelled `lucidbench.profile=<provider>/<name>`. `lucid login` creates the volume and prints the interactive `docker run` command to sign in inside the agent image; it does not log in for you. Grok has no known home override, so additional Grok accounts are volume profiles only.
+
+Inside Docker, `lucidd` reads the host home mounted read-only at `/host-home` (`LUCID_HOST_HOME`); `docker-compose.yml` sets this up.
+
+**Fair use:** profiles are separate accounts you own. Lucidbench never auto-rotates between profiles to extend or evade provider usage limits.
+
 ## Roadmap
 
 - **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
