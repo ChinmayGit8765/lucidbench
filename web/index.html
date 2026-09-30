@@ -1,9 +1,27 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Lucidbench</title>
+    <script>
+      // Apply the theme before first paint so there is no flash. Order:
+      // ?theme= (not persisted) > saved choice > last ui.theme from the
+      // daemon > dark. "system" follows prefers-color-scheme.
+      ;(function () {
+        var ok = { dark: 1, light: 1, system: 1 }
+        var pref = new URLSearchParams(location.search).get("theme")
+        try {
+          if (!ok[pref]) pref = localStorage.getItem("lucidbench.theme")
+          if (!ok[pref]) pref = localStorage.getItem("lucidbench.theme.config")
+        } catch (e) {}
+        if (!ok[pref]) pref = "dark"
+        var dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+        document.documentElement.classList.toggle("dark", dark)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

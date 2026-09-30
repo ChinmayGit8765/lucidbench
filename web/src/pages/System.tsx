@@ -1,13 +1,28 @@
-import { useCallback, useEffect, useState } from "react"
-import { Play, RefreshCw } from "lucide-react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
+import {
+  Boxes,
+  ChevronRight,
+  Copy,
+  Cpu,
+  FileKey2,
+  ListChecks,
+  Play,
+  RefreshCw,
+  Server,
+  type LucideIcon,
+} from "lucide-react"
+import { toast } from "sonner"
 
-import { CopyCommand } from "@/components/CopyCommand"
-import { Badge } from "@/components/ui/badge"
+import { copyText, CopyCommand } from "@/components/CopyCommand"
+import { PageHeader } from "@/components/Shell"
+import { Badge, StatusPill, type Tone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ErrorState, LoadingState } from "@/components/ui/states"
-import { ApiError, request, usePoll } from "@/lib/api"
+import { Card } from "@/components/ui/card"
+import { Sheet } from "@/components/ui/dialog"
+import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
+import { ApiError, request, usePoll, type Polled } from "@/lib/api"
 import type { Health } from "@/lib/health"
+import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 interface ClusterInfo {
@@ -23,106 +38,159 @@ interface Job {
   createdAt: string
 }
 
-const JOB_STATUS: Record<string, string> = {
-  Completed: "bg-emerald-500",
-  Running: "bg-sky-500",
-  Failed: "bg-destructive",
-  Pending: "bg-amber-500",
+const JOB_TONE: Record<string, Tone> = {
+  Completed: "success",
+  Running: "info",
+  Failed: "danger",
+  Pending: "warning",
 }
 
 const CLUSTER_UP = "lucid cluster up"
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function JobStatus({ status }: { status: string }) {
+  const tone = JOB_TONE[status] ?? "neutral"
   return (
-    <>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words">{children}</span>
-    </>
+    <StatusPill tone={tone} pulse={status === "Running"}>
+      {status || "Unknown"}
+    </StatusPill>
   )
 }
 
-function Dot({ className }: { className: string }) {
-  return <span className={cn("mr-2 inline-block size-2 rounded-full align-middle", className)} />
+function Tile({
+  icon: Icon,
+  label,
+  loading,
+  value,
+  sub,
+  status,
+}: {
+  icon: LucideIcon
+  label: string
+  loading?: boolean
+  value: ReactNode
+  sub?: ReactNode
+  status?: ReactNode
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex min-h-5 items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <Icon className="size-3.5 text-subtle-foreground" />
+          {label}
+        </span>
+        {!loading && status}
+      </div>
+      {loading ? (
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-3.5 w-32" />
+        </div>
+      ) : (
+        <>
+          <div className="mt-2.5 truncate text-xl font-semibold tabular-nums tracking-tight">{value}</div>
+          {sub && <div className="mt-0.5 truncate text-xs text-subtle-foreground">{sub}</div>}
+        </>
+      )}
+    </Card>
+  )
+}
+
+function Tiles({
+  health,
+  cluster,
+  jobs,
+}: {
+  health: Health | null | undefined
+  cluster: Polled<ClusterInfo>
+  jobs: Polled<Job[]>
+}) {
+  const c = cluster.data
+  const list = jobs.data ?? []
+  const done = list.filter((j) => j.status === "Completed").length
+  const failed = list.filter((j) => j.status === "Failed").length
+  const clusterLoading = cluster.loading && !c
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Tile
+        icon={Cpu}
+        label="Daemon"
+        loading={health === undefined}
+        value={health ? "Online" : "Unreachable"}
+        sub={health ? <span className="font-mono">lucidd {health.version}</span> : "Start lucidd to continue"}
+        status={<StatusPill tone={health ? "success" : "danger"}>{health ? "ok" : "down"}</StatusPill>}
+      />
+      <Tile
+        icon={Server}
+        label="Cluster"
+        loading={clusterLoading}
+        value={c ? (c.running ? "Running" : "Stopped") : "Unavailable"}
+        sub={c ? <span className="font-mono">kind · {c.name}</span> : cluster.error?.message}
+        status={
+          c ? (
+            <StatusPill tone={c.running ? "success" : "neutral"}>{c.running ? "up" : "down"}</StatusPill>
+          ) : (
+            <StatusPill tone="danger">error</StatusPill>
+          )
+        }
+      />
+      <Tile
+        icon={FileKey2}
+        label="Kubeconfig"
+        loading={clusterLoading}
+        value={c?.kubeconfig_present ? "Present" : "Missing"}
+        sub={c?.kubeconfig_present ? "Private to Lucidbench" : "Written by lucid cluster up"}
+        status={
+          <StatusPill tone={c?.kubeconfig_present ? "success" : "warning"}>
+            {c?.kubeconfig_present ? "ok" : "missing"}
+          </StatusPill>
+        }
+      />
+      <Tile
+        icon={ListChecks}
+        label="Jobs"
+        loading={jobs.loading && !jobs.data && !jobs.error}
+        value={jobs.data ? list.length : "-"}
+        sub={
+          jobs.data ? (
+            <span className="tabular-nums">
+              {done} completed{failed > 0 && ` · ${failed} failed`}
+            </span>
+          ) : (
+            "Needs a running cluster"
+          )
+        }
+      />
+    </div>
+  )
 }
 
 function NoCluster() {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3 rounded-lg border border-dashed p-4">
       <p className="text-sm text-muted-foreground">
-        The local cluster is not running. Create it from a terminal:
+        The local cluster is not running. Create it from a terminal, then jobs appear here.
       </p>
       <CopyCommand command={CLUSTER_UP} />
     </div>
   )
 }
 
-function DaemonCard({ health }: { health: Health | null }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Daemon</CardTitle>
-        <CardDescription>lucidd, the Lucidbench engine.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
-        <Row label="Status">
-          <Dot className={health ? "bg-emerald-500" : "bg-destructive"} />
-          {health ? "Running" : "Unreachable"}
-        </Row>
-        <Row label="Version">{health?.version ?? "-"}</Row>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ClusterCard() {
-  const { data, error, loading } = usePoll<ClusterInfo>("/api/cluster")
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cluster</CardTitle>
-        <CardDescription>The local kind cluster that runs jobs.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading && !data && <LoadingState />}
-        {error && !data && (
-          <ErrorState
-            title={error.status === 503 ? "Docker is not reachable" : "Could not load cluster status"}
-            message={error.message}
-          />
-        )}
-        {data && (
-          <>
-            <div className="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
-              <Row label="Name">{data.name}</Row>
-              <Row label="Status">
-                <Dot className={data.running ? "bg-emerald-500" : "bg-muted-foreground/50"} />
-                {data.running ? "Running" : "Not running"}
-              </Row>
-              <Row label="Kubeconfig">{data.kubeconfig_present ? "Present" : "Missing"}</Row>
-            </div>
-            {!data.running && <NoCluster />}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString()
-}
-
-function Logs({ name }: { name: string }) {
+function LogViewer({ job, onClose }: { job: Job | null; onClose: () => void }) {
+  const name = job?.name ?? ""
   const [text, setText] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const load = useCallback(async () => {
+    if (!name) return
     setErr(null)
+    setBusy(true)
     try {
       setText(await (await request(`/api/jobs/${encodeURIComponent(name)}/logs`)).text())
     } catch (e) {
       setText(null)
       setErr(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBusy(false)
     }
   }, [name])
   useEffect(() => {
@@ -130,122 +198,210 @@ function Logs({ name }: { name: string }) {
     void load()
   }, [load])
 
+  const lines = text === null ? [] : text.replace(/\n$/, "").split("\n")
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">
-          Logs <span className="font-mono text-muted-foreground">{name}</span>
-        </span>
-        <Button variant="ghost" size="sm" onClick={() => void load()}>
-          <RefreshCw /> Reload
-        </Button>
+    <Sheet
+      open={job !== null}
+      onClose={onClose}
+      title={<span className="font-mono">{name}</span>}
+      description={
+        job && (
+          <span className="flex flex-wrap items-center gap-2">
+            <JobStatus status={job.status} />
+            <span className="font-mono">{job.image}</span>
+            <span title={absoluteTime(job.createdAt)}>{absoluteTime(job.createdAt)}</span>
+          </span>
+        )
+      }
+      actions={
+        <>
+          <Button variant="ghost" size="sm" onClick={() => void load()} disabled={busy}>
+            <RefreshCw className={cn(busy && "animate-spin")} /> Reload
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!text}
+            onClick={() => text && void copyText(text, "Logs copied")}
+          >
+            <Copy /> Copy
+          </Button>
+        </>
+      }
+    >
+      <div className="p-4">
+        {err ? (
+          <ErrorState title="Could not load logs" message={err} onRetry={() => void load()} />
+        ) : text === null ? (
+          <div className="space-y-2 p-2">
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3.5 w-1/2" />
+            <Skeleton className="h-3.5 w-2/3" />
+          </div>
+        ) : text.trim() === "" ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">This job wrote no output.</p>
+        ) : (
+          <pre className="overflow-x-auto rounded-lg border bg-background py-3 font-mono text-xs leading-5">
+            {lines.map((l, i) => (
+              <div key={i} className="flex hover:bg-accent/40">
+                <span className="w-10 shrink-0 select-none pr-3 text-right tabular-nums text-subtle-foreground/70">
+                  {i + 1}
+                </span>
+                <span className="whitespace-pre-wrap break-all pr-4">{l || " "}</span>
+              </div>
+            ))}
+          </pre>
+        )}
       </div>
-      <pre className="max-h-64 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-        {err ? err : text === null ? "Loading..." : text.trim() === "" ? "(no output)" : text}
-      </pre>
+    </Sheet>
+  )
+}
+
+function JobsTable({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) => void }) {
+  const now = useNow()
+  const sorted = [...jobs].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-y bg-muted/40 text-left text-2xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+            <th className="px-5 py-2 font-medium">Name</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium max-md:hidden">Image</th>
+            <th className="px-3 py-2 text-right font-medium">Created</th>
+            <th className="w-10 px-3 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((j) => (
+            <tr
+              key={j.name}
+              tabIndex={0}
+              onClick={() => onOpen(j)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(j))}
+              aria-label={`Open logs for ${j.name}`}
+              className="group cursor-pointer border-b transition-colors last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/60 focus-visible:outline-none"
+            >
+              <td className="px-5 py-2.5 font-mono text-xs">{j.name}</td>
+              <td className="px-3 py-2.5">
+                <JobStatus status={j.status} />
+              </td>
+              <td className="px-3 py-2.5 max-md:hidden">
+                <Badge className="font-mono">{j.image}</Badge>
+              </td>
+              <td className="px-3 py-2.5 text-right text-xs tabular-nums whitespace-nowrap text-muted-foreground">
+                <time dateTime={j.createdAt} title={absoluteTime(j.createdAt)}>
+                  {relativeTime(j.createdAt, now)}
+                </time>
+              </td>
+              <td className="px-3 py-2.5">
+                <ChevronRight className="size-4 text-subtle-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
 
-function JobsCard() {
-  const { data, error, loading, refresh } = usePoll<Job[]>("/api/jobs")
-  const [selected, setSelected] = useState<string | null>(null)
+function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunning?: boolean }) {
+  const { data, error, loading, refresh } = jobs
+  const [selected, setSelected] = useState<Job | null>(null)
   const [busy, setBusy] = useState(false)
-  const [runError, setRunError] = useState<ApiError | null>(null)
 
   const runHello = async () => {
     setBusy(true)
-    setRunError(null)
+    const id = toast.loading("Submitting hello job")
     try {
       const res = await request("/api/jobs/hello", { method: "POST" })
       const body = (await res.json()) as { name: string }
-      setSelected(body.name)
+      toast.success("Hello job submitted", { id, description: body.name })
       refresh()
     } catch (e) {
-      setRunError(e instanceof ApiError ? e : new ApiError(0, String(e)))
+      const msg = e instanceof ApiError ? e.message : String(e)
+      toast.error("Could not submit the job", { id, description: msg })
     } finally {
       setBusy(false)
     }
   }
 
-  const unavailable = error?.status === 503 || runError?.status === 503
+  const unavailable = error?.status === 503 || clusterRunning === false
+  // Keep the open job's status fresh as polls come in.
+  const open = selected ? (data?.find((j) => j.name === selected.name) ?? selected) : null
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
-        <div className="flex flex-col gap-1.5">
-          <CardTitle>Jobs</CardTitle>
-          <CardDescription>Batch jobs on the local cluster.</CardDescription>
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            Jobs
+            {data && data.length > 0 && (
+              <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">
+                {data.length}
+              </span>
+            )}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Batch jobs on the local cluster. Select one to read its logs.</p>
         </div>
-        <Button size="sm" onClick={runHello} disabled={busy}>
-          <Play /> {busy ? "Submitting..." : "Run hello job"}
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading && !data && <LoadingState />}
-        {unavailable && <NoCluster />}
-        {!unavailable && error && !data && (
-          <ErrorState title="Could not load jobs" message={error.message} />
-        )}
-        {!unavailable && runError && (
-          <ErrorState title="Could not submit the job" message={runError.message} />
-        )}
-        {!unavailable && data && data.length === 0 && (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            No jobs yet. Run the hello job to try the cluster.
-          </p>
-        )}
-        {!unavailable && data && data.length > 0 && (
-          <div className="overflow-hidden rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Image</th>
-                  <th className="px-3 py-2 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((j) => (
-                  <tr
-                    key={j.name}
-                    onClick={() => setSelected(j.name)}
-                    className={cn(
-                      "cursor-pointer border-t transition-colors hover:bg-accent/50",
-                      selected === j.name && "bg-accent",
-                    )}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs">{j.name}</td>
-                    <td className="px-3 py-2">
-                      <Dot className={JOB_STATUS[j.status] ?? "bg-muted-foreground/50"} />
-                      {j.status}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Badge>{j.image}</Badge>
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{formatTime(j.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!unavailable && selected && <Logs name={selected} />}
-      </CardContent>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={refresh} aria-label="Refresh jobs" title="Refresh jobs">
+            <RefreshCw />
+          </Button>
+          <Button onClick={runHello} disabled={busy || unavailable}>
+            <Play /> {busy ? "Submitting" : "Run hello job"}
+          </Button>
+        </div>
+      </div>
+
+      {loading && !data && !error && (
+        <div className="space-y-2 border-t p-5">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-8" />
+          ))}
+        </div>
+      )}
+      {unavailable && (
+        <div className="border-t p-5">
+          <NoCluster />
+        </div>
+      )}
+      {!unavailable && error && !data && (
+        <div className="border-t p-5">
+          <ErrorState title="Could not load jobs" message={error.message} onRetry={refresh} />
+        </div>
+      )}
+      {!unavailable && data && data.length === 0 && (
+        <div className="border-t">
+          <EmptyState
+            icon={<Boxes />}
+            title="No jobs yet"
+            description="Run the hello job to check the cluster end to end. It prints a greeting and exits."
+          />
+        </div>
+      )}
+      {!unavailable && data && data.length > 0 && <JobsTable jobs={data} onOpen={setSelected} />}
+
+      <LogViewer job={open} onClose={() => setSelected(null)} />
     </Card>
   )
 }
 
-export default function System({ health }: { health: Health | null }) {
+export default function System({ health }: { health: Health | null | undefined }) {
+  const cluster = usePoll<ClusterInfo>("/api/cluster")
+  const jobs = usePoll<Job[]>("/api/jobs")
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">System</h1>
-      <div className="grid gap-6 md:grid-cols-2">
-        <DaemonCard health={health} />
-        <ClusterCard />
-      </div>
-      <JobsCard />
+      <PageHeader title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
+      <Tiles health={health} cluster={cluster} jobs={jobs} />
+      {cluster.error && !cluster.data && (
+        <ErrorState
+          title={cluster.error.status === 503 ? "Docker is not reachable" : "Could not load cluster status"}
+          message={cluster.error.message}
+          onRetry={cluster.refresh}
+        />
+      )}
+      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} />
     </div>
   )
 }

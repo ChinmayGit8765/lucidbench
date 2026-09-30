@@ -5,9 +5,9 @@ export interface Health {
   version: string
 }
 
-/** Polls the daemon's /api/health; null means unreachable. */
-export function useHealth(intervalMs = 10000): Health | null {
-  const [health, setHealth] = useState<Health | null>(null)
+/** Polls the daemon's /api/health; null means unreachable, undefined not checked yet. */
+export function useHealth(intervalMs = 10000): Health | null | undefined {
+  const [health, setHealth] = useState<Health | null | undefined>(undefined)
   useEffect(() => {
     let cancelled = false
     const poll = async () => {
