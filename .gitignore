@@ -1,0 +1,22 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# Web
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
