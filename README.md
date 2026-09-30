@@ -89,6 +89,12 @@ go run ./cmd/lucid cluster up
 
 Mounting the docker socket gives the daemon control of your Docker engine. Only run it on a machine you trust.
 
+## Web UI
+
+The UI at <http://localhost:7420> has an Accounts page (every detected account, grouped by provider) and a System page (daemon, cluster and jobs, with a log viewer). It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
+
+Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Roadmap
 
 - **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
