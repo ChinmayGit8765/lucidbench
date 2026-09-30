@@ -67,7 +67,23 @@ go run ./cmd/lucid cluster status
 go run ./cmd/lucid cluster down
 ```
 
-The kubeconfig is written to `<user config dir>/lucidbench/kubeconfig`, never to your default kubeconfig. Use it with `kubectl --kubeconfig <path> get jobs -n lucidbench`. The daemon exposes `GET /api/jobs` and `GET /api/jobs/{name}/logs`, and answers 503 while no cluster exists.
+The kubeconfig is written to `<user config dir>/lucidbench/kubeconfig`, never to your default kubeconfig. Use it with `kubectl --kubeconfig <path> get jobs -n lucidbench`. The daemon exposes `GET /api/jobs` and `GET /api/jobs/{name}/logs`, and answers 503 while no cluster exists. It also exposes `GET /api/cluster` (`{name, running, kubeconfig_present}`) and `POST /api/jobs/hello`, which the System page uses.
+
+### Running the daemon in docker compose
+
+The host kubeconfig points at `127.0.0.1`, which is unreachable from inside a container. With `LUCID_IN_CONTAINER=1` (set by `docker-compose.yml`) `lucidd` instead asks kind for an internal kubeconfig that addresses the control-plane container by name on the `kind` docker network. For that, the compose service:
+
+- joins the external docker network `kind`,
+- mounts `/var/run/docker.sock` (the image ships the docker CLI, which kind's docker provider shells out to) and runs as root to use it.
+
+Because `kind` is declared `external`, create the cluster first, otherwise `docker compose up` fails with "network kind declared as external, but could not be found":
+
+```sh
+go run ./cmd/lucid cluster up
+docker compose up -d --build
+```
+
+Mounting the docker socket gives the daemon control of your Docker engine. Only run it on a machine you trust.
 
 ## Roadmap
 

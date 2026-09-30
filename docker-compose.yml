@@ -1,3 +1,5 @@
+# Run `lucid cluster up` once before `docker compose up`: the kind cluster
+# creates the external "kind" network that lucidd joins to reach its API server.
 services:
   lucidd:
     build: .
@@ -7,7 +9,19 @@ services:
     environment:
       LUCID_ADDR: ":7420"
       LUCID_HOST_HOME: /host-home
+      LUCID_IN_CONTAINER: "1"
+    # Root so the process can use the mounted docker socket.
+    user: root
     volumes:
       # Host home, read-only, so lucidd can detect logged-in accounts (presence only).
       - ${USERPROFILE:-${HOME}}:/host-home:ro
+      # Lets the kind library find the cluster and list profile volumes.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - kind
     restart: unless-stopped
+
+networks:
+  kind:
+    external: true
