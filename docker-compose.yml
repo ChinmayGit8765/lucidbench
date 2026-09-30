@@ -7,7 +7,10 @@ services:
     environment:
       LUCID_ADDR: ":7420"
       LUCID_HOST_HOME: /host-home
+      LUCID_CONFIG: /config/config.yaml
     volumes:
       # Host home, read-only, so lucidd can detect logged-in accounts (presence only).
       - ${USERPROFILE:-${HOME}}:/host-home:ro
+      # Your Lucidbench config dir, read-only (see docs/CONFIG.md and .env.example).
+      - ${LUCID_CONFIG_DIR:-${APPDATA:-${HOME}/.config}/lucidbench}:/config:ro
     restart: unless-stopped

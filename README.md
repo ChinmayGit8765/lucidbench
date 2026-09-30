@@ -36,6 +36,10 @@ cd web && npm run build
 
 `LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
 
+## Configuration
+
+Everything user-specific lives in your own config directory or in `LUCID_*` environment variables, never in this repository. Run `go run ./cmd/lucid config init` to write a commented `config.yaml` (see `config.example.yaml`), and `lucid config show` to see the effective values. Secrets are never stored in the file; only `env:NAME` references are accepted. Details: [docs/CONFIG.md](docs/CONFIG.md).
+
 ## Accounts
 
 Lucidbench detects the provider accounts you are already signed in to, by presence only. It never reads, prints, logs or copies token values.
