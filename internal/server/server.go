@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
 )
@@ -32,6 +33,8 @@ func New() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", HealthHandler)
 	mux.Handle("/api/accounts", accounts.Handler())
+	mux.HandleFunc("/api/jobs/", jobs.Handler)
+	mux.HandleFunc("/api/jobs", jobs.Handler)
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", webui.Handler())
 	return mux

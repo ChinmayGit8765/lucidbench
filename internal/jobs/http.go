@@ -1,0 +1,50 @@
+package jobs
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+)
+
+// Handler serves GET /api/jobs (JSON list) and GET /api/jobs/{name}/logs (plain text).
+// It answers 503 when no local cluster is reachable.
+func Handler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rest := strings.Trim(strings.TrimPrefix(req.URL.Path, "/api/jobs"), "/")
+	r, err := Connect()
+	if err != nil {
+		unavailable(w, err)
+		return
+	}
+	switch {
+	case rest == "":
+		list, err := r.List(req.Context())
+		if err != nil {
+			unavailable(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(list)
+	case strings.HasSuffix(rest, "/logs") && !strings.Contains(strings.TrimSuffix(rest, "/logs"), "/"):
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if err := r.Logs(req.Context(), strings.TrimSuffix(rest, "/logs"), w); err != nil {
+			// Headers may already be sent; best effort.
+			http.Error(w, err.Error(), http.StatusNotFound)
+		}
+	default:
+		http.NotFound(w, req)
+	}
+}
+
+func unavailable(w http.ResponseWriter, err error) {
+	msg := "local cluster unavailable: " + err.Error()
+	if errors.Is(err, ErrNoCluster) {
+		msg = ErrNoCluster.Error()
+	}
+	http.Error(w, msg, http.StatusServiceUnavailable)
+}
