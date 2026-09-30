@@ -47,7 +47,7 @@ func health() error {
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: lucid <version|health>")
+		fmt.Fprintln(os.Stderr, "usage: lucid <version|health|cluster|job>")
 	}
 	flag.Parse()
 	switch flag.Arg(0) {
@@ -58,6 +58,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
+	case "cluster":
+		runCluster(flag.Args()[1:])
+	case "job":
+		runJob(flag.Args()[1:])
 	default:
 		flag.Usage()
 		os.Exit(2)

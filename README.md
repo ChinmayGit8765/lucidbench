@@ -36,6 +36,21 @@ cd web && npm run build
 
 `LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
 
+## Local cluster
+
+Lucidbench runs agent jobs on a local Kubernetes cluster. It embeds [kind](https://kind.sigs.k8s.io) as a library, so you only need Docker (no kind binary).
+
+```sh
+go run ./cmd/lucid cluster up      # create the "lucidbench" cluster (first run pulls the node image)
+go run ./cmd/lucid job hello       # submit a busybox hello Job, prints its name
+go run ./cmd/lucid job list
+go run ./cmd/lucid job logs <name>
+go run ./cmd/lucid cluster status
+go run ./cmd/lucid cluster down
+```
+
+The kubeconfig is written to `<user config dir>/lucidbench/kubeconfig`, never to your default kubeconfig. Use it with `kubectl --kubeconfig <path> get jobs -n lucidbench`. The daemon exposes `GET /api/jobs` and `GET /api/jobs/{name}/logs`, and answers 503 while no cluster exists.
+
 ## Roadmap
 
 - **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
