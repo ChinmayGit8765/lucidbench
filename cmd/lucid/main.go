@@ -47,7 +47,7 @@ func health() error {
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: lucid <version|health>")
+		fmt.Fprintln(os.Stderr, "usage: lucid <version|health|accounts|login>")
 	}
 	flag.Parse()
 	switch flag.Arg(0) {
@@ -58,6 +58,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
+	case "accounts":
+		os.Exit(runAccounts(flag.Args()[1:]))
+	case "login":
+		os.Exit(runLogin(flag.Args()[1:]))
 	default:
 		flag.Usage()
 		os.Exit(2)
