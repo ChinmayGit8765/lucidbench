@@ -2,7 +2,7 @@
 
 Lucidbench is an open-source, all-in-one AI workspace: your Claude, ChatGPT/Codex, Grok and Cursor accounts in one clear workspace, a cross-model council that lets models check each other, usage planning across all of them, Linear, GitHub and Obsidian integrations, and a Kubernetes job runner for agent work.
 
-**Status: pre-alpha, M0.** Only the skeleton exists: a Go daemon, a CLI and an empty web UI.
+**Status: pre-alpha, M0 (containerised foundation).** Works today: account detection across Claude, Codex, Grok and Cursor (several accounts per provider), running a prompt through your own logged-in CLI inside a container, a local Kubernetes cluster with jobs, and a web UI for all of it. The council arrives in M1.
 
 ## Quick start
 
