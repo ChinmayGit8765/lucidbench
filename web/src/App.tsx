@@ -1,24 +1,19 @@
 import { useEffect, useState } from "react"
-import { Activity, Users } from "lucide-react"
+import { Toaster } from "sonner"
 
-import { cn } from "@/lib/utils"
+import { Header, Sidebar, useSidebar, type Page } from "@/components/Shell"
 import { useHealth } from "@/lib/health"
+import { useTheme } from "@/lib/theme"
 import Accounts from "@/pages/Accounts"
 import System from "@/pages/System"
-
-type Page = "accounts" | "system"
-
-const nav: { id: Page; label: string; icon: typeof Users }[] = [
-  { id: "accounts", label: "Accounts", icon: Users },
-  { id: "system", label: "System", icon: Activity },
-]
 
 const pageFromPath = (): Page => (location.pathname === "/system" ? "system" : "accounts")
 
 export default function App() {
   const [page, setPageState] = useState<Page>(pageFromPath)
   const setPage = (p: Page) => {
-    history.pushState(null, "", `/${p}`)
+    // Keep ?theme= so a forced theme survives navigation.
+    history.pushState(null, "", `/${p}${location.search}`)
     setPageState(p)
   }
   useEffect(() => {
@@ -26,45 +21,44 @@ export default function App() {
     window.addEventListener("popstate", onPop)
     return () => window.removeEventListener("popstate", onPop)
   }, [])
+  useEffect(() => {
+    document.title = `${page === "system" ? "System" : "Accounts"} · Lucidbench`
+  }, [page])
+
   const health = useHealth()
-  const ok = health?.status === "ok"
+  const theme = useTheme()
+  const sidebar = useSidebar()
 
   return (
-    <div className="flex h-screen">
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-card/50 p-3">
-        <div className="px-2 py-3 text-sm font-semibold tracking-tight">Lucidbench</div>
-        <nav className="mt-2 flex flex-col gap-1">
-          {nav.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setPage(id)}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                page === id
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-accent-foreground",
-              )}
-            >
-              <Icon className="size-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar
+        page={page}
+        onNavigate={setPage}
+        rail={sidebar.rail}
+        wide={sidebar.wide}
+        onToggle={sidebar.toggle}
+        version={health?.version}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b px-6">
-          <span className="font-semibold tracking-tight">Lucidbench</span>
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className={cn("size-2 rounded-full", ok ? "bg-emerald-500" : "bg-destructive")} />
-            {ok ? `daemon ok · ${health.version}` : "daemon unreachable"}
-          </span>
-        </header>
-        <main className="flex-1 overflow-auto p-6">
-          <div className="mx-auto max-w-5xl">
+        <Header page={page} health={health} theme={theme.pref} onTheme={theme.setPref} />
+        <main className="flex-1 overflow-auto">
+          <div key={page} className="mx-auto max-w-5xl px-5 py-7 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 md:px-8">
             {page === "accounts" ? <Accounts /> : <System health={health} />}
           </div>
         </main>
       </div>
+      <Toaster
+        theme={theme.resolved}
+        position="bottom-right"
+        toastOptions={{ className: "!font-sans !text-sm !rounded-lg !border-border-strong !shadow-pop" }}
+        style={
+          {
+            "--normal-bg": "var(--elevated)",
+            "--normal-text": "var(--foreground)",
+            "--normal-border": "var(--border-strong)",
+          } as React.CSSProperties
+        }
+      />
     </div>
   )
 }
