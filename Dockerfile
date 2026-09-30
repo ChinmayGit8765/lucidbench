@@ -7,9 +7,9 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.25 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
@@ -21,7 +21,10 @@ RUN CGO_ENABLED=0 go build -trimpath \
     -ldflags "-s -w -X github.com/ChinmayGit8765/lucidbench/internal/version.Version=${VERSION}" \
     -o /out/lucid ./cmd/lucid
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# The kind library drives the cluster through the docker CLI, so the runtime
+# image carries docker-cli (talking to the mounted docker socket).
+FROM alpine:3.21
+RUN apk add --no-cache docker-cli ca-certificates
 COPY --from=build /out/lucidd /out/lucid /usr/local/bin/
 EXPOSE 7420
 ENTRYPOINT ["/usr/local/bin/lucidd"]

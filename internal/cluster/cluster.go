@@ -85,6 +85,45 @@ func Down() error {
 	return nil
 }
 
+// InContainer reports whether lucidd runs inside docker compose
+// (LUCID_IN_CONTAINER=1), where the host kubeconfig is unreachable.
+func InContainer() bool { return os.Getenv("LUCID_IN_CONTAINER") == "1" }
+
+// InternalKubeconfig returns a kubeconfig whose server address is the kind
+// node's name on the docker network, reachable from another container on that
+// network. It returns "" when the cluster does not exist.
+func InternalKubeconfig() (string, error) {
+	p := provider()
+	ok, err := exists(p)
+	if err != nil || !ok {
+		return "", err
+	}
+	return p.KubeConfig(Name, true)
+}
+
+// Info is the body of GET /api/cluster.
+type Info struct {
+	Name              string `json:"name"`
+	Running           bool   `json:"running"`
+	KubeconfigPresent bool   `json:"kubeconfig_present"`
+}
+
+// Describe reports cluster state for the API. Inside a container the
+// kubeconfig is generated on demand, so it counts as present when the cluster
+// runs.
+func Describe() (Info, error) {
+	running, kc, err := Status()
+	if err != nil {
+		return Info{Name: Name}, err
+	}
+	present := running && InContainer()
+	if !present {
+		_, statErr := os.Stat(kc)
+		present = statErr == nil
+	}
+	return Info{Name: Name, Running: running, KubeconfigPresent: present}, nil
+}
+
 // Status reports whether the cluster exists.
 func Status() (running bool, kubeconfig string, err error) {
 	kc, err := KubeconfigPath()

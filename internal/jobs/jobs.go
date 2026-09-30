@@ -44,6 +44,9 @@ func NewRunner(cs kubernetes.Interface) *Runner { return &Runner{cs: cs} }
 
 // Connect builds a Runner from the Lucidbench kubeconfig.
 func Connect() (*Runner, error) {
+	if cluster.InContainer() {
+		return connectInternal()
+	}
 	kc, err := cluster.KubeconfigPath()
 	if err != nil {
 		return nil, err
@@ -55,6 +58,28 @@ func Connect() (*Runner, error) {
 		return nil, err
 	}
 	cfg, err := clientcmd.BuildConfigFromFlags("", kc)
+	if err != nil {
+		return nil, fmt.Errorf("load kubeconfig: %w", err)
+	}
+	cfg.Timeout = 15 * time.Second
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Runner{cs: cs}, nil
+}
+
+// connectInternal builds a Runner from an in-memory kubeconfig that points at
+// the kind node's address on the shared docker network.
+func connectInternal() (*Runner, error) {
+	raw, err := cluster.InternalKubeconfig()
+	if err != nil {
+		return nil, err
+	}
+	if raw == "" {
+		return nil, ErrNoCluster
+	}
+	cfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(raw))
 	if err != nil {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
@@ -113,6 +138,18 @@ func (r *Runner) Submit(ctx context.Context, name, image string, command []strin
 		return nil, fmt.Errorf("ensure namespace: %w", err)
 	}
 	return r.cs.BatchV1().Jobs(Namespace).Create(ctx, BuildJob(name, image, command), metav1.CreateOptions{})
+}
+
+// HelloImage is the image the hello job runs.
+const HelloImage = "busybox:1.36"
+
+// HelloCommand is what the hello job runs.
+var HelloCommand = []string{"sh", "-c", "echo hello from lucidbench && date"}
+
+// SubmitHello submits a uniquely named hello job.
+func (r *Runner) SubmitHello(ctx context.Context) (*batchv1.Job, error) {
+	name := fmt.Sprintf("hello-%d", time.Now().UnixMilli())
+	return r.Submit(ctx, name, HelloImage, HelloCommand)
 }
 
 func status(j *batchv1.Job) string {
