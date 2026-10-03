@@ -26,5 +26,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
 FROM alpine:3.21
 RUN apk add --no-cache docker-cli ca-certificates
 COPY --from=build /out/lucidd /out/lucid /usr/local/bin/
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/lucidbench/
+COPY web/public/licenses/ /usr/share/doc/lucidbench/licenses/
 EXPOSE 7420
 ENTRYPOINT ["/usr/local/bin/lucidd"]

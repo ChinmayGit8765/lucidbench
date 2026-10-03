@@ -1,0 +1,8 @@
+# gitleaks configuration: extend the default rules, and allowlist the test file
+# whose obviously fake key-shaped literals verify that secret values are rejected.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake key-shaped fixtures used by the secret-reference tests"
+paths = ['''internal/config/secret_test\.go''']
