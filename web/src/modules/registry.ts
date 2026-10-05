@@ -46,7 +46,8 @@ export function sidebarGroups(prefs: Prefs): { main: SidebarGroup[]; bottom: Mod
     { id: "ai", label: SECTION_LABEL.ai, items: core("ai") },
     { id: "extensions", label: SECTION_LABEL.extensions, items: extensions },
   ]
-  return { main: main.filter((g) => g.items.length > 0), bottom: [...core("infrastructure"), ...core("settings")] }
+  const bottom = sorted(MODULES.filter((m) => m.kind === "core" && (m.section === "infrastructure" || m.section === "settings")), prefs)
+  return { main: main.filter((g) => g.items.length > 0), bottom }
 }
 
 /** Every module in sidebar order, openable or not. */

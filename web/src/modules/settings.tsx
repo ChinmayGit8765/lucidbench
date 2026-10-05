@@ -104,7 +104,7 @@ export const settings: ModuleDef = {
   route: "/settings",
   section: "settings",
   kind: "core",
-  order: 0,
+  order: 1,
   defaultEnabled: true,
   description: "Appearance, sidebar, extensions and engine details.",
   keywords: "preferences appearance theme extensions sidebar",

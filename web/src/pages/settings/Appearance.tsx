@@ -379,7 +379,7 @@ function Describe({ onSaved }: { onSaved: (t: Theme) => void }) {
           </div>
         ) : (
           <div className="space-y-3">
-            <ThemeThumb theme={result.theme} inline={result.assets} />
+            <ThemeThumb theme={result.theme} inline={result.assets} className="max-w-sm" />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">{result.theme.name}</h3>
