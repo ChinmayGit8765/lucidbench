@@ -392,10 +392,10 @@ func TestExtraClaudeDirAndProjectName(t *testing.T) {
 	if c.Totals.Total != 4 || c.Sources != 1 || c.Projects[0].Name != "proj-y" {
 		t.Errorf("%+v", c)
 	}
-	if got := projectName("C--Users-x-code-app", `C:\Users\x`); got != "code-app" {
+	if got := projectName("D--work-me-code-app", `D:\work\me`); got != "code-app" {
 		t.Errorf("projectName %q", got)
 	}
-	if got := projectName("-home-x", "/home/x"); got != "~" {
+	if got := projectName("-srv-me", "/srv/me"); got != "~" {
 		t.Errorf("projectName %q", got)
 	}
 }
