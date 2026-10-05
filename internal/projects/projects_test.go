@@ -146,3 +146,41 @@ func TestHandler(t *testing.T) {
 		t.Errorf("POST status %d", rec.Code)
 	}
 }
+
+func TestLocalPath(t *testing.T) {
+	// An absolute path that does not exist loads fine: existence is checked
+	// when the path is used, not when the file is read.
+	abs, err := filepath.Abs(filepath.Join(t.TempDir(), "not-created-yet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := "version: 1\nprojects:\n" +
+		"  - { id: a, name: A, category: product, status: active, visibility: public, local_path: '" + abs + "' }\n" +
+		"  - { id: b, name: B, category: product, status: active, visibility: public, local_path: relative/dir }\n" +
+		"  - { id: c, name: C, category: product, status: active, visibility: public }\n"
+	ps, errs := Parse([]byte(src))
+	if len(ps) != 3 || ps[0].LocalPath != abs || ps[2].LocalPath != "" {
+		t.Fatalf("projects = %+v", ps)
+	}
+	if len(errs) != 1 || !strings.Contains(errs[0], `project "b": local_path: must be an absolute path`) {
+		t.Errorf("errors = %v", errs)
+	}
+	if !strings.Contains(Detail(ps[0]), abs) {
+		t.Errorf("detail lacks the local path:\n%s", Detail(ps[0]))
+	}
+
+	rec := httptest.NewRecorder()
+	HandlerFor(func() *List { return &List{Projects: ps} }).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/projects", nil))
+	var out struct {
+		Projects []map[string]any `json:"projects"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Projects[0]["local_path"] != abs {
+		t.Errorf("API local_path = %v", out.Projects[0]["local_path"])
+	}
+	if _, ok := out.Projects[2]["local_path"]; ok {
+		t.Error("an unset local_path should be left out of the API output")
+	}
+}

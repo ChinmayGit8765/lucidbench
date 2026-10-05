@@ -109,6 +109,7 @@ func Detail(p Project) string {
 		kv("", "never sent to AI providers")
 	}
 	kv("repo", p.Repo)
+	kv("local path", p.LocalPath)
 	kv("linear", p.Linear)
 	kv("summary", p.Summary)
 	kv("builds into", strings.Join(p.BuildsInto, ", "))

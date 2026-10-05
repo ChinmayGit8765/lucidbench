@@ -49,6 +49,7 @@ type Request struct {
     Dir               string          // working directory; "" = new empty temp dir
     Tools             ToolMode        // ToolsNone (council, themes) | ToolsEdit (work)
     Model             string          // optional provider model alias
+    Harness           string          // "mine" | "clean" (default); ToolsNone is always clean
     Timeout           time.Duration
     OnEvent           func(Event)     // optional streaming callback (Work)
 }
@@ -65,7 +66,13 @@ var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
     grok headless JSON) and allows file edits inside `Dir` only.
 - **Harness:** Work sessions choose `harness: "mine" | "clean"`.
   - "mine" lets the CLI load the user's normal settings and hooks.
-  - "clean" adds the no-settings flags.
+  - "clean" (the default) adds the no-settings, no-hooks flags: `claude --safe-mode
+    --strict-mcp-config`, `codex --ignore-user-config --ignore-rules`. Grok has no such flag, so
+    for grok the two behave the same.
+- **Event normalisation:** `Result.Events` and `OnEvent` carry the same events. Claude and Codex
+  are read from their JSON lines, Grok from `--output-format streaming-json` (its text arrives in
+  deltas, which are joined into one `text` event). `Run` returns the partial `Result` along with
+  an error. `Body` is cut at 8 KB; `Raw` keeps the CLI's line when it is under 64 KB.
 
 ### `internal/memory`: the vault as files
 ```go
@@ -154,11 +161,12 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/memory/tree?dir=` | GET | folder listing |
 | `/api/memory/page?path=` | GET / PUT / DELETE | read / write / trash a page |
 | `/api/memory/move` | POST | `{from,to}` |
-| `/api/memory/search?q=` | GET | full-text hits |
+| `/api/memory/search?q=&limit=` | GET | full-text hits |
+| `/api/memory/backlinks?path=` | GET | pages that link to a page |
 | `/api/boards` | GET | board summaries |
 | `/api/boards/{id}` | GET | board with cards |
 | `/api/boards/{id}/cards` | POST | add card |
-| `/api/boards/{id}/cards/{card}` | PUT | update / move (`{column,index}`) |
+| `/api/boards/{id}/cards/{card}` | PUT | update the fields in the body, or move (`{column,index}`) |
 | `/api/council/sessions` | GET / POST | list / start `{input, project?, proposer?, critics?, rounds?}` |
 | `/api/council/sessions/{id}` | GET | session (poll) |
 | `/api/council/sessions/{id}/events` | GET (SSE) | live updates |

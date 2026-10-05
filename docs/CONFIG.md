@@ -144,12 +144,18 @@ projects:
     status: active             # idea | active | paused | frozen | shipped | archived
     visibility: public         # public | private | confidential
     repo: you/my-app           # optional
+    local_path: <absolute path to your checkout>   # optional, absolute; Work sessions need it
     linear: APP-1              # optional, free text
     summary: One line.         # optional
     builds_into: [other-id]    # optional
     needs:                     # optional; status todo | doing | done | blocked
       - { what: "Release pipeline", from: build-tools, status: doing }
 ```
+
+`local_path` is where the project's checkout lives on this machine. It must be
+an absolute path when set; whether the folder exists is checked when something
+uses it (Work refuses a project without one). `lucid projects show` prints it
+and `GET /api/projects` returns it as `local_path`.
 
 A `tool` is a private project that builds other projects; `builds_into` says
 which. A need's `from` names the project that supplies it. Lucidbench derives

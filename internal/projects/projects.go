@@ -58,6 +58,7 @@ type Project struct {
 	Status     string   `json:"status" yaml:"status"`
 	Visibility string   `json:"visibility" yaml:"visibility"`
 	Repo       string   `json:"repo,omitempty" yaml:"repo"`
+	LocalPath  string   `json:"local_path,omitempty" yaml:"local_path"`
 	Linear     string   `json:"linear,omitempty" yaml:"linear"`
 	Summary    string   `json:"summary,omitempty" yaml:"summary"`
 	BuildsInto []string `json:"builds_into" yaml:"builds_into"`
@@ -192,6 +193,11 @@ func Parse(data []byte) ([]Project, []string) {
 			case v != "" && !slices.Contains(allowed, v):
 				bad(p.ID, field, fmt.Sprintf("unknown value %q (want one of %s)", v, strings.Join(allowed, ", ")))
 			}
+		}
+		// Only the shape is checked here; whether the folder exists is
+		// checked when something uses it.
+		if p.LocalPath != "" && !filepath.IsAbs(p.LocalPath) {
+			bad(p.ID, "local_path", fmt.Sprintf("must be an absolute path, got %q", p.LocalPath))
 		}
 		enum("category", p.Category, Categories, true)
 		enum("type", p.Type, Types, false)
