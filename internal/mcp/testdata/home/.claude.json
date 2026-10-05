@@ -1,0 +1,35 @@
+{
+  "numStartups": 12,
+  "oauthAccount": { "emailAddress": "FAKE-ACCOUNT-SECRET-0a1b" },
+  "mcpServers": {
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.example/mcp?token=FAKE-QUERY-SECRET-5e10",
+      "headers": { "Authorization": "Bearer FAKE-HEADER-SECRET-91bc" }
+    },
+    "linear": {
+      "type": "sse",
+      "url": "https://fakeuser:FAKE-USERINFO-SECRET-77aa@mcp.linear.example/sse"
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "/opt/FAKE-COMMAND-SECRET-3c4d/server",
+      "args": ["--root", "FAKE-ARG-SECRET-22de"],
+      "env": { "API_KEY": "FAKE-ENV-SECRET-7f3a" }
+    }
+  },
+  "projects": {
+    "D:\\work\\FAKE-PATH-SECRET-8e8e\\shop": {
+      "allowedTools": [],
+      "mcpServers": {
+        "postgres": {
+          "command": "npx",
+          "args": ["pg-mcp", "postgres://fake:FAKE-DSN-SECRET-4b4b@localhost/db"]
+        }
+      }
+    },
+    "/srv/FAKE-PATH-SECRET-9f9f/blog/": {
+      "mcpServers": {}
+    }
+  }
+}

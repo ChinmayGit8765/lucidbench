@@ -1,0 +1,13 @@
+model = "fake-model"
+
+[mcp_servers.linear]
+url = "https://mcp.linear.example/mcp?key=FAKE-QUERY-SECRET-5e10"
+bearer_token_env_var = "FAKE-BEARER-VAR-SECRET-1212"
+http_headers = { "X-Api-Key" = "FAKE-HEADER-SECRET-91bc" }
+
+[mcp_servers.filesystem]
+command = "/opt/FAKE-COMMAND-SECRET-3c4d/server"
+args = ["--root", "FAKE-ARG-SECRET-22de"]
+
+[mcp_servers.filesystem.env]
+API_KEY = "FAKE-ENV-SECRET-7f3a"

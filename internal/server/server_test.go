@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
@@ -38,6 +39,22 @@ func TestCIActionsNeedConfirmHeader(t *testing.T) {
 		New().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, nil))
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("%s: status %d", p, rec.Code)
+		}
+	}
+}
+
+func TestProjectsAndMCPRoutes(t *testing.T) {
+	t.Setenv("LUCID_PROJECTS", filepath.Join(t.TempDir(), "projects.yaml"))
+	t.Setenv("LUCID_HOST_HOME", t.TempDir())
+	for _, p := range []string{"/api/projects", "/api/mcp"} {
+		rec := httptest.NewRecorder()
+		New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status %d", p, rec.Code)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Errorf("%s: %v", p, err)
 		}
 	}
 }

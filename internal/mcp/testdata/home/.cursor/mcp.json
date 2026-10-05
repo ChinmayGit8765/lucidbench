@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "Notion": { "url": "https://mcp.notion.example/sse", "headers": { "Authorization": "FAKE-HEADER-SECRET-91bc" } },
+    "browser": { "command": "node", "args": ["FAKE-ARG-SECRET-22de"], "env": { "TOKEN": "FAKE-ENV-SECRET-7f3a" } }
+  }
+}

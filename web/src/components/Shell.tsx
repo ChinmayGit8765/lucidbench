@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import {
   Activity,
   ChevronRight,
+  FolderKanban,
   Gauge,
   KanbanSquare,
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
   RefreshCw,
   Search,
   ServerCog,
@@ -27,11 +29,13 @@ import type { ThemePref } from "@/lib/theme"
 import { relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
 
-export type Page = "overview" | "accounts" | "runners" | "system"
+export type Page = "overview" | "projects" | "accounts" | "mcp" | "runners" | "system"
 
 const WORKSPACE: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "projects", label: "Projects", icon: FolderKanban },
   { id: "accounts", label: "Accounts", icon: Users },
+  { id: "mcp", label: "MCP servers", icon: Plug },
   { id: "runners", label: "Runners & CI", icon: ServerCog },
   { id: "system", label: "System", icon: Activity },
 ]

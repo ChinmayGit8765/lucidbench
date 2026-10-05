@@ -10,6 +10,8 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
+	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
+	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
 )
@@ -46,6 +48,8 @@ func New(cfgs ...*config.Config) http.Handler {
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	ci.Register(mux, ci.New(cfg.CI))
+	mux.Handle("/api/projects", projects.Handler())
+	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", webui.Handler())
 	return mux

@@ -6,11 +6,13 @@ import { cn } from "@/lib/utils"
 export interface Command {
   id: string
   label: string
-  group: "Go to" | "Actions"
+  group: "Go to" | "Actions" | "Projects"
   icon: LucideIcon
   hint?: string
   keywords?: string
   disabled?: boolean
+  /** Listed only once the user has typed something, so long lists stay out of the way. */
+  searchOnly?: boolean
   run: () => void
 }
 
@@ -67,7 +69,7 @@ export function CommandPalette({
     return () => restore.current?.focus?.()
   }, [open])
 
-  const shown = commands.filter((c) => matches(c, query))
+  const shown = commands.filter((c) => (!c.searchOnly || query.trim() !== "") && matches(c, query))
   const runnable = shown.filter((c) => !c.disabled)
   const current = runnable[Math.min(active, runnable.length - 1)]
 
@@ -103,7 +105,7 @@ export function CommandPalette({
     }
   }
 
-  const groups = (["Go to", "Actions"] as const)
+  const groups = (["Go to", "Actions", "Projects"] as const)
     .map((g) => ({ g, items: shown.filter((c) => c.group === g) }))
     .filter((x) => x.items.length > 0)
 

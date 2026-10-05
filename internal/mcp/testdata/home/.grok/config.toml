@@ -1,0 +1,12 @@
+[ui]
+compact_mode = true
+
+[compat.claude]
+mcps = true
+
+[compat.cursor]
+mcps = false
+
+[mcp_servers.github]
+url = "https://api.github.example/mcp"
+headers = { Authorization = "Bearer FAKE-HEADER-SECRET-91bc" }

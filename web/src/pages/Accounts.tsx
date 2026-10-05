@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react"
-import { CheckCircle2, ChevronDown, CircleDashed, Container, Copy, HardDrive, KeyRound, Plus, Users } from "lucide-react"
+import { ArrowRight, CheckCircle2, ChevronDown, CircleDashed, Container, Copy, HardDrive, KeyRound, Plug, Plus, Users } from "lucide-react"
 
 import { copyText, CopyCommand } from "@/components/CopyCommand"
 import { ProviderTile, PROVIDERS, providerInfo, tintVar } from "@/components/ProviderMark"
@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card"
 import { Dialog } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
+import { clientLabel, MCP_POLL_MS, serversFor, type McpMatrix } from "@/lib/mcp"
 import { cn } from "@/lib/utils"
 
 export interface Account {
@@ -147,11 +148,15 @@ function Section({
   title,
   subtitle,
   accounts,
+  mcp,
+  onOpenMcp,
 }: {
   provider?: string
   title: string
   subtitle?: string
   accounts: Account[]
+  mcp?: McpMatrix | null
+  onOpenMcp?: () => void
 }) {
   return (
     <section id={provider ? `provider-${provider}` : "api-keys"} className="scroll-mt-6 space-y-3">
@@ -169,12 +174,53 @@ function Section({
           {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
         </span>
       </div>
+      {provider && mcp && <McpChips provider={provider} mcp={mcp} onOpen={onOpenMcp} />}
       <div className="grid gap-3 md:grid-cols-2">
         {accounts.map((a) => (
           <AccountCard key={`${a.provider}/${a.location}/${a.name}`} account={a} />
         ))}
       </div>
     </section>
+  )
+}
+
+/** The MCP servers this provider's client can reach, as a compact chip row. */
+function McpChips({ provider, mcp, onOpen }: { provider: string; mcp: McpMatrix; onOpen?: () => void }) {
+  const client = mcp.clients.find((c) => c.provider === provider)
+  if (!client) return null
+  const servers = serversFor(mcp, provider)
+  const max = 8
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onOpen}
+        title="Open the MCP access matrix"
+        className="group flex h-5 items-center gap-1 rounded-md pr-1 text-2xs font-medium text-subtle-foreground transition-colors hover:text-foreground"
+      >
+        <Plug className="size-3" />
+        MCP
+        <ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+      </button>
+      {servers.length === 0 ? (
+        <span className="text-2xs text-subtle-foreground">
+          {client.config_found ? "no servers configured" : `no ${clientLabel(provider)} MCP config found`}
+        </span>
+      ) : (
+        <>
+          {servers.slice(0, max).map((s) => (
+            <Badge
+              key={s.name}
+              title={s.via ? `Loaded from the ${clientLabel(s.via)} config` : s.project ? `Only in the ${s.project} project` : "Configured"}
+              className={cn("font-mono", (s.via || s.project) && "border-dashed bg-transparent")}
+            >
+              {s.name}
+            </Badge>
+          ))}
+          {servers.length > max && <span className="text-2xs tabular-nums text-subtle-foreground">+{servers.length - max} more</span>}
+        </>
+      )}
+    </div>
   )
 }
 
@@ -388,8 +434,9 @@ export function AddAccountDialog({ open, onClose }: { open: boolean; onClose: ()
   )
 }
 
-export default function Accounts({ onAdd }: { onAdd: () => void }) {
+export default function Accounts({ onAdd, onOpenMcp }: { onAdd: () => void; onOpenMcp?: () => void }) {
   const { data, error, loading, refresh } = usePoll<Account[]>("/api/accounts")
+  const mcp = usePoll<McpMatrix>("/api/mcp", MCP_POLL_MS)
 
 
   const all = data ?? []
@@ -440,7 +487,15 @@ export default function Accounts({ onAdd }: { onAdd: () => void }) {
       {data && all.length > 0 && <SummaryStrip accounts={all} />}
 
       {byProvider.map((g) => (
-        <Section key={g.id} provider={g.id} title={g.label} subtitle={g.vendor} accounts={g.accounts} />
+        <Section
+          key={g.id}
+          provider={g.id}
+          title={g.label}
+          subtitle={g.vendor}
+          accounts={g.accounts}
+          mcp={mcp.data}
+          onOpenMcp={onOpenMcp}
+        />
       ))}
       {keys.length > 0 && <Section title="API keys" subtitle="from the environment" accounts={keys} />}
 

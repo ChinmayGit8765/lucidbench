@@ -6,7 +6,9 @@ import {
   CircleCheck,
   Container as ContainerIcon,
   ExternalLink,
+  FolderKanban,
   KeyRound,
+  OctagonAlert,
   Play,
   Plus,
   RotateCw,
@@ -45,6 +47,7 @@ import {
 } from "@/lib/ci"
 import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
+import { blockedNeeds, CATEGORIES, countLabel, PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
 import type { Account } from "@/pages/Accounts"
@@ -156,10 +159,12 @@ export default function Overview({
   health,
   onNavigate,
   onAddAccount,
+  onOpenProject,
 }: {
   health: Health | null | undefined
   onNavigate: (p: Page) => void
   onAddAccount: () => void
+  onOpenProject: (id: string) => void
 }) {
   const now = useNow(5000)
   const accounts = usePoll<Account[]>("/api/accounts", 15000)
@@ -168,10 +173,11 @@ export default function Overview({
   const summary = usePoll<CISummary>("/api/ci/summary", CI_POLL_MS)
   const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
   const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
+  const projectsPoll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [helloBusy, setHelloBusy] = useState(false)
 
-  const all = [accounts, cluster, jobs, summary, runners, runsPoll]
+  const all = [accounts, cluster, jobs, summary, runners, runsPoll, projectsPoll]
   const refreshing = all.some((p) => p.refreshing)
   const updated = all.map((p) => p.updatedAt).filter((t): t is number => t !== null)
 
@@ -185,6 +191,10 @@ export default function Overview({
   const containers = runners.data?.containers ?? []
   const c = cluster.data
   const jobList = jobs.data ?? []
+  const pl = projectsPoll.data
+  const projectList = pl?.projects ?? []
+  const blocked = blockedNeeds(projectList)
+  const openNeeds = projectList.reduce((n, p) => n + p.progress.total - p.progress.done, 0)
 
   // Pass rate: last 24h when there were runs, else the recent window.
   const recent = runs.slice(0, 30)
@@ -283,6 +293,24 @@ export default function Overview({
       action: (
         <Button variant="secondary" size="sm" onClick={() => start(ct)}>
           <Play /> Start
+        </Button>
+      ),
+    })
+  }
+  for (const { project, need } of blocked.slice(0, 6)) {
+    const from = need.from ? projectList.find((p) => p.id === need.from) : undefined
+    attention.push({
+      key: `need-${project.id}-${need.what}`,
+      icon: <OctagonAlert className="size-3.5 text-warning" />,
+      title: (
+        <>
+          {project.name} is blocked on {need.what}
+        </>
+      ),
+      meta: from ? `needs it from ${from.name}` : `${project.progress.done}/${project.progress.total} needs done`,
+      action: (
+        <Button variant="ghost" size="sm" onClick={() => onOpenProject(project.id)}>
+          View <ArrowRight />
         </Button>
       ),
     })
@@ -400,7 +428,60 @@ export default function Overview({
         <RefreshButton refreshing={refreshing} updatedAt={updated.length ? Math.min(...updated) : null} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3 @5xl:grid-cols-5">
+        <StatTile
+          icon={FolderKanban}
+          label="Projects"
+          onOpen={() => onNavigate("projects")}
+          loading={projectsPoll.loading && !pl}
+          value={
+            pl?.configured ? (
+              projectList.length
+            ) : (
+              <span className="text-base font-medium text-muted-foreground">Not set up</span>
+            )
+          }
+          aside={
+            blocked.length > 0 ? (
+              <StatusPill tone="warning">{blocked.length} blocked</StatusPill>
+            ) : pl?.configured && projectList.length > 0 ? (
+              <StatusPill tone="success">{projectList.filter((p) => p.status === "active").length} active</StatusPill>
+            ) : undefined
+          }
+          sub={
+            pl?.configured ? (
+              <>
+                {openNeeds} open {openNeeds === 1 ? "need" : "needs"}
+                {blocked.length > 0 && <span className="text-warning-fg"> · {blocked.length} blocked</span>}
+              </>
+            ) : (
+              <span className="font-mono">lucid projects init</span>
+            )
+          }
+          footer={
+            <div className="space-y-1.5">
+              <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted">
+                {CATEGORIES.map((cat) => {
+                  const n = projectList.filter((p) => p.category === cat.id).length
+                  return n > 0 ? (
+                    <span key={cat.id} title={countLabel(cat, n)} style={{ flexGrow: n, backgroundColor: cat.color }} className="h-full" />
+                  ) : null
+                })}
+              </div>
+              <div className="flex items-center gap-2.5 text-xs tabular-nums text-muted-foreground">
+                {CATEGORIES.map((cat) => {
+                  const n = projectList.filter((p) => p.category === cat.id).length
+                  return n > 0 ? (
+                    <span key={cat.id} title={countLabel(cat, n)} className="flex items-center gap-1">
+                      <span className="size-1.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                      {n}
+                    </span>
+                  ) : null
+                })}
+              </div>
+            </div>
+          }
+        />
         <StatTile
           icon={Users}
           label="AI accounts"
@@ -535,7 +616,7 @@ export default function Overview({
                 </span>
                 <div>
                   <div className="text-sm font-medium">All clear</div>
-                  <div className="text-xs text-muted-foreground">No failed runs, offline runners or expired sign-ins.</div>
+                  <div className="text-xs text-muted-foreground">No failed runs, offline runners, expired sign-ins or blocked needs.</div>
                 </div>
               </div>
             ) : (

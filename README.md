@@ -112,9 +112,22 @@ go run ./cmd/lucid ci runs --repo you/your-repo
 
 The daemon serves the same data at `GET /api/ci/summary`, `GET /api/ci/runners` and `GET /api/ci/runs?repo=`, and can act: `POST /api/ci/containers/{name}/{start|stop|restart}` (runner containers only; any other container is refused) and `POST /api/ci/runs/{owner%2Fname}/{id}/rerun` (re-runs failed jobs). Every POST needs the header `X-Lucid-Confirm: yes`, which the web UI sends. The token is never logged or returned; GitHub responses are cached for 30 seconds. In docker compose the daemon uses the mounted docker socket for containers, and needs `GITHUB_TOKEN` exported (or in `.env`) for GitHub, because the image has no `gh`. Details: [docs/CONFIG.md](docs/CONFIG.md#runners--ci).
 
+## Projects and MCP
+
+Describe what you build in your own `projects.yaml` (in the Lucidbench data directory, or `LUCID_PROJECTS`; never in this repository): each project's category (product, portfolio piece, private tool that builds other projects, experiment or coursework), type, status, visibility, what it builds into and what it still needs. Start from [`projects.example.yaml`](projects.example.yaml):
+
+```sh
+go run ./cmd/lucid projects init       # write the example, then edit it
+go run ./cmd/lucid projects            # table grouped by category
+go run ./cmd/lucid projects show my-app
+go run ./cmd/lucid mcp                 # which MCP servers Claude Code, Codex, Grok and Cursor can reach
+```
+
+`lucid mcp` (and the MCP page, `GET /api/mcp`) reads only server names, transports and hosts from each client's own config; env, headers, arguments and tokens are never read out. Details: [docs/CONFIG.md](docs/CONFIG.md#projects).
+
 ## Web UI
 
-The UI at <http://localhost:7420> opens on an Overview: AI accounts, runners, CI health with a pass rate and recent-run bars, the cluster, a "needs attention" list (failed runs with a re-run button, offline runners, stopped runner containers, expired sign-ins), recent activity and quick actions. Runners & CI shows the runner fleet with container controls (each asks before it acts) and every recent workflow run; Accounts groups every detected account by provider; System covers the daemon, cluster and jobs, with a log viewer. Press Ctrl+K (⌘K on macOS) for the command palette. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
+The UI at <http://localhost:7420> opens on an Overview: AI accounts, runners, CI health with a pass rate and recent-run bars, the cluster, a "needs attention" list (failed runs with a re-run button, offline runners, stopped runner containers, expired sign-ins), recent activity and quick actions. Projects shows your projects by category as cards (status, visibility, repo, Linear id, builds-into links and a needs checklist) or as a "what needs what" dependency graph. MCP servers shows a matrix of servers against clients. Runners & CI shows the runner fleet with container controls (each asks before it acts) and every recent workflow run; Accounts groups every detected account by provider; System covers the daemon, cluster and jobs, with a log viewer. Press Ctrl+K (⌘K on macOS) for the command palette. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
 
 Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
