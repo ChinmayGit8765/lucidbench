@@ -7,19 +7,28 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Lucidbench</title>
     <script>
-      // Apply the theme before first paint so there is no flash. Order:
-      // ?theme= (not persisted) > saved choice > last ui.theme from the
-      // daemon > dark. "system" follows prefers-color-scheme.
+      // Replay the last applied theme before first paint so there is no
+      // flash: its base, its variables and the density (see src/lib/theme.ts).
+      // A ?theme= parameter is applied by the app once the themes load; here
+      // only its base is known, for the built-in ids.
       ;(function () {
-        var ok = { dark: 1, light: 1, system: 1 }
-        var pref = new URLSearchParams(location.search).get("theme")
+        var root = document.documentElement
+        var forced = new URLSearchParams(location.search).get("theme")
+        var saved = null
         try {
-          if (!ok[pref]) pref = localStorage.getItem("lucidbench.theme")
-          if (!ok[pref]) pref = localStorage.getItem("lucidbench.theme.config")
+          saved = JSON.parse(localStorage.getItem("lucidbench.appearance") || "null")
         } catch (e) {}
-        if (!ok[pref]) pref = "dark"
-        var dark = pref === "dark" || (pref === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-        document.documentElement.classList.toggle("dark", dark)
+        var bases = { dark: 1, midnight: 1, graphite: 1, aurora: 1, light: 0, daylight: 0, paper: 0 }
+        var dark
+        if (forced === "system") dark = matchMedia("(prefers-color-scheme: dark)").matches
+        else if (forced && forced in bases) dark = !!bases[forced]
+        else if (saved) dark = !!saved.dark
+        else dark = true
+        root.classList.toggle("dark", dark)
+        if (saved && !forced) {
+          for (var k in saved.vars || {}) root.style.setProperty(k, saved.vars[k])
+          if (saved.density) root.dataset.density = saved.density
+        }
       })()
     </script>
   </head>

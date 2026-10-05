@@ -85,8 +85,13 @@
  * Status colours carry meaning only: green ok, amber attention, red failure,
  * azure in progress, grey unknown. *-soft is a tinted surface, *-fg is text
  * on that surface (AA contrast in both themes).
+ *
+ * Themes (Settings › Appearance) override these as inline variables on
+ * <html>. .lb-light and .lb-dark re-declare a base inside any subtree, so a
+ * theme thumbnail can render in its own base whatever the page uses.
  */
-:root {
+:root,
+.lb-light {
   color-scheme: light;
   --radius: 0.625rem;
 
@@ -115,6 +120,9 @@
   --brand-soft: oklch(0.55 0.19 255 / 9%);
   --brand-fg: oklch(0.47 0.18 258);
   --brand-2: oklch(0.55 0.2 295);
+  /* The two faint lights at the top of the page. */
+  --glow-1: oklch(0.72 0.14 245 / 5%);
+  --glow-2: oklch(0.7 0.16 295 / 3%);
 
   --success: oklch(0.62 0.15 155);
   --success-soft: oklch(0.62 0.15 155 / 11%);
@@ -142,7 +150,8 @@
   --shadow-pop: 0 12px 32px -8px oklch(0.2 0.02 265 / 18%), 0 2px 6px oklch(0.2 0.02 265 / 6%);
 }
 
-.dark {
+.dark,
+.lb-dark {
   color-scheme: dark;
 
   --background: oklch(0.155 0.006 265);
@@ -170,6 +179,8 @@
   --brand-soft: oklch(0.72 0.14 245 / 13%);
   --brand-fg: oklch(0.8 0.11 240);
   --brand-2: oklch(0.7 0.16 295);
+  --glow-1: oklch(0.72 0.14 245 / 9%);
+  --glow-2: oklch(0.7 0.16 295 / 6%);
 
   --success: oklch(0.72 0.16 155);
   --success-soft: oklch(0.72 0.16 155 / 13%);
@@ -249,15 +260,20 @@
  */
 .app-backdrop {
   background:
-    radial-gradient(1200px 420px at 70% -160px, oklch(0.72 0.14 245 / 5%), transparent 70%),
-    radial-gradient(900px 360px at 15% -200px, oklch(0.7 0.16 295 / 3%), transparent 70%),
+    radial-gradient(1200px 440px at 70% -160px, var(--glow-1), transparent 70%),
+    radial-gradient(900px 370px at 15% -200px, var(--glow-2), transparent 70%),
     var(--background);
 }
-.dark .app-backdrop {
-  background:
-    radial-gradient(1200px 460px at 70% -160px, oklch(0.72 0.14 245 / 9%), transparent 70%),
-    radial-gradient(900px 380px at 15% -200px, oklch(0.7 0.16 295 / 6%), transparent 70%),
-    var(--background);
+
+/* Comfortable density scales the whole rem-based UI up a step. */
+html[data-density="comfortable"] {
+  font-size: 106.25%;
+}
+
+/* Theme art is decoration: never selectable or draggable. */
+.theme-art {
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .tile-glow {
   background: radial-gradient(260px 140px at 100% 0%, var(--brand-soft), transparent 70%);

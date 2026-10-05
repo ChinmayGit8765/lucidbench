@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card"
 import { Sheet } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { ApiError, request, usePoll, type Polled } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
@@ -365,7 +366,8 @@ function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunnin
   )
 }
 
-export default function System({ health }: { health: Health | null | undefined }) {
+export default function System() {
+  const { health } = useApp()
   const cluster = usePoll<ClusterInfo>("/api/cluster")
   const jobs = usePoll<Job[]>("/api/jobs")
   return (

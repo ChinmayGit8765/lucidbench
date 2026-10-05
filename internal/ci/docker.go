@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 )
 
 // Container is a local self-hosted runner container. Of the container's
@@ -47,22 +48,10 @@ func (f Filter) Matches(project, image string) bool {
 }
 
 // DockerFunc runs the docker CLI with args and returns its standard output.
-type DockerFunc func(ctx context.Context, args ...string) ([]byte, error)
+type DockerFunc = docker.Func
 
 // ExecDocker runs the real docker CLI.
-func ExecDocker(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("docker %s: %s", args[0], msg)
-		}
-		return nil, fmt.Errorf("docker %s: %w", args[0], err)
-	}
-	return out, nil
-}
+var ExecDocker DockerFunc = docker.Exec
 
 // psLine is one line of `docker ps --format '{{json .}}'`.
 type psLine struct {
@@ -72,18 +61,6 @@ type psLine struct {
 	State  string `json:"State"`
 	Status string `json:"Status"`
 	Labels string `json:"Labels"`
-}
-
-// parseLabels parses docker's "k=v,k=v" label string. Values that contain
-// commas are split, which only loses labels this package does not read.
-func parseLabels(s string) map[string]string {
-	m := map[string]string{}
-	for _, kv := range strings.Split(s, ",") {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			m[k] = v
-		}
-	}
-	return m
 }
 
 // parsePS parses `docker ps -a --no-trunc --format '{{json .}}'` output (one
@@ -101,7 +78,7 @@ func parsePS(out []byte, f Filter) ([]Container, error) {
 		if err := json.Unmarshal(line, &p); err != nil {
 			return nil, fmt.Errorf("parse docker ps output: %w", err)
 		}
-		labels := parseLabels(p.Labels)
+		labels := docker.ParseLabels(p.Labels)
 		project := labels["com.docker.compose.project"]
 		if !f.Matches(project, p.Image) {
 			continue

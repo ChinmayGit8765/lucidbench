@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `ui.json`, `themes/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -58,11 +58,12 @@ is an error that names the file and the key, for example
 | `cluster.name` | `lucidbench` | `LUCID_CLUSTER_NAME` | Local kind cluster name. Lowercase letters, digits and dashes. |
 | `agent.image` | `lucidbench/agent:dev` | `LUCID_AGENT_IMAGE` | Image used to run provider CLIs. |
 | `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault. A leading `~` is expanded. |
-| `ui.theme` | `dark` | `LUCID_UI_THEME` | `dark`, `light` or `system`. |
+| `ui.theme` | `dark` | `LUCID_UI_THEME` | `dark`, `light` or `system`: the starting theme until you pick one in Settings (dark is Midnight, light is Daylight). Afterwards `ui.json` wins. |
 | `ci.github.repos` | `[]` | `LUCID_CI_GITHUB_REPOS` | GitHub repositories (`owner/name`) whose self-hosted runners and recent workflow runs appear under Runners & CI. The variable is a comma-separated list. |
 | `ci.github.token` | `env:GITHUB_TOKEN` | `LUCID_CI_GITHUB_TOKEN` | Secret reference for the GitHub API token. If the variable it names is empty, Lucidbench runs `gh auth token` when the GitHub CLI is installed. See [Runners & CI](#runners--ci). |
 | `ci.runners.compose_project` | (empty) | `LUCID_CI_RUNNERS_COMPOSE_PROJECT` | Docker compose project whose containers are runners. Empty disables this match. |
 | `ci.runners.image_match` | `github-runner` | `LUCID_CI_RUNNERS_IMAGE_MATCH` | Containers whose image name contains this text are runners too. Empty disables this match. |
+| `docker.allowed_projects` | `[]` | `LUCID_DOCKER_ALLOWED_PROJECTS` | Compose projects whose containers the Containers page may start, stop and restart, besides the `lucidbench` project and the runner containers. Every other container is read-only. The variable is a comma-separated list. See [Docker and Kubernetes](#docker-and-kubernetes). |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -177,6 +178,110 @@ read out, stored or returned.
 
 Disabled providers (`providers.<p>.enabled: false`) are skipped, and inside
 Docker the host home comes from `LUCID_HOST_HOME`, as for accounts.
+
+## Themes and UI prefs
+
+Settings › Appearance, Sidebar and Extensions save to `<data dir>/ui.json`
+through `GET`/`PUT /api/prefs`:
+
+```json
+{
+  "theme": "midnight",
+  "overrides": { "accent": "#4f8ff7", "density": "compact", "radius": 10, "font": "geist", "sidebar": "expanded" },
+  "modules": { "projects": { "order": 1 } },
+  "extensions": { "containers": { "added": true, "order": 0 } },
+  "sprite_board": false
+}
+```
+
+Every field is optional and validated; a bad value is refused with `400` and
+the file is left as it was. Writes go to a temporary file that is renamed
+over `ui.json`, so a crash never leaves half a file. `theme` is a theme id or
+`system` (Midnight or Daylight, following the OS). Adding `?theme=<id>` to
+any UI address shows that theme for the page view without saving it.
+
+Themes:
+
+| Route | What |
+|---|---|
+| `GET /api/themes` | the five presets (Midnight, Daylight, Graphite, Aurora, Paper) and your themes |
+| `GET /api/themes/{id}/export` | one theme with its art inline (the import format) |
+| `GET /api/themes/{id}/assets/{file}` | one art file of a user theme |
+| `POST /api/themes` | create or replace a user theme: `{"theme": {...}, "assets": {"file.svg": "<svg…>", "file.png": "<base64>"}}` |
+| `DELETE /api/themes/{id}` | delete a user theme (presets cannot be deleted) |
+| `POST /api/themes/generate` | draft a theme from a description (below) |
+
+Your themes live in `<data dir>/themes/<id>/theme.json` with their art next
+to it. A theme is `{ id, name, version: 1, base: "dark" | "light",
+description?, tokens, fonts?, art?, labels? }`:
+
+- `tokens` may set only the UI's design tokens (`--background`, `--brand`,
+  `--glow-1`, `--radius`, …; the list is in `internal/themes/theme.go`).
+  Each value is checked by kind: colours (`#hex`, `oklch()`, `rgb()`,
+  `hsl()`, `color-mix()`), shadows, lengths (`px`, `rem`, `em`). `url()`,
+  `expression()`, `@import`, `;` and braces are refused.
+- `fonts` names installed fonts only (`sans`, `mono`); themes cannot load
+  web fonts.
+- `art` names files in the theme's folder for the header banner
+  (`headerImage`), the sidebar mascot (`sidebarMascot`), empty states
+  (`emptyState`) and the Overview sprite board (`spriteBoard`: up to 12
+  `{file, caption}`). Files are lowercase `.svg`, `.png`, `.webp` or `.gif`
+  names. SVGs are sanitised on save: scripts, event handlers, external
+  references, `<image>`, `<foreignObject>`, animations and DOCTYPEs are
+  removed. PNG, WebP and GIF files are checked by content. Art is served
+  only from inside the theme's folder, with `nosniff` and a locked-down CSP.
+- `labels` may rename `overview_title`, `attention`, `all_clear`,
+  `sprite_board` and `usage_meter` (up to 40 characters each).
+
+Every `POST`, `PUT` and `DELETE` here needs the `X-Lucid-Confirm: yes`
+header, which the UI sends.
+
+### Describe a theme
+
+`POST /api/themes/generate` with `{"description": "...", "provider":
+"claude" | "codex" | "grok", "profile"?: "<account profile>"}` runs that
+provider's own CLI on this machine, signed in with your subscription. It
+sends a fixed prompt (`internal/themes/prompts/theme.md`) asking for theme
+JSON and up to four original SVGs, and runs with no tools, MCP servers or
+hooks in an empty temporary folder:
+
+| Provider | Command |
+|---|---|
+| Claude | `claude -p --output-format json --model sonnet --system-prompt-file <prompt> --safe-mode --strict-mcp-config --tools "" --no-session-persistence` (description on stdin) |
+| Codex | `codex exec --skip-git-repo-check --ephemeral --ignore-user-config --ignore-rules --sandbox read-only -o <file> -` |
+| Grok | `grok -p <prompt> --output-format json --disable-web-search --no-subagents --max-turns 1` |
+
+The answer is validated and sanitised (unsafe parts are dropped and listed)
+and returned as a preview with token counts and cost when the CLI reports
+them. Nothing is saved until you choose Save. A run is limited to 120
+seconds and one at a time. A missing or signed-out CLI answers `424` with
+what to run; a daemon running in Docker answers `501`, because the CLIs and
+your sign-ins live on the host: use the desktop app or a lucidd started on
+the host.
+
+## Docker and Kubernetes
+
+The Containers and Kubernetes extensions read the local Docker engine and
+the Lucidbench kind cluster.
+
+| Route | What |
+|---|---|
+| `GET /api/docker/containers` | every container, grouped by compose project (kind nodes by cluster), with the actions allowed on each |
+| `GET /api/docker/stats` | one `docker stats --no-stream` sample |
+| `GET /api/docker/images`, `/api/docker/volumes` | read-only lists |
+| `GET /api/docker/containers/{name}/logs?tail=200[&follow=1]` | log tail; `follow=1` streams server-sent events |
+| `POST /api/docker/containers/{name}/{start\|stop\|restart}` | only where allowed (below) |
+| `GET /api/k8s/namespaces`, `/nodes`, `/pods`, `/jobs`, `/events` | `?namespace=` filters; events are the newest 50 |
+| `GET /api/k8s/pods/{ns}/{name}/logs?tail=200[&container=c][&follow=1]` | pod log tail or stream |
+| `DELETE /api/k8s/jobs/{ns}/{name}` | deletes a job that has completed or failed (`409` otherwise) |
+
+Container labels, mounts and environment values are never returned; of the
+labels only the compose project and service and the kind cluster name are
+read. Start, stop and restart are allowed only for containers of the
+`lucidbench` compose project, runner containers (the `ci.runners` filter),
+compose projects listed in `docker.allowed_projects`, and kind nodes
+(restart only). Every other container is read-only. Every `POST` and
+`DELETE` needs `X-Lucid-Confirm: yes`.
 
 ## Containers
 

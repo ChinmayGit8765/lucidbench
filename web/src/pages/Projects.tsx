@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import {
   blockedNeeds,
   CATEGORIES,
@@ -480,7 +481,8 @@ function ProjectsSkeleton() {
   )
 }
 
-export default function Projects({ focus }: { focus?: { id: string; n: number } | null }) {
+export default function Projects() {
+  const { focus } = useApp()
   const poll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
   const data = poll.data
   const all = useMemo(() => data?.projects ?? [], [data])

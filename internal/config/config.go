@@ -89,6 +89,14 @@ type CIConfig struct {
 	Runners CIRunnersConfig `json:"runners"`
 }
 
+// DockerConfig configures the Containers page.
+type DockerConfig struct {
+	// AllowedProjects are extra compose projects whose containers the UI may
+	// start, stop and restart (the lucidbench project and runner containers
+	// are always allowed).
+	AllowedProjects []string `json:"allowed_projects"`
+}
+
 // Config is the effective configuration. It holds no secret values.
 type Config struct {
 	Server    ServerConfig              `json:"server"`
@@ -98,6 +106,7 @@ type Config struct {
 	Vault     VaultConfig               `json:"vault"`
 	UI        UIConfig                  `json:"ui"`
 	CI        CIConfig                  `json:"ci"`
+	Docker    DockerConfig              `json:"docker"`
 
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
@@ -119,6 +128,7 @@ func Default() *Config {
 			GitHub:  CIGitHubConfig{Repos: []string{}, Token: DefaultCIToken},
 			Runners: CIRunnersConfig{ComposeProject: DefaultCIComposeProject, ImageMatch: DefaultCIImageMatch},
 		},
+		Docker:  DockerConfig{AllowedProjects: []string{}},
 		sources: map[string]string{},
 	}
 	for _, p := range Providers {
@@ -137,7 +147,7 @@ func Keys() []string {
 		ks = append(ks, "providers."+p+".enabled", "providers."+p+".extra_dirs")
 	}
 	return append(ks, "cluster.name", "agent.image", "vault.path", "ui.theme",
-		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match")
+		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match", "docker.allowed_projects")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -336,6 +346,16 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 			err = d.section(e, d.stringField("ui", "theme", &c.UI.Theme))
 		case "ci":
 			err = d.ci(e)
+		case "docker":
+			err = d.section(e, func(k string, v *yaml.Node) (bool, error) {
+				if k != "allowed_projects" {
+					return false, nil
+				}
+				l, err := d.list(v, "docker.allowed_projects")
+				c.Docker.AllowedProjects = l
+				c.sources["docker.allowed_projects"] = "file"
+				return true, err
+			})
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -497,6 +517,10 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 		c.CI.GitHub.Repos = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
 		c.sources["ci.github.repos"] = "env:LUCID_CI_GITHUB_REPOS"
 	}
+	if v := getenv("LUCID_DOCKER_ALLOWED_PROJECTS"); v != "" {
+		c.Docker.AllowedProjects = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+		c.sources["docker.allowed_projects"] = "env:LUCID_DOCKER_ALLOWED_PROJECTS"
+	}
 	if v := getenv("LUCID_CI_GITHUB_TOKEN"); v != "" {
 		ref, err := ParseSecretRef(v)
 		if err != nil {
@@ -638,8 +662,15 @@ func (c *Config) validate() error {
 	if strings.ContainsAny(c.CI.Runners.ComposeProject, " \t") {
 		return c.bad("ci.runners.compose_project", "must not contain spaces")
 	}
+	for _, p := range c.Docker.AllowedProjects {
+		if !composeProjectRE.MatchString(p) {
+			return c.bad("docker.allowed_projects", fmt.Sprintf("%q must be a compose project name (lowercase letters, digits, dashes, underscores)", p))
+		}
+	}
 	return nil
 }
+
+var composeProjectRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 var repoRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
@@ -674,6 +705,8 @@ func (c *Config) value(key string) string {
 		return c.CI.Runners.ComposeProject
 	case "ci.runners.image_match":
 		return c.CI.Runners.ImageMatch
+	case "docker.allowed_projects":
+		return "[" + strings.Join(c.Docker.AllowedProjects, ", ") + "]"
 	}
 	parts := strings.Split(key, ".")
 	if len(parts) == 3 && parts[0] == "providers" {

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { AlertTriangle, RotateCw } from "lucide-react"
 
+import { useEmptyArt } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -11,7 +12,8 @@ export function Skeleton({ className }: { className?: string }) {
 
 /**
  * A friendly empty state: a centre icon on a lit tile, with optional small
- * satellite tiles around it, over a faded grid.
+ * satellite tiles around it, over a faded grid. A theme with an empty-state
+ * illustration shows that instead.
  */
 export function EmptyState({
   icon,
@@ -34,8 +36,12 @@ export function EmptyState({
     "right-3 bottom-0 rotate-6",
     "left-4 bottom-0 -rotate-6",
   ]
+  const art = useEmptyArt()
   return (
     <div className={cn("flex flex-col items-center px-6 py-10 text-center", className)}>
+      {art ? (
+        <img src={art} alt="" aria-hidden className="theme-art mb-4 h-24 w-40 object-contain opacity-90" />
+      ) : (
       <div className={cn("relative mb-5 w-40", satellites.length > 0 ? "h-24" : "h-16")}>
         <div className="bg-grid absolute inset-0 [mask-image:radial-gradient(closest-side,black,transparent)] opacity-70" />
         <div className="absolute inset-0 flex items-center justify-center">
@@ -50,6 +56,7 @@ export function EmptyState({
           </div>
         ))}
       </div>
+      )}
       <h3 className="text-base font-semibold tracking-tight">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
       {children && <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{children}</div>}

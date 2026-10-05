@@ -1,20 +1,26 @@
 import * as React from "react"
-import { CornerDownLeft, Search, type LucideIcon } from "lucide-react"
+import { ChevronRight, CornerDownLeft, Search, type LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 export interface Command {
   id: string
   label: string
-  group: "Go to" | "Actions" | "Projects"
+  /** Section heading, e.g. "Go to", "Actions", "Appearance". */
+  group: string
   icon: LucideIcon
   hint?: string
   keywords?: string
   disabled?: boolean
   /** Listed only once the user has typed something, so long lists stay out of the way. */
   searchOnly?: boolean
-  run: () => void
+  /** Opens a nested list instead of running (Backspace on an empty query goes back). */
+  children?: Command[]
+  run?: () => void
 }
+
+/** Groups in this order first; any others follow in the order they appear. */
+const GROUP_ORDER = ["Go to", "Actions", "Appearance", "Extensions", "Projects"]
 
 /** Every query word must appear in the label, hint or keywords. */
 function matches(c: Command, q: string): boolean {
@@ -55,6 +61,7 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = React.useState("")
   const [active, setActive] = React.useState(0)
+  const [stack, setStack] = React.useState<Command[]>([])
   const input = React.useRef<HTMLInputElement>(null)
   const list = React.useRef<HTMLDivElement>(null)
   const restore = React.useRef<HTMLElement | null>(null)
@@ -65,11 +72,14 @@ export function CommandPalette({
     restore.current = document.activeElement as HTMLElement | null
     setQuery("")
     setActive(0)
+    setStack([])
     requestAnimationFrame(() => input.current?.focus())
     return () => restore.current?.focus?.()
   }, [open])
 
-  const shown = commands.filter((c) => (!c.searchOnly || query.trim() !== "") && matches(c, query))
+  const parent = stack[stack.length - 1]
+  const items = parent ? (parent.children ?? []) : commands
+  const shown = items.filter((c) => (!c.searchOnly || query.trim() !== "") && matches(c, query))
   const runnable = shown.filter((c) => !c.disabled)
   const current = runnable[Math.min(active, runnable.length - 1)]
 
@@ -82,6 +92,14 @@ export function CommandPalette({
 
   const run = (c: Command | undefined) => {
     if (!c || c.disabled) return
+    if (c.children) {
+      setStack((s) => [...s, c])
+      setQuery("")
+      setActive(0)
+      input.current?.focus()
+      return
+    }
+    if (!c.run) return
     onClose()
     // Let the dialog unmount (and focus return) before the command acts.
     setTimeout(c.run, 0)
@@ -90,7 +108,12 @@ export function CommandPalette({
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault()
-      onClose()
+      if (stack.length) setStack((s) => s.slice(0, -1))
+      else onClose()
+    } else if (e.key === "Backspace" && query === "" && stack.length) {
+      e.preventDefault()
+      setStack((s) => s.slice(0, -1))
+      setActive(0)
     } else if (e.key === "ArrowDown" || (e.key === "n" && e.ctrlKey)) {
       e.preventDefault()
       setActive((i) => (runnable.length ? (Math.min(i, runnable.length - 1) + 1) % runnable.length : 0))
@@ -105,9 +128,12 @@ export function CommandPalette({
     }
   }
 
-  const groups = (["Go to", "Actions", "Projects"] as const)
-    .map((g) => ({ g, items: shown.filter((c) => c.group === g) }))
-    .filter((x) => x.items.length > 0)
+  const names = [...new Set(shown.map((c) => c.group))].sort((a, b) => {
+    const ia = GROUP_ORDER.indexOf(a)
+    const ib = GROUP_ORDER.indexOf(b)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+  })
+  const groups = names.map((g) => ({ g, items: shown.filter((c) => c.group === g) }))
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[14vh]" onKeyDown={onKey}>
@@ -120,6 +146,12 @@ export function CommandPalette({
       >
         <div className="flex items-center gap-2.5 border-b px-4">
           <Search className="size-4 shrink-0 text-subtle-foreground" />
+          {stack.map((c) => (
+            <span key={c.id} className="flex shrink-0 items-center gap-1 rounded-md border bg-muted/60 px-1.5 py-0.5 text-xs text-muted-foreground">
+              {c.label.replace(/…$/, "")}
+              <ChevronRight className="size-3" />
+            </span>
+          ))}
           <input
             ref={input}
             value={query}
@@ -127,7 +159,7 @@ export function CommandPalette({
               setQuery(e.target.value)
               setActive(0)
             }}
-            placeholder="Type a command or search…"
+            placeholder={parent ? `Search ${parent.label.replace(/…$/, "").toLowerCase()}…` : "Type a command or search…"}
             role="combobox"
             aria-expanded="true"
             aria-controls={listId}
@@ -137,7 +169,9 @@ export function CommandPalette({
           <kbd className="rounded border bg-muted px-1.5 py-0.5 text-2xs text-subtle-foreground">Esc</kbd>
         </div>
         <div ref={list} id={listId} role="listbox" aria-label="Commands" className="max-h-[min(60vh,420px)] overflow-y-auto p-1.5">
-          {groups.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching commands.</p>}
+          {groups.length === 0 && (
+            <p className="px-3 py-8 text-center text-sm text-muted-foreground">{parent && items.length === 0 ? "Nothing to choose here." : "No matching commands."}</p>
+          )}
           {groups.map(({ g, items }) => (
             <div key={g} role="group" aria-label={g} className="pb-1">
               <div className="px-2.5 pb-1 pt-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">{g}</div>
@@ -170,7 +204,11 @@ export function CommandPalette({
                     </span>
                     <span className="min-w-0 flex-1 truncate">{c.label}</span>
                     {c.hint && <span className="max-w-[45%] shrink-0 truncate text-xs text-subtle-foreground">{c.hint}</span>}
-                    {on && <CornerDownLeft className="size-3.5 shrink-0 text-subtle-foreground" />}
+                    {c.children ? (
+                      <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" />
+                    ) : (
+                      on && <CornerDownLeft className="size-3.5 shrink-0 text-subtle-foreground" />
+                    )}
                   </div>
                 )
               })}
@@ -185,6 +223,11 @@ export function CommandPalette({
           <span className="flex items-center gap-1">
             <kbd className="rounded border bg-background px-1">↵</kbd> run
           </span>
+          {stack.length > 0 && (
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border bg-background px-1">⌫</kbd> back
+            </span>
+          )}
           <span className="ml-auto">Lucidbench</span>
         </div>
       </div>
