@@ -19,6 +19,8 @@ const Template = `# Lucidbench projects.
 #             (confidential projects are never sent to AI providers)
 # needs:      status is todo | doing | done | blocked; from names the
 #             project that supplies it, if any.
+# local_path: optional absolute path of the project's checkout on this
+#             machine. Work sessions need it; it is checked when used.
 
 version: 1
 projects:
@@ -29,6 +31,7 @@ projects:
     status: active
     visibility: public
     repo: you/my-app
+    # local_path: <absolute path to your checkout>
     linear: APP-1
     summary: The thing people actually use.
     needs:
