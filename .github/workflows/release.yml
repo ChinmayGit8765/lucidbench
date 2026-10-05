@@ -1,0 +1,68 @@
+name: release
+
+# Builds the Windows desktop installer for a version tag (v1.2.3 or v1.2.3-beta.1)
+# and publishes it as a GitHub Release. The tag must match the version in
+# desktop/src-tauri/tauri.conf.json.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Check the tag matches the app version
+        run: |
+          app=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          echo "app=$app tag=$tag"
+          test "$app" = "$tag"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build installer
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run build:sidecar
+          npx tauri build
+
+      - name: Collect artefacts
+        run: |
+          mkdir -p dist-release
+          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe dist-release/
+          cd dist-release && sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0 ~ "^## " {p = index($0, v) == 1} p' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" dist-release/* $prerelease \
+            --title "Lucidbench $GITHUB_REF_NAME" --notes "${notes:-See CHANGELOG.md}"
