@@ -1,0 +1,25 @@
+{
+  "total_count": 2,
+  "runners": [
+    {
+      "id": 21,
+      "name": "home-runner",
+      "os": "Linux",
+      "status": "online",
+      "busy": true,
+      "labels": [
+        { "id": 1, "name": "self-hosted", "type": "read-only" },
+        { "id": 2, "name": "Linux", "type": "read-only" },
+        { "id": 3, "name": "runforge", "type": "custom" }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "spare-runner",
+      "os": "Linux",
+      "status": "offline",
+      "busy": false,
+      "labels": [{ "id": 1, "name": "self-hosted", "type": "read-only" }]
+    }
+  ]
+}

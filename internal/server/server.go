@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
@@ -44,6 +45,7 @@ func New(cfgs ...*config.Config) http.Handler {
 	mux.Handle("/api/config", config.Handler(cfg, nil))
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
+	ci.Register(mux, ci.New(cfg.CI))
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", webui.Handler())
 	return mux

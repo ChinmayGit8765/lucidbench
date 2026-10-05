@@ -10,6 +10,9 @@ services:
       LUCID_HOST_HOME: /host-home
       LUCID_IN_CONTAINER: "1"
       LUCID_CONFIG: /config/config.yaml
+      # GitHub token for Runners & CI (the image has no gh CLI). Passed through
+      # from the shell or a git-ignored .env; never stored in this file.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     # Root so the process can use the mounted docker socket.
     user: root
     volumes:
