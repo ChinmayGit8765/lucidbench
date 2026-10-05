@@ -57,7 +57,7 @@ is an error that names the file and the key, for example
 | `providers.<p>.extra_dirs` | `[]` | `LUCID_PROVIDERS_<P>_EXTRA_DIRS` | Extra config directories to scan, for example a second Claude profile. The variable is a path list (`;` on Windows, `:` elsewhere) and replaces the file value. |
 | `cluster.name` | `lucidbench` | `LUCID_CLUSTER_NAME` | Local kind cluster name. Lowercase letters, digits and dashes. |
 | `agent.image` | `lucidbench/agent:dev` | `LUCID_AGENT_IMAGE` | Image used to run provider CLIs. |
-| `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault. A leading `~` is expanded. |
+| `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault, the folder behind Memory and Boards (any Obsidian vault works). Empty means `<data dir>/memory`. A leading `~` is expanded. Settings › General shows the folder in use; the UI does not write the config file, so change this key and restart. |
 | `ui.theme` | `dark` | `LUCID_UI_THEME` | `dark`, `light` or `system`: the starting theme until you pick one in Settings (dark is Midnight, light is Daylight). Afterwards `ui.json` wins. |
 | `ci.github.repos` | `[]` | `LUCID_CI_GITHUB_REPOS` | GitHub repositories (`owner/name`) whose self-hosted runners and recent workflow runs appear under Runners & CI. The variable is a comma-separated list. |
 | `ci.github.token` | `env:GITHUB_TOKEN` | `LUCID_CI_GITHUB_TOKEN` | Secret reference for the GitHub API token. If the variable it names is empty, Lucidbench runs `gh auth token` when the GitHub CLI is installed. See [Runners & CI](#runners--ci). |

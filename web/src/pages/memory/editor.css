@@ -1,0 +1,360 @@
+/*
+ * Memory editor typography: a calm, document-first look (generous line
+ * height, quiet headings, soft blocks) on the app's own tokens, so every
+ * theme restyles it.
+ */
+.lb-prose {
+  outline: none;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--foreground);
+  min-height: 12rem;
+  padding-bottom: 6rem;
+  caret-color: var(--brand);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+.lb-prose > * + * {
+  margin-top: 0.35em;
+}
+.lb-prose p {
+  margin: 0.15em 0;
+}
+.lb-prose h1,
+.lb-prose h2,
+.lb-prose h3,
+.lb-prose h4,
+.lb-prose h5,
+.lb-prose h6 {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+.lb-prose h1 {
+  font-size: 1.75em;
+  margin: 1.1em 0 0.25em;
+}
+.lb-prose h2 {
+  font-size: 1.4em;
+  margin: 1em 0 0.2em;
+}
+.lb-prose h3 {
+  font-size: 1.17em;
+  margin: 0.9em 0 0.15em;
+}
+.lb-prose h4,
+.lb-prose h5,
+.lb-prose h6 {
+  font-size: 1em;
+  margin: 0.8em 0 0.1em;
+}
+.lb-prose > :first-child {
+  margin-top: 0;
+}
+.lb-prose a {
+  color: var(--brand-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--brand) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.lb-prose strong {
+  font-weight: 650;
+}
+.lb-prose code {
+  font-size: 0.85em;
+  padding: 0.12em 0.36em;
+  border-radius: 5px;
+  background: var(--muted);
+  color: var(--danger-fg);
+}
+.lb-prose pre {
+  position: relative;
+  margin: 0.6em 0;
+  padding: 0.85em 1em;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  font-size: 0.82em;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+.lb-prose pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+}
+.lb-prose pre[data-language]:not([data-language=""])::after {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.45em;
+  right: 0.7em;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--subtle-foreground);
+}
+.lb-prose ul,
+.lb-prose ol {
+  padding-left: 1.55em;
+  margin: 0.2em 0;
+}
+.lb-prose ul {
+  list-style: disc;
+}
+.lb-prose ul ul {
+  list-style: circle;
+}
+.lb-prose ol {
+  list-style: decimal;
+}
+.lb-prose li {
+  margin: 0.08em 0;
+}
+.lb-prose li > p {
+  margin: 0;
+}
+.lb-prose li::marker {
+  color: var(--subtle-foreground);
+}
+/* Task items: a drawn checkbox in the item's left padding. */
+.lb-prose li[data-item-type="task"] {
+  list-style: none;
+  position: relative;
+  padding-left: 1.6em;
+  margin-left: -1.6em;
+}
+.lb-prose li[data-item-type="task"]::before {
+  content: "";
+  position: absolute;
+  left: 0.1em;
+  top: 0.38em;
+  width: 1em;
+  height: 1em;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--card);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.lb-prose li[data-item-type="task"]:hover::before {
+  border-color: var(--brand);
+}
+.lb-prose li[data-item-type="task"][data-checked="true"]::before {
+  background: var(--brand)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 85% no-repeat;
+  border-color: var(--brand);
+}
+.lb-prose li[data-item-type="task"][data-checked="true"] > p {
+  color: var(--subtle-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+.lb-prose blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding: 0.05em 0 0.05em 0.95em;
+  margin: 0.5em 0;
+  color: var(--muted-foreground);
+}
+.lb-prose hr {
+  border: none;
+  border-top: 1px solid var(--border-strong);
+  margin: 1.2em 0;
+}
+.lb-prose hr.ProseMirror-selectednode {
+  border-top-color: var(--brand);
+}
+.lb-prose img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+/* Tables. */
+.lb-prose table {
+  border-collapse: collapse;
+  margin: 0.7em 0;
+  width: 100%;
+  font-size: 0.92em;
+  table-layout: fixed;
+}
+.lb-prose th,
+.lb-prose td {
+  border: 1px solid var(--border-strong);
+  padding: 0.35em 0.65em;
+  text-align: left;
+  vertical-align: top;
+}
+.lb-prose th {
+  background: var(--muted);
+  font-weight: 600;
+}
+.lb-prose .selectedCell {
+  background: var(--brand-soft);
+}
+.lb-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--brand);
+}
+/* Wikilinks read as page mentions. */
+.lb-prose .lb-wikilink {
+  display: inline;
+  color: var(--foreground);
+  font-weight: 500;
+  border-bottom: 1px solid color-mix(in oklch, var(--brand) 55%, transparent);
+  cursor: pointer;
+  padding: 0 1px;
+  border-radius: 2px;
+  transition: background-color 0.12s;
+}
+.lb-prose .lb-wikilink::before {
+  content: "↗";
+  font-size: 0.78em;
+  margin-right: 0.2em;
+  color: var(--brand-fg);
+}
+.lb-prose .lb-wikilink[data-embed]::before {
+  content: "⧉";
+}
+.lb-prose .lb-wikilink:hover {
+  background: var(--brand-soft);
+}
+.lb-prose .lb-wikilink.ProseMirror-selectednode {
+  background: var(--brand-soft);
+  outline: none;
+}
+/* Callouts: a tinted block with a type header (click it to change type). */
+.lb-prose .lb-callout {
+  --c: var(--info);
+  --c-soft: var(--info-soft);
+  --c-fg: var(--info-fg);
+  margin: 0.6em 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, var(--c) 28%, transparent);
+  background: var(--c-soft);
+  padding: 0.55em 0.95em 0.6em;
+}
+.lb-prose .lb-callout::before {
+  content: attr(data-title);
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--c-fg);
+  margin-bottom: 0.15em;
+  cursor: pointer;
+  user-select: none;
+}
+.lb-prose .lb-callout[data-callout="tip"],
+.lb-prose .lb-callout[data-callout="success"],
+.lb-prose .lb-callout[data-callout="check"],
+.lb-prose .lb-callout[data-callout="done"] {
+  --c: var(--success);
+  --c-soft: var(--success-soft);
+  --c-fg: var(--success-fg);
+}
+.lb-prose .lb-callout[data-callout="warning"],
+.lb-prose .lb-callout[data-callout="caution"],
+.lb-prose .lb-callout[data-callout="attention"],
+.lb-prose .lb-callout[data-callout="question"],
+.lb-prose .lb-callout[data-callout="help"],
+.lb-prose .lb-callout[data-callout="faq"] {
+  --c: var(--warning);
+  --c-soft: var(--warning-soft);
+  --c-fg: var(--warning-fg);
+}
+.lb-prose .lb-callout[data-callout="danger"],
+.lb-prose .lb-callout[data-callout="error"],
+.lb-prose .lb-callout[data-callout="bug"],
+.lb-prose .lb-callout[data-callout="failure"] {
+  --c: var(--danger);
+  --c-soft: var(--danger-soft);
+  --c-fg: var(--danger-fg);
+}
+.lb-prose .lb-callout[data-callout="quote"],
+.lb-prose .lb-callout[data-callout="cite"],
+.lb-prose .lb-callout[data-callout="abstract"],
+.lb-prose .lb-callout[data-callout="summary"] {
+  --c: var(--neutral);
+  --c-soft: var(--neutral-soft);
+  --c-fg: var(--neutral-fg);
+}
+.lb-prose .lb-callout-body > :first-child {
+  margin-top: 0;
+}
+/* Placeholders on empty lines. */
+.lb-prose .lb-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--subtle-foreground);
+  opacity: 0.75;
+}
+.lb-prose .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+.lb-prose .ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid var(--foreground);
+  animation: lb-cursor-blink 1.1s steps(2, start) infinite;
+}
+.lb-prose.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+@keyframes lb-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+.lb-prose .ProseMirror-selectednode {
+  outline: 2px solid var(--brand-soft);
+  border-radius: 4px;
+}
+/* Drop indicator while dragging a block. */
+.lb-editor .milkdown-drop-indicator,
+.lb-editor [data-drop-indicator] {
+  background: var(--brand);
+}
+/* Block handle: shown to the left of the hovered block. */
+.lb-block-handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--subtle-foreground);
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+.lb-block-handle[data-show="false"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.lb-block-handle > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  border-radius: 5px;
+}
+.lb-block-handle .lb-bh-add {
+  width: 22px;
+  cursor: pointer;
+}
+.lb-block-handle .lb-bh-grip {
+  width: 16px;
+  cursor: grab;
+}
+.lb-block-handle > *:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
