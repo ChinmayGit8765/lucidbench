@@ -242,6 +242,54 @@
   }
 }
 
+/*
+ * Depth. A faint azure-to-violet light falls from the top of the content
+ * area, and stat tiles carry a soft corner glow. Both are a few percent, so
+ * they read as depth rather than decoration; light mode keeps them fainter.
+ */
+.app-backdrop {
+  background:
+    radial-gradient(1200px 420px at 70% -160px, oklch(0.72 0.14 245 / 5%), transparent 70%),
+    radial-gradient(900px 360px at 15% -200px, oklch(0.7 0.16 295 / 3%), transparent 70%),
+    var(--background);
+}
+.dark .app-backdrop {
+  background:
+    radial-gradient(1200px 460px at 70% -160px, oklch(0.72 0.14 245 / 9%), transparent 70%),
+    radial-gradient(900px 380px at 15% -200px, oklch(0.7 0.16 295 / 6%), transparent 70%),
+    var(--background);
+}
+.tile-glow {
+  background: radial-gradient(260px 140px at 100% 0%, var(--brand-soft), transparent 70%);
+  opacity: 0.55;
+  transition: opacity 0.3s var(--ease-out-soft);
+}
+.group:hover > .tile-glow {
+  opacity: 1;
+}
+
+/* A busy runner: a light sweep along the card's top edge. */
+@keyframes lb-sweep {
+  0% {
+    background-position: -40% 0;
+  }
+  100% {
+    background-position: 140% 0;
+  }
+}
+.busy-shimmer {
+  background: linear-gradient(90deg, transparent 0%, var(--info) 50%, transparent 100%) no-repeat;
+  background-size: 40% 100%;
+  animation: lb-sweep 1.8s var(--ease-out-soft) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-shimmer {
+    animation: none;
+    background: var(--info);
+    opacity: 0.6;
+  }
+}
+
 /* Skeleton shimmer. */
 @keyframes lb-shimmer {
   0% {

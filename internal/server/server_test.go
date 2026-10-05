@@ -32,6 +32,16 @@ func TestHealthRejectsPost(t *testing.T) {
 	}
 }
 
+func TestCIActionsNeedConfirmHeader(t *testing.T) {
+	for _, p := range []string{"/api/ci/containers/x/stop", "/api/ci/runs/you%2Fyour-repo/1/rerun"} {
+		rec := httptest.NewRecorder()
+		New().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, nil))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s: status %d", p, rec.Code)
+		}
+	}
+}
+
 func TestUnknownAPIIs404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nope", nil))

@@ -34,7 +34,7 @@ go vet ./... && go test ./...
 cd web && npm run build
 ```
 
-`LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
+`LUCID_ADDR` overrides the listen address (default `127.0.0.1:7420`, loopback only). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
 
 ## Configuration
 
@@ -89,9 +89,32 @@ go run ./cmd/lucid cluster up
 
 Mounting the docker socket gives the daemon control of your Docker engine. Only run it on a machine you trust.
 
+## Runners & CI
+
+Lucidbench watches your self-hosted GitHub Actions runners: the runner containers on this machine (for example ephemeral [`myoung34/github-runner`](https://github.com/myoung34/docker-github-actions-runner) containers started by docker compose) and, for each repository you list, its registered runners and last 10 workflow runs.
+
+```yaml
+# config.yaml (lucid config path shows where it lives)
+ci:
+  github:
+    repos: ["you/your-repo"]
+    token: "env:GITHUB_TOKEN"     # falls back to `gh auth token` when empty
+  runners:
+    compose_project: "runforge"   # containers of this compose project ...
+    image_match: "github-runner"  # ... or whose image contains this text
+```
+
+```sh
+go run ./cmd/lucid ci                          # summary: runners, containers, last 24h of runs
+go run ./cmd/lucid ci runners                  # registered runners and local containers
+go run ./cmd/lucid ci runs --repo you/your-repo
+```
+
+The daemon serves the same data at `GET /api/ci/summary`, `GET /api/ci/runners` and `GET /api/ci/runs?repo=`, and can act: `POST /api/ci/containers/{name}/{start|stop|restart}` (runner containers only; any other container is refused) and `POST /api/ci/runs/{owner%2Fname}/{id}/rerun` (re-runs failed jobs). Every POST needs the header `X-Lucid-Confirm: yes`, which the web UI sends. The token is never logged or returned; GitHub responses are cached for 30 seconds. In docker compose the daemon uses the mounted docker socket for containers, and needs `GITHUB_TOKEN` exported (or in `.env`) for GitHub, because the image has no `gh`. Details: [docs/CONFIG.md](docs/CONFIG.md#runners--ci).
+
 ## Web UI
 
-The UI at <http://localhost:7420> has an Accounts page (every detected account, grouped by provider) and a System page (daemon, cluster and jobs, with a log viewer). It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
+The UI at <http://localhost:7420> opens on an Overview: AI accounts, runners, CI health with a pass rate and recent-run bars, the cluster, a "needs attention" list (failed runs with a re-run button, offline runners, stopped runner containers, expired sign-ins), recent activity and quick actions. Runners & CI shows the runner fleet with container controls (each asks before it acts) and every recent workflow run; Accounts groups every detected account by provider; System covers the daemon, cluster and jobs, with a log viewer. Press Ctrl+K (⌘K on macOS) for the command palette. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
 
 Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

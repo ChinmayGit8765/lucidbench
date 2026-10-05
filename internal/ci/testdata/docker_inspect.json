@@ -1,0 +1,32 @@
+[
+  {
+    "Id": "aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaaa",
+    "State": { "Status": "running", "StartedAt": "2026-10-03T04:53:30.717058271Z" },
+    "Config": {
+      "Env": [
+        "RUNNER_SCOPE=repo",
+        "REPO_URL=https://github.com/you/your-repo",
+        "ACCESS_TOKEN=FIXTURE-ACCESS-TOKEN-7f3a",
+        "RUNNER_NAME=home-runner",
+        "LABELS=runforge",
+        "PATH=/usr/bin"
+      ]
+    }
+  },
+  {
+    "Id": "bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbbb",
+    "State": { "Status": "exited", "StartedAt": "2026-10-02T01:00:00Z" },
+    "Config": {
+      "Env": [
+        "REPO_URL=https://github.com/you/other-repo",
+        "ACCESS_TOKEN=FIXTURE-ACCESS-TOKEN-7f3a",
+        "RUNNER_NAME=other-runner"
+      ]
+    }
+  },
+  {
+    "Id": "ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333cccc",
+    "State": { "Status": "running", "StartedAt": "0001-01-01T00:00:00Z" },
+    "Config": { "Env": ["SECRET_THING=FIXTURE-ACCESS-TOKEN-7f3a"] }
+  }
+]

@@ -1,0 +1,65 @@
+{
+  "total_count": 4,
+  "workflow_runs": [
+    {
+      "id": 1004,
+      "run_number": 44,
+      "name": "ci",
+      "display_title": "feat: newest change",
+      "head_branch": "main",
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "created_at": "2026-10-05T11:30:00Z",
+      "run_started_at": "2026-10-05T11:30:05Z",
+      "updated_at": "2026-10-05T11:31:00Z",
+      "html_url": "https://github.com/you/your-repo/actions/runs/1004",
+      "actor": { "login": "you" }
+    },
+    {
+      "id": 1003,
+      "run_number": 43,
+      "name": "ci",
+      "display_title": "fix: broken thing",
+      "head_branch": "main",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-05T10:00:00Z",
+      "run_started_at": "2026-10-05T10:00:03Z",
+      "updated_at": "2026-10-05T10:04:00Z",
+      "html_url": "https://github.com/you/your-repo/actions/runs/1003",
+      "actor": { "login": "you" }
+    },
+    {
+      "id": 1002,
+      "run_number": 42,
+      "name": "ci",
+      "display_title": "docs: readme",
+      "head_branch": "feat/x",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-05T08:00:00Z",
+      "run_started_at": "2026-10-05T08:00:02Z",
+      "updated_at": "2026-10-05T08:03:00Z",
+      "html_url": "https://github.com/you/your-repo/actions/runs/1002",
+      "actor": { "login": "you" }
+    },
+    {
+      "id": 1001,
+      "run_number": 41,
+      "name": "release",
+      "display_title": "chore: old",
+      "head_branch": "main",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-01T08:00:00Z",
+      "run_started_at": "2026-10-01T08:00:02Z",
+      "updated_at": "2026-10-01T08:03:00Z",
+      "html_url": "https://github.com/you/your-repo/actions/runs/1001",
+      "actor": null
+    }
+  ]
+}

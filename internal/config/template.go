@@ -13,8 +13,10 @@ const Template = `# Lucidbench configuration.
 # a reference to an environment variable, written as env:NAME.
 
 server:
-  # Address the daemon (lucidd) listens on, as host:port.
-  addr: ":7420"
+  # Address the daemon (lucidd) listens on, as host:port. The default is
+  # loopback only. ":7420" listens on every interface; the daemon can control
+  # runner containers and re-run CI, so only do that on a network you trust.
+  addr: "127.0.0.1:7420"
 
 providers:
   # For each provider: enabled = false hides it from detection entirely.
@@ -48,4 +50,18 @@ vault:
 ui:
   # dark, light or system.
   theme: "dark"
+
+ci:
+  # Runners & CI: self-hosted GitHub Actions runners and recent workflow runs.
+  github:
+    # Repositories to watch, as owner/name, for example ["you/your-repo"].
+    repos: []
+    # Token for the GitHub API, as an env:NAME reference. When that variable
+    # is empty, Lucidbench asks the GitHub CLI (gh auth token) if installed.
+    token: "env:GITHUB_TOKEN"
+  runners:
+    # Local runner containers: those in this docker compose project ...
+    compose_project: "runforge"
+    # ... or whose image name contains this text. Empty disables a match.
+    image_match: "github-runner"
 `

@@ -4,11 +4,14 @@ import {
   ChevronRight,
   Gauge,
   KanbanSquare,
+  LayoutDashboard,
   Monitor,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Rocket,
+  RefreshCw,
+  Search,
+  ServerCog,
   Sun,
   Users,
   Vote,
@@ -17,14 +20,19 @@ import {
 
 import { Wordmark } from "@/components/Logo"
 import { StatusPill } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { refreshAll } from "@/lib/api"
 import type { Health } from "@/lib/health"
 import type { ThemePref } from "@/lib/theme"
-import { cn } from "@/lib/utils"
+import { relativeTime, useNow } from "@/lib/time"
+import { cn, isMac } from "@/lib/utils"
 
-export type Page = "accounts" | "system"
+export type Page = "overview" | "accounts" | "runners" | "system"
 
 const WORKSPACE: { id: Page; label: string; icon: LucideIcon }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "accounts", label: "Accounts", icon: Users },
+  { id: "runners", label: "Runners & CI", icon: ServerCog },
   { id: "system", label: "System", icon: Activity },
 ]
 
@@ -32,7 +40,6 @@ const ROADMAP: { label: string; milestone: string; icon: LucideIcon }[] = [
   { label: "Council", milestone: "M1", icon: Vote },
   { label: "Usage", milestone: "M2", icon: Gauge },
   { label: "Boards", milestone: "M3", icon: KanbanSquare },
-  { label: "Runner", milestone: "M4", icon: Rocket },
 ]
 
 const SIDEBAR_KEY = "lucidbench.sidebar"
@@ -207,21 +214,26 @@ function ThemeToggle({ pref, onChange }: { pref: ThemePref; onChange: (p: ThemeP
   )
 }
 
+export const pageLabel = (p: Page) => WORKSPACE.find((w) => w.id === p)?.label ?? p
+export const PAGES = WORKSPACE
+
 export function Header({
   page,
   health,
   theme,
   onTheme,
+  onSearch,
 }: {
   page: Page
   health: Health | null | undefined
   theme: ThemePref
   onTheme: (p: ThemePref) => void
+  onSearch: () => void
 }) {
   const ok = health?.status === "ok"
-  const title = WORKSPACE.find((w) => w.id === page)?.label
+  const title = pageLabel(page)
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background/80 px-5 backdrop-blur md:px-6">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background/70 px-5 backdrop-blur-md md:px-6">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
         <span className="text-subtle-foreground">Workspace</span>
         <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" />
@@ -230,6 +242,16 @@ export function Header({
         </span>
       </nav>
       <div className="flex items-center gap-3">
+        <button
+          onClick={onSearch}
+          aria-label="Open command palette"
+          aria-keyshortcuts={isMac() ? "Meta+K" : "Control+K"}
+          className="flex h-7 w-60 items-center gap-2 whitespace-nowrap rounded-lg border bg-muted/40 pl-2.5 pr-1.5 text-xs text-subtle-foreground transition-colors hover:border-border-strong hover:text-muted-foreground max-[1100px]:w-auto"
+        >
+          <Search className="size-3.5" />
+          <span className="flex-1 text-left max-[1100px]:sr-only">Search or run a command…</span>
+          <kbd className="rounded border bg-background px-1 font-sans text-2xs leading-4">{isMac() ? "⌘K" : "Ctrl K"}</kbd>
+        </button>
         {health === undefined ? (
           <StatusPill tone="neutral">Connecting</StatusPill>
         ) : (
@@ -243,23 +265,51 @@ export function Header({
   )
 }
 
-/** Page title block with an optional action on the right. */
+/** Page title block: an icon tile, title, description and actions on the right. */
 export function PageHeader({
+  icon,
   title,
   description,
   actions,
 }: {
+  icon?: ReactNode
   title: string
   description?: ReactNode
   actions?: ReactNode
 }) {
   return (
     <div className="flex items-start justify-between gap-6">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      <div className="flex min-w-0 items-start gap-3.5">
+        {icon && (
+          <span className="relative mt-0.5 flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border-strong bg-elevated text-brand shadow-card [&_svg]:size-[18px]">
+            <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-brand-soft to-transparent" />
+            <span className="relative">{icon}</span>
+          </span>
+        )}
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em]">{title}</h1>
+          {description && <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{description}</p>}
+        </div>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2 pt-1">{actions}</div>}
+    </div>
+  )
+}
+
+/** Manual refresh for every poll on the page, with when it last succeeded. */
+export function RefreshButton({ refreshing, updatedAt }: { refreshing: boolean; updatedAt: number | null }) {
+  const now = useNow(5000)
+  return (
+    <div className="flex items-center gap-2">
+      {updatedAt !== null && (
+        <span className="text-xs tabular-nums text-subtle-foreground max-[1100px]:hidden">
+          Updated {relativeTime(new Date(updatedAt).toISOString(), now)}
+        </span>
+      )}
+      <Button variant="secondary" size="sm" onClick={refreshAll} aria-label="Refresh now" title="Refresh now">
+        <RefreshCw className={cn(refreshing && "animate-spin")} />
+        Refresh
+      </Button>
     </div>
   )
 }

@@ -28,7 +28,7 @@ func TestDefaultsWhenNoFile(t *testing.T) {
 	if err != nil || len(warns) != 0 {
 		t.Fatalf("err=%v warns=%v", err, warns)
 	}
-	if c.FileFound || c.Server.Addr != ":7420" || c.Cluster.Name != "lucidbench" ||
+	if c.FileFound || c.Server.Addr != "127.0.0.1:7420" || c.Cluster.Name != "lucidbench" ||
 		c.Agent.Image != "lucidbench/agent:dev" || c.UI.Theme != "dark" || c.Vault.Path != "" {
 		t.Fatalf("unexpected defaults %+v", c)
 	}
