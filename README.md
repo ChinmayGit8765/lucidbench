@@ -95,6 +95,26 @@ The UI at <http://localhost:7420> has an Accounts page (every detected account, 
 
 Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+## Desktop app
+
+A Tauri 2 shell (`desktop/`) wraps the same UI in a native Windows window. Requirements: Go 1.26, Node 22, Rust (stable) and WebView2.
+
+```sh
+cd desktop
+npm ci
+npm run build:sidecar   # builds web/ and lucidd into src-tauri/binaries/lucidd-<triple>.exe
+npx tauri build         # NSIS installer
+```
+
+The installer lands in `desktop/src-tauri/target/release/bundle/nsis/Lucidbench_0.1.0_x64-setup.exe` and installs per user (no admin prompt).
+
+On start the app reads the daemon address from `LUCID_SERVER_ADDR` or `LUCID_ADDR` (default `127.0.0.1:7420`) and checks `/api/health`:
+
+- **Attach**: if a daemon already answers within 1.5 s (for example the docker compose one), the window just opens it. The app never stops a daemon it did not start.
+- **Sidecar**: otherwise it starts the bundled `lucidd`, waits up to 15 s for it to become healthy, and stops it when the app exits.
+
+If neither works, the splash screen shows the error with a Retry button. The window only navigates to the local daemon (`127.0.0.1` / `localhost` on the configured port), and the daemon UI gets no access to the app's native APIs.
+
 ## Roadmap
 
 - **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
