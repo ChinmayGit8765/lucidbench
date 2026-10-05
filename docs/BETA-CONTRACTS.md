@@ -170,6 +170,7 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/council/sessions` | GET / POST | list / start `{input, project?, proposer?, critics?, rounds?}` |
 | `/api/council/sessions/{id}` | GET | session (poll) |
 | `/api/council/sessions/{id}/events` | GET (SSE) | live updates |
+| `/api/council/sessions/{id}/again` | POST | `{notes}` re-runs a round with the operator's extra notes |
 | `/api/council/sessions/{id}/approve` | POST | `{project?}` returns the new card |
 | `/api/work/sessions` | GET / POST | list / start `{card? , project, prompt?, provider, profile?, harness}` |
 | `/api/work/sessions/{id}` | GET | session + diff summary |
