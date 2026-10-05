@@ -142,12 +142,13 @@ npm run build:sidecar   # builds web/ and lucidd into src-tauri/binaries/lucidd-
 npx tauri build         # NSIS installer
 ```
 
-The installer lands in `desktop/src-tauri/target/release/bundle/nsis/Lucidbench_0.1.0_x64-setup.exe` and installs per user (no admin prompt).
+The installer lands in `desktop/src-tauri/target/release/bundle/nsis/Lucidbench_<version>_x64-setup.exe` and installs per user (no admin prompt). Installing or uninstalling first stops any `lucidbench-desktop.exe` and `lucidd.exe` running from the install directory (and only those), so an update is never blocked by a locked file.
 
 On start the app reads the daemon address from `LUCID_SERVER_ADDR` or `LUCID_ADDR` (default `127.0.0.1:7420`) and checks `/api/health`:
 
-- **Attach**: if a daemon already answers within 1.5 s (for example the docker compose one), the window just opens it. The app never stops a daemon it did not start.
-- **Sidecar**: otherwise it starts the bundled `lucidd`, waits up to 15 s for it to become healthy, and stops it when the app exits.
+- **Attach**: if a daemon already answers within 1.5 s (for example the docker compose one), the window just opens it. The app never stops a daemon it did not start, with one exception below.
+- **Version check**: the app compares its version with the one `/api/health` reports. If they differ and the daemon is the app's own bundled `lucidd`, it is restarted. Any other daemon is still attached, with a dismissible banner "Engine vX differs from app vY".
+- **Sidecar**: otherwise it starts the bundled `lucidd`, waits up to 15 s for it to become healthy, and stops it when the app exits. On Windows the sidecar runs in a kill-on-close job object, so it also dies if the app is force-killed.
 
 If neither works, the splash screen shows the error with a Retry button. The window only navigates to the local daemon (`127.0.0.1` / `localhost` on the configured port), and the daemon UI gets no access to the app's native APIs.
 
