@@ -89,6 +89,7 @@ export function NewSession({ card: initialCard }: { card?: string }) {
   const [cardId, setCardId] = useState(initialCard ?? "")
   const [prompt, setPrompt] = useState("")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  const [showUnusable, setShowUnusable] = useState(false)
 
   const all = (projects.data?.projects ?? []) as WorkProject[]
   const usable = all.filter((p) => p.local_path && p.visibility !== "confidential")
@@ -256,7 +257,15 @@ export function NewSession({ card: initialCard }: { card?: string }) {
                 })}
               </div>
             )}
-            {unusable.length > 0 && (
+            {unusable.length > 0 && !showUnusable && (
+              <button onClick={() => setShowUnusable(true)} className="mt-2.5 inline-flex items-center gap-1 text-2xs text-subtle-foreground hover:text-foreground">
+                <CircleDashed className="size-3" />
+                {unusable.filter((p) => p.visibility !== "confidential").length} without a local_path
+                {unusable.some((p) => p.visibility === "confidential") && ` · ${unusable.filter((p) => p.visibility === "confidential").length} confidential`}
+                <span className="underline underline-offset-2">show</span>
+              </button>
+            )}
+            {unusable.length > 0 && showUnusable && (
               <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle-foreground">
                 <span>Not available:</span>
                 {unusable.map((p) => (

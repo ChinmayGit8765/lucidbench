@@ -161,7 +161,7 @@ export function SessionView({ id }: { id: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="sticky -top-7 z-20 -mx-5 border-b bg-background/85 px-5 pb-0 pt-4 backdrop-blur-md md:-mx-8 md:px-8">
+      <div className="sticky top-0 z-20 -mx-5 -mt-3 border-b bg-background/85 px-5 pb-0 pt-3 backdrop-blur-md md:-mx-8 md:px-8">
         <div className="flex items-start gap-3">
           <ProviderTile provider={session.provider} size="lg" />
           <div className="min-w-0 flex-1">
@@ -175,7 +175,11 @@ export function SessionView({ id }: { id: string }) {
               <Meta icon={GitBranch} title="Copy branch name" onClick={() => void copyText(session.branch, "Branch copied")}>
                 <span className={cn("truncate font-mono", session.removed && "line-through")}>{session.branch}</span>
               </Meta>
-              <Meta icon={FolderGit2} title={session.removed ? "Worktree removed" : "Copy worktree path"} onClick={() => void copyText(session.worktree, "Path copied")}>
+              <Meta
+                icon={FolderGit2}
+                title={session.removed ? `Worktree removed: ${session.worktree_hint}` : `${session.worktree_hint} (click to copy)`}
+                onClick={() => void copyText(session.worktree, "Path copied")}
+              >
                 <span className={cn("max-w-[22rem] truncate font-mono", session.removed && "line-through")}>{session.worktree_hint}</span>
               </Meta>
               <Meta icon={session.harness === "mine" ? UserCog : ShieldCheck} title={session.harness === "mine" ? "The CLI loaded your own settings, hooks and skills" : "No user settings, hooks or MCP servers"}>
@@ -235,6 +239,12 @@ export function SessionView({ id }: { id: string }) {
 
 /* ---------- changes ---------- */
 
+/** A server message as a sentence: capitalised, with a full stop. */
+const sentence = (s: string) => {
+  const t = s.trim().replace(/[.;:]$/, "")
+  return t.charAt(0).toUpperCase() + t.slice(1) + "."
+}
+
 function Changes({
   session,
   onChange,
@@ -257,6 +267,17 @@ function Changes({
     })
   const noCommits = d.commits.length === 0
   const base = session.base_ref.replace(/^origin\//, "")
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      onChange(await getJSON<WorkSession>(`${sessionPath(session.id)}?refresh=1`))
+    } catch (e) {
+      toast.error("Could not read the worktree", { description: errorMessage(e) })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const pr = () =>
     setConfirm({
@@ -279,7 +300,7 @@ function Changes({
     setConfirm({
       title: discard ? "Discard the unpushed work?" : "Remove the worktree?",
       description: discard
-        ? `${reason ?? "The worktree has work that is not on the remote."} Removing it deletes the uncommitted changes; the ${session.branch} branch and its commits stay in the repository.`
+        ? `${sentence(reason ?? "the worktree has work that is not on the remote")} Removing it deletes the folder and any uncommitted changes in it; the ${session.branch} branch and its commits stay in the repository.`
         : `Deletes ${session.worktree_hint}. The ${session.branch} branch stays in the repository.`,
       confirmLabel: discard ? "Discard and remove" : "Remove worktree",
       danger: true,
@@ -322,6 +343,18 @@ function Changes({
           ) : (
             <Button size="sm" onClick={pr} disabled={noCommits || session.removed || session.status === "running"} title={noCommits ? "The branch has no commits yet" : undefined}>
               <GitPullRequest /> Open PR
+            </Button>
+          )}
+          {!session.removed && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Read the worktree again, for changes made after the run"
+              aria-label="Refresh changes"
+              disabled={session.status === "running" || refreshing}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className={cn(refreshing && "animate-spin")} />
             </Button>
           )}
           {session.removed ? (

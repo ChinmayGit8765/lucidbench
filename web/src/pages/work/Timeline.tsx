@@ -13,6 +13,7 @@ import {
   Search,
   SquareTerminal,
   TriangleAlert,
+  User,
   Wrench,
   type LucideIcon,
 } from "lucide-react"
@@ -102,7 +103,10 @@ export function Prose({ text, className }: { text: string; className?: string })
 
 /** A diff with added and removed lines coloured: agent edits ("- "/"+ ") or git patches. */
 export function DiffView({ text, className }: { text: string; className?: string }) {
-  const lines = text.replace(/\n$/, "").split("\n")
+  let lines = text.replace(/\n$/, "").split("\n")
+  // A git patch: the file is already named above, so start at the first hunk.
+  const hunk = lines.findIndex((l) => l.startsWith("@@"))
+  if (lines[0]?.startsWith("diff --git") && hunk > 0) lines = lines.slice(hunk)
   return (
     <pre className={cn("max-h-96 overflow-auto rounded-lg border bg-background py-1.5 font-mono text-xs leading-5", className)}>
       {lines.map((l, i) => {
@@ -278,8 +282,8 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
       <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />
 
       <li className="relative pb-3 pl-9">
-        <span className="absolute left-0 top-0 z-[1] flex size-6 items-center justify-center rounded-md border bg-elevated text-2xs font-semibold text-brand-fg">
-          You
+        <span title="You" className="absolute left-0 top-0 z-[1] flex size-6 items-center justify-center rounded-md border border-brand/40 bg-brand-soft text-brand-fg">
+          <User className="size-3.5" />
         </span>
         <div className="rounded-xl border bg-brand-soft/40 px-4 py-3">
           <div className="mb-1 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">

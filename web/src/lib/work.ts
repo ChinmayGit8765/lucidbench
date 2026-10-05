@@ -316,13 +316,18 @@ export function stepLabel(kind: ToolKind, items: ToolItem[]): { verb: string; ob
     case "read":
       return n === 1 ? { verb: "Read", object: one.target || "a file" } : { verb: "Read", object: plural("file") }
     case "search":
-      return n === 1 ? { verb: one.name === "LS" ? "Listed" : "Searched", object: one.target } : { verb: "Searched", object: `${n} times` }
+      if (n > 1) return { verb: "Searched", object: `${n} times` }
+      if (/^(ls|list)/i.test(one.name)) return { verb: "Listed", object: one.target || "the folder" }
+      if (/glob|find/i.test(one.name)) return { verb: "Looked for files matching", object: one.target }
+      return { verb: "Searched for", object: one.target }
     case "edit": {
       const wrote = one.name === "Write" || one.name === "write" || one.name === "create"
       return { verb: wrote ? "Wrote" : "Edited", object: one.target || "a file" }
     }
-    case "command":
-      return { verb: "Ran", object: one.target }
+    case "command": {
+      const [first, ...rest] = one.target.split("\n")
+      return { verb: "Ran", object: rest.some((l) => l.trim()) ? `${first} …` : first }
+    }
     case "plan":
       return { verb: "Updated", object: "the plan" }
     case "web":
