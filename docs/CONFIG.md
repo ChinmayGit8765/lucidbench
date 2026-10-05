@@ -63,6 +63,7 @@ is an error that names the file and the key, for example
 | `ci.github.token` | `env:GITHUB_TOKEN` | `LUCID_CI_GITHUB_TOKEN` | Secret reference for the GitHub API token. If the variable it names is empty, Lucidbench runs `gh auth token` when the GitHub CLI is installed. See [Runners & CI](#runners--ci). |
 | `ci.runners.compose_project` | (empty) | `LUCID_CI_RUNNERS_COMPOSE_PROJECT` | Docker compose project whose containers are runners. Empty disables this match. |
 | `ci.runners.image_match` | `github-runner` | `LUCID_CI_RUNNERS_IMAGE_MATCH` | Containers whose image name contains this text are runners too. Empty disables this match. |
+| `docker.allowed_projects` | `[]` | `LUCID_DOCKER_ALLOWED_PROJECTS` | Compose projects whose containers the Containers page may start, stop and restart, besides the `lucidbench` project and the runner containers. Every other container is read-only. The variable is a comma-separated list. See [Docker and Kubernetes](#docker-and-kubernetes). |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the

@@ -9,6 +9,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
+	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
@@ -48,6 +49,11 @@ func New(cfgs ...*config.Config) http.Handler {
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	ci.Register(mux, ci.New(cfg.CI))
+	runners := ci.Filter{ComposeProject: cfg.CI.Runners.ComposeProject, ImageMatch: cfg.CI.Runners.ImageMatch}
+	docker.Register(mux, &docker.Service{Docker: docker.Exec, Policy: docker.Policy{
+		Projects: append([]string{"lucidbench"}, cfg.Docker.AllowedProjects...),
+		IsRunner: runners.Matches,
+	}})
 	mux.Handle("/api/projects", projects.Handler())
 	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
 	mux.Handle("/api/", http.NotFoundHandler())

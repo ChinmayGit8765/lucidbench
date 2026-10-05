@@ -59,3 +59,9 @@ ci:
     compose_project: ""
     # ... or whose image name contains this text. Empty disables a match.
     image_match: "github-runner"
+
+docker:
+  # Containers page: compose projects whose containers may be started,
+  # stopped and restarted from the UI, besides the lucidbench project and the
+  # runner containers above. Every other container is read-only.
+  allowed_projects: []
