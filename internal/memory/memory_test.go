@@ -257,6 +257,21 @@ func TestListMoveDeleteTrash(t *testing.T) {
 		t.Errorf("list = %v", names)
 	}
 
+	// Title and icon come from front matter; a folder's from its _folder.md.
+	put(t, v, "c.md", "---\ntitle: Sea\nicon: \"🌊\"\n---\nbody")
+	put(t, v, "A/_folder.md", "---\nicon: 📁\n---\n")
+	ents, _ = v.List("")
+	meta := map[string][2]string{}
+	for _, e := range ents {
+		meta[e.Name] = [2]string{e.Title, e.Icon}
+	}
+	if meta["c.md"] != [2]string{"Sea", "🌊"} || meta["A"] != [2]string{"", "📁"} || meta["b.md"] != [2]string{} {
+		t.Errorf("title and icon = %v", meta)
+	}
+	if err := v.Delete("c.md"); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := v.Move("a.md", "A/moved.md"); err != nil {
 		t.Fatal(err)
 	}

@@ -51,6 +51,10 @@ type Entry struct {
 	Size         int64     `json:"size"`
 	Modified     time.Time `json:"modified"`
 	Confidential bool      `json:"confidential"`
+	// Title and Icon come from the front matter (a folder's _folder.md),
+	// empty when it sets none.
+	Title string `json:"title,omitempty"`
+	Icon  string `json:"icon,omitempty"`
 }
 
 // Hit is one search result.
@@ -246,6 +250,16 @@ func (v *Vault) List(dir string) ([]Entry, error) {
 		ent := Entry{Name: name, Path: rel, Dir: isDir, Modified: info.ModTime(), Confidential: conf}
 		if !isDir {
 			ent.Size = info.Size()
+		}
+		meta := full
+		if isDir {
+			meta = filepath.Join(full, FolderFile)
+		}
+		if data, err := os.ReadFile(meta); err == nil {
+			front, _ := SplitFront(string(data))
+			title, _ := front["title"].(string)
+			icon, _ := front["icon"].(string)
+			ent.Title, ent.Icon = strings.TrimSpace(title), strings.TrimSpace(icon)
 		}
 		out = append(out, ent)
 	}

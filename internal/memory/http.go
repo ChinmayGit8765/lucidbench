@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/apiutil"
@@ -64,6 +66,7 @@ func Fail(w http.ResponseWriter, err error) {
 //	POST   /api/memory/move             {from, to}
 //	GET    /api/memory/search?q=&limit= full-text hits
 //	GET    /api/memory/backlinks?path=  pages that link to a page
+//	GET    /api/memory/info             vault folder and page count
 //
 // PUT, DELETE and POST need X-Lucid-Confirm.
 func Register(mux *http.ServeMux, open Opener) {
@@ -177,4 +180,28 @@ func Register(mux *http.ServeMux, open Opener) {
 			apiutil.WriteJSON(w, http.StatusOK, links)
 		})
 	})
+	mux.HandleFunc("GET /api/memory/info", func(w http.ResponseWriter, r *http.Request) {
+		with(w, func(v *Vault) {
+			// Folder notes and the board files do not count as pages, so a
+			// vault that only holds the default board still reads as empty.
+			n := 0
+			err := v.walk(func(rel, _ string) error {
+				if path.Base(rel) != FolderFile && !strings.HasPrefix(rel, "Boards/") {
+					n++
+				}
+				return nil
+			})
+			if err != nil {
+				Fail(w, err)
+				return
+			}
+			apiutil.WriteJSON(w, http.StatusOK, Info{Root: v.Root(), Pages: n})
+		})
+	})
+}
+
+// Info is the body of GET /api/memory/info.
+type Info struct {
+	Root  string `json:"root"`  // absolute vault folder
+	Pages int    `json:"pages"` // Markdown pages, not counting folder notes and boards
 }

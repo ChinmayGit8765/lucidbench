@@ -163,6 +163,7 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/memory/move` | POST | `{from,to}` |
 | `/api/memory/search?q=&limit=` | GET | full-text hits |
 | `/api/memory/backlinks?path=` | GET | pages that link to a page |
+| `/api/memory/info` | GET | `{root, pages}`: the vault folder and its page count (folder notes and boards excluded) |
 | `/api/boards` | GET | board summaries |
 | `/api/boards/{id}` | GET | board with cards |
 | `/api/boards/{id}/cards` | POST | add card |
