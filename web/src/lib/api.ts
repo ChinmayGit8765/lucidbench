@@ -23,8 +23,35 @@ export async function request(path: string, init?: RequestInit): Promise<Respons
   return res
 }
 
-export async function getJSON<T>(path: string): Promise<T> {
-  return (await request(path)).json() as Promise<T>
+const inflight = new Map<string, Promise<unknown>>()
+
+/**
+ * GETs JSON. Concurrent calls for the same path share one request, so an
+ * Overview tile and the page around it polling the same endpoint cost one
+ * round trip.
+ */
+export function getJSON<T>(path: string): Promise<T> {
+  let p = inflight.get(path) as Promise<T> | undefined
+  if (!p) {
+    p = request(path).then((r) => r.json() as Promise<T>)
+    inflight.set(path, p)
+    void p.then(
+      () => inflight.delete(path),
+      () => inflight.delete(path),
+    )
+  }
+  return p
+}
+
+/** Sends a JSON body with the confirm header (any change on this machine). */
+export async function sendJSON<T>(path: string, method: "POST" | "PUT" | "DELETE", body?: unknown): Promise<T> {
+  const res = await request(path, {
+    method,
+    headers: { "Content-Type": "application/json", "X-Lucid-Confirm": "yes" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
 }
 
 /**

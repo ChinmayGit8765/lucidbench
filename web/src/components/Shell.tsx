@@ -1,52 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react"
-import {
-  Activity,
-  ChevronRight,
-  FolderKanban,
-  Gauge,
-  KanbanSquare,
-  LayoutDashboard,
-  Monitor,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plug,
-  RefreshCw,
-  Search,
-  ServerCog,
-  Sun,
-  Users,
-  Vote,
-  type LucideIcon,
-} from "lucide-react"
+import { ChevronRight, Monitor, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Sun, type LucideIcon } from "lucide-react"
 
 import { Wordmark } from "@/components/Logo"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { refreshAll } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import type { Health } from "@/lib/health"
-import type { ThemePref } from "@/lib/theme"
+import { usePrefs } from "@/lib/prefs"
+import { assetURL, DARK_DEFAULT, LIGHT_DEFAULT, SYSTEM_THEME } from "@/lib/theme"
 import { relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
-
-export type Page = "overview" | "projects" | "accounts" | "mcp" | "runners" | "system"
-
-const WORKSPACE: { id: Page; label: string; icon: LucideIcon }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "projects", label: "Projects", icon: FolderKanban },
-  { id: "accounts", label: "Accounts", icon: Users },
-  { id: "mcp", label: "MCP servers", icon: Plug },
-  { id: "runners", label: "Runners & CI", icon: ServerCog },
-  { id: "system", label: "System", icon: Activity },
-]
-
-const ROADMAP: { label: string; milestone: string; icon: LucideIcon }[] = [
-  { label: "Council", milestone: "M1", icon: Vote },
-  { label: "Usage", milestone: "M2", icon: Gauge },
-  { label: "Boards", milestone: "M3", icon: KanbanSquare },
-]
-
-const SIDEBAR_KEY = "lucidbench.sidebar"
+import { SECTION_LABEL, sidebarGroups } from "@/modules/registry"
+import type { ModuleDef } from "@/modules/types"
 
 function useMedia(query: string): boolean {
   const [match, setMatch] = useState(() => matchMedia(query).matches)
@@ -59,25 +25,13 @@ function useMedia(query: string): boolean {
   return match
 }
 
-/** Collapsed state: the user's toggle on wide screens, always a rail below 1024px. */
+/** Rail or expanded: the user's choice (saved in prefs) on wide screens, always a rail below 1024px. */
 export function useSidebar() {
   const wide = useMedia("(min-width: 1024px)")
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(SIDEBAR_KEY) === "collapsed"
-    } catch {
-      return false
-    }
-  })
-  const toggle = () => {
-    const next = !collapsed
-    setCollapsed(next)
-    try {
-      localStorage.setItem(SIDEBAR_KEY, next ? "collapsed" : "expanded")
-    } catch {
-      // not persisted
-    }
-  }
+  const { prefs, update } = usePrefs()
+  const collapsed = prefs.overrides.sidebar === "rail"
+  const toggle = () =>
+    update((p) => ({ ...p, overrides: { ...p.overrides, sidebar: p.overrides.sidebar === "rail" ? "expanded" : "rail" } }))
   return { rail: collapsed || !wide, wide, toggle }
 }
 
@@ -90,22 +44,59 @@ function SectionLabel({ rail, children }: { rail: boolean; children: ReactNode }
   )
 }
 
-export function Sidebar({
-  page,
-  onNavigate,
-  rail,
-  wide,
-  onToggle,
-  version,
-}: {
-  page: Page
-  onNavigate: (p: Page) => void
-  rail: boolean
-  wide: boolean
-  onToggle: () => void
-  version?: string
-}) {
-  const item = "group relative flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors"
+const ITEM = "group relative flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors"
+
+function NavItem({ m, active, rail }: { m: ModuleDef; active: boolean; rail: boolean }) {
+  const { open } = useApp()
+  const Icon = m.icon
+  if (m.status === "soon") {
+    const when = m.milestone ? `coming in ${m.milestone}` : "coming soon"
+    return (
+      <div
+        role="link"
+        aria-disabled="true"
+        aria-label={`${m.title}, ${when}`}
+        title={`${m.title}: ${when}${m.description ? `. ${m.description}` : ""}`}
+        className={cn(ITEM, "cursor-not-allowed text-subtle-foreground", rail ? "justify-center" : "px-2.5")}
+      >
+        <Icon className="size-4 shrink-0 opacity-70" />
+        {!rail && (
+          <>
+            <span className="flex-1 truncate">{m.title}</span>
+            <span className="rounded border border-dashed border-border-strong px-1.5 text-2xs leading-4 text-subtle-foreground">
+              {m.milestone ? `${m.milestone} · soon` : "soon"}
+            </span>
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <button
+      onClick={() => open(m.id)}
+      aria-current={active ? "page" : undefined}
+      title={rail ? m.title : undefined}
+      aria-label={rail ? m.title : undefined}
+      className={cn(
+        ITEM,
+        rail ? "justify-center" : "px-2.5",
+        active
+          ? "bg-accent font-medium text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      )}
+    >
+      <Icon className={cn("size-4 shrink-0", active ? "text-brand" : "text-subtle-foreground group-hover:text-foreground")} />
+      {!rail && <span className="truncate">{m.title}</span>}
+    </button>
+  )
+}
+
+/** The sidebar, generated from the module registry and the user's prefs. */
+export function Sidebar({ current, version }: { current?: string; version?: string }) {
+  const { prefs, active, inlineAssets } = usePrefs()
+  const { rail, wide, toggle } = useSidebar()
+  const { main, bottom } = sidebarGroups(prefs)
+  const mascot = active?.art?.sidebarMascot
   return (
     <aside
       className={cn(
@@ -117,63 +108,39 @@ export function Sidebar({
         <Wordmark collapsed={rail} />
       </div>
 
-      <nav aria-label="Main" className="flex flex-1 flex-col">
-        <SectionLabel rail={rail}>Workspace</SectionLabel>
-        <div className="flex flex-col gap-0.5">
-          {WORKSPACE.map(({ id, label, icon: Icon }) => {
-            const active = page === id
-            return (
-              <button
-                key={id}
-                onClick={() => onNavigate(id)}
-                aria-current={active ? "page" : undefined}
-                title={rail ? label : undefined}
-                aria-label={rail ? label : undefined}
-                className={cn(
-                  item,
-                  rail ? "justify-center" : "px-2.5",
-                  active
-                    ? "bg-accent font-medium text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                )}
-              >
-                <Icon className={cn("size-4 shrink-0", active ? "text-brand" : "text-subtle-foreground group-hover:text-foreground")} />
-                {!rail && label}
-              </button>
-            )
-          })}
-        </div>
-
-        <SectionLabel rail={rail}>Roadmap</SectionLabel>
-        <div className="flex flex-col gap-0.5">
-          {ROADMAP.map(({ label, milestone, icon: Icon }) => (
-            <div
-              key={label}
-              role="link"
-              aria-disabled="true"
-              aria-label={`${label}, coming in ${milestone}`}
-              title={`${label}: coming in ${milestone}`}
-              className={cn(item, "cursor-not-allowed text-subtle-foreground", rail ? "justify-center" : "px-2.5")}
-            >
-              <Icon className="size-4 shrink-0 opacity-70" />
-              {!rail && (
-                <>
-                  <span className="flex-1">{label}</span>
-                  <span className="rounded border border-dashed border-border-strong px-1.5 text-2xs leading-4 text-subtle-foreground">
-                    {milestone} · soon
-                  </span>
-                </>
-              )}
+      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {main.map((g) => (
+          <div key={g.id}>
+            <SectionLabel rail={rail}>{g.label}</SectionLabel>
+            <div className="flex flex-col gap-0.5">
+              {g.items.map((m) => (
+                <NavItem key={m.id} m={m} active={m.id === current} rail={rail} />
+              ))}
             </div>
+          </div>
+        ))}
+        <div className="mt-auto flex flex-col gap-0.5 pt-4">
+          {bottom.map((m) => (
+            <NavItem key={m.id} m={m} active={m.id === current} rail={rail} />
           ))}
         </div>
       </nav>
+
+      {mascot && active && !rail && (
+        <div className="pointer-events-none flex justify-center pb-1 pt-3">
+          <img
+            src={assetURL(active, mascot, inlineAssets(active))}
+            alt=""
+            className="theme-art size-14 object-contain opacity-90 drop-shadow-[0_4px_16px_var(--brand-soft)]"
+          />
+        </div>
+      )}
 
       <div className={cn("flex items-center border-t py-3", rail ? "justify-center" : "justify-between px-1")}>
         {!rail && version && <span className="font-mono text-2xs text-subtle-foreground">lucidd {version}</span>}
         {wide && (
           <button
-            onClick={onToggle}
+            onClick={toggle}
             aria-label={rail ? "Expand sidebar" : "Collapse sidebar"}
             title={rail ? "Expand sidebar" : "Collapse sidebar"}
             className="rounded-md p-1.5 text-subtle-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -186,25 +153,27 @@ export function Sidebar({
   )
 }
 
-const THEMES: { id: ThemePref; label: string; icon: LucideIcon }[] = [
-  { id: "light", label: "Light", icon: Sun },
-  { id: "dark", label: "Dark", icon: Moon },
-  { id: "system", label: "System", icon: Monitor },
+const MODES: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: LIGHT_DEFAULT, label: "Light (Daylight)", icon: Sun },
+  { id: DARK_DEFAULT, label: "Dark (Midnight)", icon: Moon },
+  { id: SYSTEM_THEME, label: "Match the system", icon: Monitor },
 ]
 
-function ThemeToggle({ pref, onChange }: { pref: ThemePref; onChange: (p: ThemePref) => void }) {
+/** Quick light / dark / system switch; any other theme is picked in Settings. */
+function ThemeToggle() {
+  const { prefs, update } = usePrefs()
   return (
     <div role="radiogroup" aria-label="Theme" className="flex items-center rounded-lg border bg-muted/50 p-0.5">
-      {THEMES.map(({ id, label, icon: Icon }) => {
-        const on = pref === id
+      {MODES.map(({ id, label, icon: Icon }) => {
+        const on = prefs.theme === id
         return (
           <button
             key={id}
             role="radio"
             aria-checked={on}
-            aria-label={`${label} theme`}
-            title={`${label} theme`}
-            onClick={() => onChange(id)}
+            aria-label={label}
+            title={label}
+            onClick={() => update((p) => ({ ...p, theme: id }))}
             className={cn(
               "flex size-6 items-center justify-center rounded-md transition-colors",
               on ? "bg-elevated text-foreground shadow-card" : "text-subtle-foreground hover:text-foreground",
@@ -218,36 +187,36 @@ function ThemeToggle({ pref, onChange }: { pref: ThemePref; onChange: (p: ThemeP
   )
 }
 
-export const pageLabel = (p: Page) => WORKSPACE.find((w) => w.id === p)?.label ?? p
-export const PAGES = WORKSPACE
-
-export function Header({
-  page,
-  health,
-  theme,
-  onTheme,
-  onSearch,
-}: {
-  page: Page
-  health: Health | null | undefined
-  theme: ThemePref
-  onTheme: (p: ThemePref) => void
-  onSearch: () => void
-}) {
+export function Header({ module, health }: { module?: ModuleDef; health: Health | null | undefined }) {
+  const { openPalette } = useApp()
+  const { active, inlineAssets } = usePrefs()
   const ok = health?.status === "ok"
-  const title = pageLabel(page)
+  const section = !module
+    ? "Lucidbench"
+    : module.kind === "extension"
+      ? SECTION_LABEL.extensions
+      : (SECTION_LABEL[module.section] ?? "Workspace")
+  const banner = active?.art?.headerImage
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background/70 px-5 backdrop-blur-md md:px-6">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="text-subtle-foreground">Workspace</span>
+    <header className="relative flex h-14 shrink-0 items-center justify-between gap-4 overflow-hidden border-b bg-background/70 px-5 backdrop-blur-md md:px-6">
+      {banner && active && (
+        <img
+          src={assetURL(active, banner, inlineAssets(active))}
+          alt=""
+          aria-hidden
+          className="theme-art pointer-events-none absolute inset-0 size-full object-cover opacity-30 [mask-image:linear-gradient(to_right,black,transparent_75%)]"
+        />
+      )}
+      <nav aria-label="Breadcrumb" className="relative flex min-w-0 items-center gap-1.5 text-sm">
+        <span className="text-subtle-foreground">{section}</span>
         <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" />
         <span aria-current="page" className="truncate font-medium">
-          {title}
+          {module?.title ?? "Not found"}
         </span>
       </nav>
-      <div className="flex items-center gap-3">
+      <div className="relative flex items-center gap-3">
         <button
-          onClick={onSearch}
+          onClick={openPalette}
           aria-label="Open command palette"
           aria-keyshortcuts={isMac() ? "Meta+K" : "Control+K"}
           className="flex h-7 w-60 items-center gap-2 whitespace-nowrap rounded-lg border bg-muted/40 pl-2.5 pr-1.5 text-xs text-subtle-foreground transition-colors hover:border-border-strong hover:text-muted-foreground max-[1100px]:w-auto"
@@ -263,21 +232,26 @@ export function Header({
             <span className="max-sm:sr-only">{ok ? "Daemon online" : "Daemon unreachable"}</span>
           </StatusPill>
         )}
-        <ThemeToggle pref={theme} onChange={onTheme} />
+        <ThemeToggle />
       </div>
     </header>
   )
 }
 
-/** Page title block: an icon tile, title, description and actions on the right. */
+/**
+ * The page title block every page uses: an optional eyebrow line, an icon
+ * tile, the title, a description and actions on the right.
+ */
 export function PageHeader({
   icon,
+  eyebrow,
   title,
   description,
   actions,
 }: {
   icon?: ReactNode
-  title: string
+  eyebrow?: ReactNode
+  title: ReactNode
   description?: ReactNode
   actions?: ReactNode
 }) {
@@ -291,6 +265,7 @@ export function PageHeader({
           </span>
         )}
         <div className="min-w-0">
+          {eyebrow && <p className="mb-1 text-xs font-medium text-subtle-foreground">{eyebrow}</p>}
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">{title}</h1>
           {description && <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{description}</p>}
         </div>

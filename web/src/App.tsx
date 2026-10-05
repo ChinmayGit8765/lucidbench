@@ -1,39 +1,19 @@
-import { useCallback, useEffect, useState } from "react"
-import { Play, Plus, RefreshCw, RotateCw, SunMoon } from "lucide-react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import { Blocks, Compass, Plus } from "lucide-react"
 import { Toaster as SonnerToaster, toast } from "sonner"
 
 import { CommandPalette, useCommandPaletteHotkey, type Command } from "@/components/CommandPalette"
-import { Header, PAGES, pageLabel, Sidebar, useSidebar, type Page } from "@/components/Shell"
-import { getJSON, refreshAll } from "@/lib/api"
-import { failingRuns, rerunFailed, shortRepo, type CIRun, type CIRuns } from "@/lib/ci"
+import { Header, Sidebar } from "@/components/Shell"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { EmptyState, Skeleton } from "@/components/ui/states"
+import { AppContext, useApp, type AppValue } from "@/lib/app"
 import { useHealth } from "@/lib/health"
-import { runHelloJob } from "@/lib/jobs"
-import { categoryInfo, typeInfo, type Project, type ProjectList } from "@/lib/projects"
-import { useTheme } from "@/lib/theme"
-import Accounts, { AddAccountDialog } from "@/pages/Accounts"
-import Mcp from "@/pages/Mcp"
-import Overview from "@/pages/Overview"
-import Projects from "@/pages/Projects"
-import Runners from "@/pages/Runners"
-import System from "@/pages/System"
-
-const ROUTES: Record<string, Page> = {
-  "/": "overview",
-  "/projects": "projects",
-  "/accounts": "accounts",
-  "/mcp": "mcp",
-  "/runners": "runners",
-  "/system": "system",
-}
-const pathFor = (p: Page) => (p === "overview" ? "/" : `/${p}`)
-const pageFromPath = (): Page => ROUTES[location.pathname.replace(/\/+$/, "") || "/"] ?? "overview"
-
-const GO_KEYWORDS: Partial<Record<Page, string>> = {
-  projects: "portfolio products tools needs dependencies graph",
-  mcp: "servers model context protocol subscriptions access",
-  runners: "ci github actions workflow",
-  system: "cluster jobs daemon",
-}
+import { PrefsProvider, usePrefs } from "@/lib/prefs"
+import { MODULES } from "@/modules"
+import { isAdded, isOpenable, matchPath, moduleById, navOrder, pathFor } from "@/modules/registry"
+import type { ModuleDef } from "@/modules/types"
+import { AddAccountDialog } from "@/pages/Accounts"
 
 /** Only ?theme= survives navigation; page-specific parameters do not. */
 function keptSearch(): string {
@@ -42,174 +22,193 @@ function keptSearch(): string {
 }
 
 export default function App() {
-  const [page, setPageState] = useState<Page>(pageFromPath)
-  const setPage = useCallback((p: Page) => {
-    history.pushState(null, "", `${pathFor(p)}${keptSearch()}`)
-    setPageState(p)
-  }, [])
-  // A project to scroll to and highlight on the Projects page.
-  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null)
-  const openProject = useCallback(
-    (id: string) => {
-      setPage("projects")
-      setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 }))
-    },
-    [setPage],
+  return (
+    <PrefsProvider>
+      <Workbench />
+    </PrefsProvider>
   )
+}
+
+function Workbench() {
+  const [path, setPath] = useState(() => location.pathname)
+  const navigate = useCallback((p: string) => {
+    if (p !== location.pathname) history.pushState(null, "", `${p}${keptSearch()}`)
+    setPath(p)
+  }, [])
   useEffect(() => {
-    const onPop = () => setPageState(pageFromPath())
+    const onPop = () => setPath(location.pathname)
     window.addEventListener("popstate", onPop)
     return () => window.removeEventListener("popstate", onPop)
   }, [])
-  useEffect(() => {
-    document.title = `${pageLabel(page)} · Lucidbench`
-  }, [page])
 
+  const { prefs, base } = usePrefs()
+  const { module, subpath } = matchPath(path)
   const health = useHealth()
-  const theme = useTheme()
-  const sidebar = useSidebar()
   const [adding, setAdding] = useState(false)
   const [palette, setPalette] = useState(false)
   const togglePalette = useCallback(() => setPalette((o) => !o), [])
   useCommandPaletteHotkey(togglePalette)
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null)
 
-  // The palette lists projects by name; fetch them on open.
-  const [paletteProjects, setPaletteProjects] = useState<Project[]>([])
-  // The palette's "re-run last failed" needs fresh runs; fetch on open.
-  const [lastFailed, setLastFailed] = useState<CIRun | null | undefined>(undefined)
+  const open = useCallback(
+    (id: string, sub: string[] = []) => {
+      const m = moduleById(id)
+      if (!m) return
+      if (m.status === "soon") {
+        toast(`${m.title} is coming${m.milestone ? ` in ${m.milestone}` : " soon"}`, { description: m.description })
+        return
+      }
+      if (!isAdded(m, prefs)) {
+        navigate(`/settings/extensions/${m.id}`)
+        return
+      }
+      navigate(pathFor(m, sub))
+    },
+    [prefs, navigate],
+  )
+  const openProject = useCallback(
+    (id: string) => {
+      navigate("/projects")
+      setFocus((f) => ({ id, n: (f?.n ?? 0) + 1 }))
+    },
+    [navigate],
+  )
+  const app = useMemo<AppValue>(
+    () => ({
+      health,
+      navigate,
+      open,
+      openProject,
+      focus,
+      addAccount: () => setAdding(true),
+      openPalette: () => setPalette(true),
+    }),
+    [health, navigate, open, openProject, focus],
+  )
+
   useEffect(() => {
-    if (!palette) return
-    let cancelled = false
-    setLastFailed(undefined)
-    getJSON<CIRuns>("/api/ci/runs")
-      .then((r) => !cancelled && setLastFailed(failingRuns(r.runs)[0] ?? null))
-      .catch(() => !cancelled && setLastFailed(null))
-    getJSON<ProjectList>("/api/projects")
-      .then((l) => !cancelled && setPaletteProjects(l.projects))
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [palette])
-
-  const commands: Command[] = [
-    ...PAGES.map(
-      (p): Command => ({
-        id: `go-${p.id}`,
-        label: p.label,
-        group: "Go to",
-        icon: p.icon,
-        hint: page === p.id ? "current page" : undefined,
-        keywords: GO_KEYWORDS[p.id] ?? "",
-        run: () => setPage(p.id),
-      }),
-    ),
-    {
-      id: "hello",
-      label: "Run hello job",
-      group: "Actions",
-      icon: Play,
-      hint: "local cluster",
-      keywords: "job kubernetes test",
-      run: () => void runHelloJob(),
-    },
-    {
-      id: "add-account",
-      label: "Add account",
-      group: "Actions",
-      icon: Plus,
-      keywords: "login profile claude codex grok",
-      run: () => setAdding(true),
-    },
-    {
-      id: "rerun-last-failed",
-      label: "Re-run last failed run",
-      group: "Actions",
-      icon: RotateCw,
-      disabled: !lastFailed,
-      hint:
-        lastFailed === undefined
-          ? "checking…"
-          : lastFailed
-            ? `${lastFailed.name} · ${shortRepo(lastFailed.repo)}`
-            : "nothing failing",
-      keywords: "ci github retry",
-      run: () => {
-        if (lastFailed) void rerunFailed(lastFailed).then((ok) => ok && setTimeout(refreshAll, 1500))
-      },
-    },
-    {
-      id: "theme",
-      label: theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme",
-      group: "Actions",
-      icon: SunMoon,
-      keywords: "toggle theme dark light appearance",
-      run: () => theme.setPref(theme.resolved === "dark" ? "light" : "dark"),
-    },
-    {
-      id: "refresh",
-      label: "Refresh data",
-      group: "Actions",
-      icon: RefreshCw,
-      keywords: "reload update",
-      run: () => {
-        refreshAll()
-        toast.success("Refreshing")
-      },
-    },
-    ...paletteProjects.map(
-      (p): Command => ({
-        id: `project-${p.id}`,
-        label: `Open project ${p.name}`,
-        group: "Projects",
-        icon: typeInfo(p.type).icon,
-        hint: `${categoryInfo(p.category)?.one ?? p.category} · ${p.status}`,
-        keywords: `${p.id} ${p.type} ${p.repo ?? ""} ${p.linear ?? ""}`,
-        searchOnly: true,
-        run: () => openProject(p.id),
-      }),
-    ),
-  ]
+    document.title = `${module?.title ?? "Not found"} · Lucidbench`
+  }, [module])
 
   return (
-    <div className="app-backdrop flex h-screen overflow-hidden">
-      <Sidebar
-        page={page}
-        onNavigate={setPage}
-        rail={sidebar.rail}
-        wide={sidebar.wide}
-        onToggle={sidebar.toggle}
-        version={health?.version}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header
-          page={page}
-          health={health}
-          theme={theme.pref}
-          onTheme={theme.setPref}
-          onSearch={() => setPalette(true)}
-        />
-        <main className="@container flex-1 overflow-auto">
-          <div
-            key={page}
-            className="mx-auto max-w-6xl px-5 py-7 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 md:px-8"
-          >
-            {page === "overview" && (
-              <Overview health={health} onNavigate={setPage} onAddAccount={() => setAdding(true)} onOpenProject={openProject} />
-            )}
-            {page === "projects" && <Projects focus={focus} />}
-            {page === "accounts" && <Accounts onAdd={() => setAdding(true)} onOpenMcp={() => setPage("mcp")} />}
-            {page === "mcp" && <Mcp />}
-            {page === "runners" && <Runners />}
-            {page === "system" && <System health={health} />}
-          </div>
-        </main>
+    <AppContext.Provider value={app}>
+      <div className="app-backdrop flex h-screen overflow-hidden">
+        <Sidebar current={module?.id} version={health?.version} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header module={module} health={health} />
+          <main className="@container flex-1 overflow-auto">
+            <div
+              key={module?.id ?? "none"}
+              className="mx-auto max-w-6xl px-5 py-7 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 md:px-8"
+            >
+              <ModuleView module={module} subpath={subpath} />
+            </div>
+          </main>
+        </div>
+        <AddAccountDialog key={String(adding)} open={adding} onClose={() => setAdding(false)} />
+        <Palette open={palette} onClose={() => setPalette(false)} current={module?.id} />
+        <Toaster theme={base} />
       </div>
-      <AddAccountDialog key={String(adding)} open={adding} onClose={() => setAdding(false)} />
-      <CommandPalette open={palette} onClose={() => setPalette(false)} commands={commands} />
-      <Toaster theme={theme.resolved} />
+    </AppContext.Provider>
+  )
+}
+
+function PageSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true">
+      <div className="flex items-start gap-3.5">
+        <Skeleton className="size-10 rounded-xl" />
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <Skeleton className="h-28 rounded-xl" />
+        <Skeleton className="h-28 rounded-xl" />
+        <Skeleton className="h-28 rounded-xl" />
+      </div>
+      <Skeleton className="h-64 rounded-xl" />
     </div>
   )
+}
+
+/** Renders a module, or says plainly why it cannot be shown. */
+function ModuleView({ module, subpath }: { module?: ModuleDef; subpath: string[] }) {
+  const { prefs, update } = usePrefs()
+  const { open } = useApp()
+  if (!module) {
+    return (
+      <Card className="border-dashed">
+        <EmptyState icon={<Compass />} title="Nothing lives here" description="This address does not match any module. It may have been renamed.">
+          <Button onClick={() => open("overview")}>Go to Overview</Button>
+        </EmptyState>
+      </Card>
+    )
+  }
+  const Icon = module.icon
+  if (module.status === "soon") {
+    return (
+      <Card className="border-dashed">
+        <EmptyState
+          icon={<Icon />}
+          title={`${module.title} is coming${module.milestone ? ` in ${module.milestone}` : " soon"}`}
+          description={module.description}
+        >
+          <Button variant="secondary" onClick={() => open("overview")}>
+            Back to Overview
+          </Button>
+        </EmptyState>
+      </Card>
+    )
+  }
+  if (!isAdded(module, prefs)) {
+    return (
+      <Card className="border-dashed">
+        <EmptyState icon={<Icon />} title={`${module.title} is not in your sidebar`} description={module.description}>
+          <Button
+            onClick={() =>
+              update((p) => ({ ...p, extensions: { ...p.extensions, [module.id]: { added: true, order: p.extensions[module.id]?.order ?? module.order } } }))
+            }
+          >
+            <Plus /> Add to sidebar
+          </Button>
+          <Button variant="secondary" onClick={() => open("settings", ["extensions", module.id])}>
+            <Blocks /> Browse extensions
+          </Button>
+        </EmptyState>
+      </Card>
+    )
+  }
+  const Page = module.component
+  if (!Page) return null
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <Page subpath={subpath} />
+    </Suspense>
+  )
+}
+
+/** The command palette: "Go to" for every openable module, then each module's own commands. */
+function Palette({ open, onClose, current }: { open: boolean; onClose: () => void; current?: string }) {
+  const { prefs } = usePrefs()
+  const app = useApp()
+  // Every module's hook runs on every render, in a fixed order.
+  const perModule = MODULES.map((m) => ({ m, commands: m.useCommands ? m.useCommands(open) : [] }))
+  const goTo: Command[] = navOrder(prefs)
+    .filter((m) => isOpenable(m, prefs))
+    .map((m) => ({
+      id: `go-${m.id}`,
+      label: m.title,
+      group: "Go to",
+      icon: m.icon,
+      hint: current === m.id ? "current page" : undefined,
+      keywords: m.keywords ?? "",
+      run: () => app.open(m.id),
+    }))
+  // Core modules always contribute (Settings carries "Add extension…"); extensions only once added.
+  const own = perModule.filter(({ m }) => (m.kind === "core" ? m.status !== "soon" : isOpenable(m, prefs))).flatMap((x) => x.commands)
+  return <CommandPalette open={open} onClose={onClose} commands={[...goTo, ...own]} />
 }
 
 function Toaster({ theme }: { theme: "dark" | "light" }) {
@@ -228,4 +227,3 @@ function Toaster({ theme }: { theme: "dark" | "light" }) {
     />
   )
 }
-

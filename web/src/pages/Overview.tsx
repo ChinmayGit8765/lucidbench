@@ -1,40 +1,37 @@
 import { useState, type ReactNode } from "react"
 import {
   ArrowRight,
-  ArrowUpRight,
+  Blocks,
   Boxes,
   CircleCheck,
   Container as ContainerIcon,
   ExternalLink,
-  FolderKanban,
   KeyRound,
   OctagonAlert,
   Play,
   Plus,
   RotateCw,
-  Server,
   ServerCog,
   TriangleAlert,
-  Users,
   Workflow,
   type LucideIcon,
 } from "lucide-react"
 
-import { RunBars, RunIcon, RunnerDot } from "@/components/ci"
-import { ProviderTile, PROVIDERS } from "@/components/ProviderMark"
-import { RefreshButton, type Page } from "@/components/Shell"
-import { StatusPill } from "@/components/ui/badge"
+import { RunIcon, RunnerDot } from "@/components/ci"
+import { PROVIDERS } from "@/components/ProviderMark"
+import { PageHeader, RefreshButton } from "@/components/Shell"
+import { SpriteBoard } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Skeleton } from "@/components/ui/states"
 import { refreshAll, usePoll } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import {
   CI_POLL_MS,
   containerAction,
   failingRuns,
   formatDuration,
-  isFailure,
   rerunFailed,
   runDuration,
   runState,
@@ -45,11 +42,12 @@ import {
   type CIRuns,
   type CISummary,
 } from "@/lib/ci"
-import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
-import { blockedNeeds, CATEGORIES, countLabel, PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
+import { usePrefs } from "@/lib/prefs"
+import { blockedNeeds, PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
+import { isOpenable, moduleById, navOrder } from "@/modules/registry"
 import type { Account } from "@/pages/Accounts"
 
 function greeting(d: Date): string {
@@ -58,64 +56,6 @@ function greeting(d: Date): string {
   if (h < 12) return "Good morning"
   if (h < 18) return "Good afternoon"
   return "Good evening"
-}
-
-/* ---------- stat tiles ---------- */
-
-function StatTile({
-  icon: Icon,
-  label,
-  onOpen,
-  loading,
-  value,
-  sub,
-  aside,
-  footer,
-}: {
-  icon: LucideIcon
-  label: string
-  onOpen: () => void
-  loading?: boolean
-  value: ReactNode
-  sub?: ReactNode
-  aside?: ReactNode
-  footer?: ReactNode
-}) {
-  return (
-    <Card className="group relative overflow-hidden transition-[border-color,box-shadow] duration-200 focus-within:border-border-strong hover:border-border-strong">
-      <div aria-hidden className="tile-glow pointer-events-none absolute inset-0" />
-      <button
-        onClick={onOpen}
-        aria-label={`${label}: open`}
-        className="absolute inset-0 z-10 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
-      <div className="relative flex h-full flex-col p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Icon className="size-3.5 text-subtle-foreground" />
-            {label}
-          </span>
-          <ArrowUpRight className="size-3.5 text-subtle-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        </div>
-        {loading ? (
-          <div className="mt-3 space-y-2">
-            <Skeleton className="h-7 w-20" />
-            <Skeleton className="h-3.5 w-32" />
-            <Skeleton className="mt-3 h-6 w-full" />
-          </div>
-        ) : (
-          <>
-            <div className="mt-2 flex items-end justify-between gap-2">
-              <div className="truncate text-2xl font-semibold tabular-nums tracking-tight">{value}</div>
-              {aside}
-            </div>
-            {sub && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>}
-            {footer && <div className="mt-auto pt-3">{footer}</div>}
-          </>
-        )}
-      </div>
-    </Card>
-  )
 }
 
 /* ---------- needs attention ---------- */
@@ -155,17 +95,11 @@ interface ActivityItem {
 
 /* ---------- page ---------- */
 
-export default function Overview({
-  health,
-  onNavigate,
-  onAddAccount,
-  onOpenProject,
-}: {
-  health: Health | null | undefined
-  onNavigate: (p: Page) => void
-  onAddAccount: () => void
-  onOpenProject: (id: string) => void
-}) {
+export default function Overview() {
+  const { open, openProject: onOpenProject, addAccount: onAddAccount } = useApp()
+  const { prefs, label } = usePrefs()
+  const ciOn = isOpenable(moduleById("runners")!, prefs)
+  const tiles = navOrder(prefs).filter((m) => m.overviewTile && isOpenable(m, prefs))
   const now = useNow(5000)
   const accounts = usePoll<Account[]>("/api/accounts", 15000)
   const cluster = usePoll<ClusterInfo>("/api/cluster", 15000)
@@ -182,7 +116,6 @@ export default function Overview({
   const updated = all.map((p) => p.updatedAt).filter((t): t is number => t !== null)
 
   const accs = accounts.data ?? []
-  const connected = PROVIDERS.filter((p) => accs.some((a) => a.provider === p.id && a.status === "logged_in"))
   const expired = accs.filter((a) => a.status === "expired")
   const s = summary.data
   const runs = runsPoll.data?.runs ?? []
@@ -194,15 +127,7 @@ export default function Overview({
   const pl = projectsPoll.data
   const projectList = pl?.projects ?? []
   const blocked = blockedNeeds(projectList)
-  const openNeeds = projectList.reduce((n, p) => n + p.progress.total - p.progress.done, 0)
 
-  // Pass rate: last 24h when there were runs, else the recent window.
-  const recent = runs.slice(0, 30)
-  const recentPass = recent.filter((r) => runState(r) === "success").length
-  const recentFail = recent.filter(isFailure).length
-  const rate24 = s?.runs_24h.pass_rate ?? null
-  const rate = rate24 ?? (recentPass + recentFail > 0 ? recentPass / (recentPass + recentFail) : null)
-  const rateLabel = rate24 !== null ? "pass rate · last 24h" : `pass rate · last ${recent.length} runs`
 
   const rerun = (r: CIRun) =>
     setConfirm({
@@ -230,7 +155,7 @@ export default function Overview({
 
   /* needs attention */
   const attention: Attention[] = []
-  for (const r of failing.slice(0, 6)) {
+  for (const r of ciOn ? failing.slice(0, 6) : []) {
     attention.push({
       key: `run-${r.repo}-${r.id}`,
       icon: <RunIcon run={r} />,
@@ -263,7 +188,7 @@ export default function Overview({
       ),
     })
   }
-  for (const r of fleet.filter((x) => x.status !== "online")) {
+  for (const r of ciOn ? fleet.filter((x) => x.status !== "online") : []) {
     attention.push({
       key: `runner-${r.repo}-${r.id}`,
       icon: <RunnerDot status="offline" />,
@@ -274,13 +199,13 @@ export default function Overview({
       ),
       meta: shortRepo(r.repo),
       action: (
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("runners")}>
+        <Button variant="ghost" size="sm" onClick={() => open("runners")}>
           View <ArrowRight />
         </Button>
       ),
     })
   }
-  for (const ct of containers.filter((x) => x.state !== "running")) {
+  for (const ct of ciOn ? containers.filter((x) => x.state !== "running") : []) {
     attention.push({
       key: `ct-${ct.name}`,
       icon: <ContainerIcon className="size-3.5 text-warning" />,
@@ -326,20 +251,22 @@ export default function Overview({
       ),
       meta: <span className="font-mono">{a.name}</span>,
       action: (
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("accounts")}>
+        <Button variant="ghost" size="sm" onClick={() => open("accounts")}>
           Fix <ArrowRight />
         </Button>
       ),
     })
   }
-  if (s && !s.configured) {
+  if (!ciOn) {
+    // CI is an extension; nothing to report when it is not added.
+  } else if (s && !s.configured) {
     attention.push({
       key: "ci-setup",
       icon: <Workflow className="size-3.5 text-info" />,
       title: "Watch your CI",
       meta: "Add repositories to ci.github.repos to see runners and runs",
       action: (
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("runners")}>
+        <Button variant="ghost" size="sm" onClick={() => open("runners")}>
           Set up <ArrowRight />
         </Button>
       ),
@@ -351,13 +278,13 @@ export default function Overview({
       title: "No GitHub token",
       meta: "Export GITHUB_TOKEN or sign in with gh auth login",
       action: (
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("runners")}>
+        <Button variant="ghost" size="sm" onClick={() => open("runners")}>
           Details <ArrowRight />
         </Button>
       ),
     })
   }
-  for (const e of s?.errors ?? []) {
+  for (const e of ciOn ? (s?.errors ?? []) : []) {
     if (e.source === "github") continue
     attention.push({
       key: `err-${e.source}-${e.message}`,
@@ -370,7 +297,7 @@ export default function Overview({
 
   /* activity */
   const activity: ActivityItem[] = [
-    ...runs.slice(0, 12).map(
+    ...(ciOn ? runs : []).slice(0, 12).map(
       (r): ActivityItem => ({
         key: `run-${r.repo}-${r.id}`,
         at: r.created_at,
@@ -411,194 +338,34 @@ export default function Overview({
   const today = new Date(now)
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-6">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-subtle-foreground">
-            {today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em]">{greeting(today)}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {attentionLoading
-              ? "Checking your workspace…"
-              : attention.length === 0
-                ? "Everything is running. Nothing needs you right now."
-                : `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention.`}
-          </p>
-        </div>
-        <RefreshButton refreshing={refreshing} updatedAt={updated.length ? Math.min(...updated) : null} />
+      <PageHeader
+        eyebrow={today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        title={label("overview_title", greeting(today))}
+        description={
+          attentionLoading
+            ? "Checking your workspace…"
+            : attention.length === 0
+              ? "Everything is running. Nothing needs you right now."
+              : `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention.`
+        }
+        actions={<RefreshButton refreshing={refreshing} updatedAt={updated.length ? Math.min(...updated) : null} />}
+      />
+
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
+        {tiles.map((m) => {
+          const Tile = m.overviewTile!
+          return <Tile key={m.id} />
+        })}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3 @5xl:grid-cols-5">
-        <StatTile
-          icon={FolderKanban}
-          label="Projects"
-          onOpen={() => onNavigate("projects")}
-          loading={projectsPoll.loading && !pl}
-          value={
-            pl?.configured ? (
-              projectList.length
-            ) : (
-              <span className="text-base font-medium text-muted-foreground">Not set up</span>
-            )
-          }
-          aside={
-            blocked.length > 0 ? (
-              <StatusPill tone="warning">{blocked.length} blocked</StatusPill>
-            ) : pl?.configured && projectList.length > 0 ? (
-              <StatusPill tone="success">{projectList.filter((p) => p.status === "active").length} active</StatusPill>
-            ) : undefined
-          }
-          sub={
-            pl?.configured ? (
-              <>
-                {openNeeds} open {openNeeds === 1 ? "need" : "needs"}
-                {blocked.length > 0 && <span className="text-warning-fg"> · {blocked.length} blocked</span>}
-              </>
-            ) : (
-              <span className="font-mono">lucid projects init</span>
-            )
-          }
-          footer={
-            <div className="space-y-1.5">
-              <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted">
-                {CATEGORIES.map((cat) => {
-                  const n = projectList.filter((p) => p.category === cat.id).length
-                  return n > 0 ? (
-                    <span key={cat.id} title={countLabel(cat, n)} style={{ flexGrow: n, backgroundColor: cat.color }} className="h-full" />
-                  ) : null
-                })}
-              </div>
-              <div className="flex items-center gap-2.5 text-xs tabular-nums text-muted-foreground">
-                {CATEGORIES.map((cat) => {
-                  const n = projectList.filter((p) => p.category === cat.id).length
-                  return n > 0 ? (
-                    <span key={cat.id} title={countLabel(cat, n)} className="flex items-center gap-1">
-                      <span className="size-1.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                      {n}
-                    </span>
-                  ) : null
-                })}
-              </div>
-            </div>
-          }
-        />
-        <StatTile
-          icon={Users}
-          label="AI accounts"
-          onOpen={() => onNavigate("accounts")}
-          loading={accounts.loading && !accounts.data}
-          value={
-            <span>
-              {connected.length}
-              <span className="text-base font-normal text-subtle-foreground">/{PROVIDERS.length}</span>
-            </span>
-          }
-          sub={
-            <>
-              providers · {accs.length} {accs.length === 1 ? "account" : "accounts"}
-              {expired.length > 0 && <span className="text-warning-fg"> · {expired.length} expired</span>}
-            </>
-          }
-          footer={
-            <div className="flex gap-1.5">
-              {PROVIDERS.map((p) => (
-                <ProviderTile key={p.id} provider={p.id} size="sm" muted={!connected.includes(p)} />
-              ))}
-            </div>
-          }
-        />
-        <StatTile
-          icon={ServerCog}
-          label="Runners"
-          onOpen={() => onNavigate("runners")}
-          loading={summary.loading && !s}
-          value={
-            <span>
-              {s?.runners.online ?? 0}
-              <span className="text-base font-normal text-subtle-foreground"> online</span>
-            </span>
-          }
-          aside={s && s.runners.busy > 0 ? <StatusPill tone="info" pulse>{s.runners.busy} busy</StatusPill> : undefined}
-          sub={
-            s
-              ? `${s.runners.offline} offline · ${s.containers.up}/${s.containers.total} containers up`
-              : summary.error?.message
-          }
-          footer={
-            <div className="flex h-6 flex-wrap items-center gap-1.5">
-              {fleet.length === 0 && containers.length === 0 ? (
-                <span className="text-xs text-subtle-foreground">No runners found</span>
-              ) : (
-                <>
-                  {fleet.map((r) => (
-                    <span key={`${r.repo}-${r.id}`} title={`${r.name} · ${r.busy ? "busy" : r.status}`} className="flex">
-                      <RunnerDot status={r.status} busy={r.busy} className="size-2.5" />
-                    </span>
-                  ))}
-                  {containers
-                    .filter((ct) => !fleet.some((r) => r.container === ct.name))
-                    .map((ct) => (
-                      <span
-                        key={ct.name}
-                        title={`${ct.name} · container ${ct.state}, repository not watched`}
-                        className={cn("size-2.5 rounded-full border-2", ct.state === "running" ? "border-success/70" : "border-neutral")}
-                      />
-                    ))}
-                </>
-              )}
-            </div>
-          }
-        />
-        <StatTile
-          icon={Workflow}
-          label="CI health"
-          onOpen={() => onNavigate("runners")}
-          loading={runsPoll.loading && !runsPoll.data}
-          value={
-            <span className={cn(rate !== null && rate < 0.8 && "text-danger-fg")}>
-              {rate === null ? "-" : `${Math.round(rate * 100)}%`}
-            </span>
-          }
-          aside={
-            failing.length > 0 ? (
-              <StatusPill tone="danger">{failing.length} failing</StatusPill>
-            ) : runs.length > 0 ? (
-              <StatusPill tone="success">green</StatusPill>
-            ) : undefined
-          }
-          sub={runs.length > 0 ? rateLabel : s?.configured ? "no runs yet" : "not configured"}
-          footer={<RunBars runs={runs} slots={24} now={now} className="h-6" />}
-        />
-        <StatTile
-          icon={Server}
-          label="Cluster"
-          onOpen={() => onNavigate("system")}
-          loading={cluster.loading && !c && !cluster.error}
-          value={c ? (c.running ? "Running" : "Stopped") : "Offline"}
-          aside={
-            <StatusPill tone={c?.running ? "success" : c ? "neutral" : "danger"} pulse={!!c?.running}>
-              {c?.running ? "up" : c ? "down" : "error"}
-            </StatusPill>
-          }
-          sub={c ? <span className="font-mono">kind · {c.name}</span> : "Docker is not reachable"}
-          footer={
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Boxes className="size-3.5 text-subtle-foreground" />
-              <span className="tabular-nums">
-                {jobs.data ? `${jobList.length} ${jobList.length === 1 ? "job" : "jobs"}` : "no jobs"}
-                {health && <span className="text-subtle-foreground"> · lucidd {health.version}</span>}
-              </span>
-            </div>
-          }
-        />
-      </div>
+      <SpriteBoard />
 
       <div className="grid gap-4 @4xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between px-5 pb-3 pt-4">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                Needs attention
+                {label("attention", "Needs attention")}
                 {attention.length > 0 && (
                   <span className="rounded-full bg-danger-soft px-1.5 text-2xs tabular-nums text-danger-fg">{attention.length}</span>
                 )}
@@ -615,7 +382,7 @@ export default function Overview({
                   <CircleCheck className="size-4" />
                 </span>
                 <div>
-                  <div className="text-sm font-medium">All clear</div>
+                  <div className="text-sm font-medium">{label("all_clear", "All clear")}</div>
                   <div className="text-xs text-muted-foreground">No failed runs, offline runners, expired sign-ins or blocked needs.</div>
                 </div>
               </div>
@@ -631,9 +398,11 @@ export default function Overview({
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between px-5 pb-3 pt-4">
               <h2 className="text-sm font-semibold">Recent activity</h2>
-              <Button variant="ghost" size="sm" onClick={() => onNavigate("runners")}>
-                All runs <ArrowRight />
-              </Button>
+              {ciOn && (
+                <Button variant="ghost" size="sm" onClick={() => open("runners")}>
+                  All runs <ArrowRight />
+                </Button>
+              )}
             </div>
             {runsPoll.loading && !runsPoll.data ? (
               <div className="space-y-2 border-t p-5">
@@ -704,12 +473,21 @@ export default function Overview({
                 onClick={() => void hello()}
               />
               <QuickAction icon={Plus} title="Add account" hint="Sign in another provider profile" onClick={onAddAccount} />
-              <QuickAction
-                icon={ServerCog}
-                title="Open Runners & CI"
-                hint="Fleet, containers and every run"
-                onClick={() => onNavigate("runners")}
-              />
+              {ciOn ? (
+                <QuickAction
+                  icon={ServerCog}
+                  title="Open Runners & CI"
+                  hint="Fleet, containers and every run"
+                  onClick={() => open("runners")}
+                />
+              ) : (
+                <QuickAction
+                  icon={Blocks}
+                  title="Browse extensions"
+                  hint="Add Runners & CI, Containers and more"
+                  onClick={() => open("settings", ["extensions"])}
+                />
+              )}
             </div>
             <p className="mt-3 flex items-center gap-1.5 text-xs text-subtle-foreground">
               Everything else:
@@ -718,6 +496,7 @@ export default function Overview({
             </p>
           </Card>
 
+          {ciOn && (
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
               <h2 className="text-sm font-semibold">Fleet</h2>
@@ -760,6 +539,7 @@ export default function Overview({
               </ul>
             )}
           </Card>
+          )}
         </div>
       </div>
 

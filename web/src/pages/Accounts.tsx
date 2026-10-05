@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card"
 import { Dialog } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import { clientLabel, MCP_POLL_MS, serversFor, type McpMatrix } from "@/lib/mcp"
 import { cn } from "@/lib/utils"
 
@@ -434,7 +435,9 @@ export function AddAccountDialog({ open, onClose }: { open: boolean; onClose: ()
   )
 }
 
-export default function Accounts({ onAdd, onOpenMcp }: { onAdd: () => void; onOpenMcp?: () => void }) {
+export default function Accounts() {
+  const { addAccount: onAdd, open } = useApp()
+  const onOpenMcp = () => open("mcp")
   const { data, error, loading, refresh } = usePoll<Account[]>("/api/accounts")
   const mcp = usePoll<McpMatrix>("/api/mcp", MCP_POLL_MS)
 
