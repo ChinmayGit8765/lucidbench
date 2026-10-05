@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
@@ -84,6 +85,21 @@ func TestMemoryAndBoardsRoutes(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, "memory", "Boards", "work.md")); err != nil {
 		t.Errorf("default board not created in the data dir: %v", err)
+	}
+}
+
+func TestWorkRoutes(t *testing.T) {
+	t.Setenv("LUCID_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	h := New()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/work/sessions", nil))
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("list: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/work/sessions", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("start without confirm: %d", rec.Code)
 	}
 }
 
