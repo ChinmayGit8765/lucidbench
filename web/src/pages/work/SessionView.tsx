@@ -6,10 +6,12 @@ import {
   Copy,
   ExternalLink,
   FileDiff,
+  FileText,
   FolderGit2,
   GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
+  KanbanSquare,
   ListTree,
   RefreshCw,
   ScrollText,
@@ -32,6 +34,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { Tabs } from "@/components/ui/tabs"
 import { ApiError, errorMessage, getJSON, request } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { DEFAULT_BOARD } from "@/lib/boards"
 import { useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import {
@@ -187,6 +190,16 @@ export function SessionView({ id }: { id: string }) {
                 {session.harness === "mine" ? "your harness" : "clean harness"}
                 {session.profile ? ` · ${session.profile}` : ""}
               </Meta>
+              {session.card && (
+                <Meta icon={KanbanSquare} title="Open the card" onClick={() => open("boards", [session.board || DEFAULT_BOARD, session.card!])}>
+                  card
+                </Meta>
+              )}
+              {session.brief && (
+                <Meta icon={FileText} title={`Open the brief: ${session.brief}`} onClick={() => open("memory", session.brief!.split("/"))}>
+                  brief
+                </Meta>
+              )}
             </div>
             <p className="mt-1 max-w-3xl text-2xs leading-4 text-subtle-foreground">{SANDBOX_NOTICE}</p>
           </div>

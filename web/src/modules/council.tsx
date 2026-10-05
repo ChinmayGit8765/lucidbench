@@ -97,7 +97,6 @@ function useCouncilCommands(paletteOpen: boolean): Command[] {
         icon: FileText,
         hint: "waiting for approval",
         keywords: `${s.project ?? ""} ${s.input}`,
-        searchOnly: true,
         run: () => open("council", [s.id]),
       })),
   ]

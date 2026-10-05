@@ -66,17 +66,32 @@ interface ReadyCard {
 function useWorkCommands(paletteOpen: boolean): Command[] {
   const { open } = useApp()
   const [cards, setCards] = useState<ReadyCard[] | null>(null)
+  const [review, setReview] = useState<WorkSession[]>([])
   useEffect(() => {
     if (!paletteOpen) return
     let cancelled = false
     getJSON<{ cards: ReadyCard[] }>("/api/boards/work")
       .then((b) => !cancelled && setCards(b.cards.filter((c) => c.column === "Ready" || c.column === "Inbox")))
       .catch(() => !cancelled && setCards([]))
+    getJSON<WorkSession[]>(sessionsPath)
+      .then((l) => !cancelled && setReview(l.filter(needsReview)))
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
   }, [paletteOpen])
   return [
+    ...review.map(
+      (s): Command => ({
+        id: `work-review-${s.id}`,
+        label: `Review diff: ${s.title}`,
+        group: "Actions",
+        icon: FileDiff,
+        hint: `${providerInfo(s.provider)?.label ?? s.provider} · ${s.project}`,
+        keywords: "work session diff review pr pull request",
+        run: () => open("work", [s.id]),
+      }),
+    ),
     {
       id: "work-start",
       label: "Start work…",
