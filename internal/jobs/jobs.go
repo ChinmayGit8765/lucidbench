@@ -3,10 +3,8 @@ package jobs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"time"
 
@@ -15,16 +13,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
+	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 )
 
 // Namespace holds all Lucidbench jobs.
 const Namespace = "lucidbench"
 
 // ErrNoCluster means the local cluster has not been created (run `lucid cluster up`).
-var ErrNoCluster = errors.New("no local cluster: run `lucid cluster up`")
+var ErrNoCluster = k8s.ErrNoCluster
 
 // Info summarises a Job.
 type Info struct {
@@ -44,47 +41,7 @@ func NewRunner(cs kubernetes.Interface) *Runner { return &Runner{cs: cs} }
 
 // Connect builds a Runner from the Lucidbench kubeconfig.
 func Connect() (*Runner, error) {
-	if cluster.InContainer() {
-		return connectInternal()
-	}
-	kc, err := cluster.KubeconfigPath()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(kc); err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrNoCluster
-		}
-		return nil, err
-	}
-	cfg, err := clientcmd.BuildConfigFromFlags("", kc)
-	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
-	}
-	cfg.Timeout = 15 * time.Second
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &Runner{cs: cs}, nil
-}
-
-// connectInternal builds a Runner from an in-memory kubeconfig that points at
-// the kind node's address on the shared docker network.
-func connectInternal() (*Runner, error) {
-	raw, err := cluster.InternalKubeconfig()
-	if err != nil {
-		return nil, err
-	}
-	if raw == "" {
-		return nil, ErrNoCluster
-	}
-	cfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(raw))
-	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
-	}
-	cfg.Timeout = 15 * time.Second
-	cs, err := kubernetes.NewForConfig(cfg)
+	cs, err := k8s.Clientset()
 	if err != nil {
 		return nil, err
 	}
@@ -153,21 +110,8 @@ func (r *Runner) SubmitHello(ctx context.Context) (*batchv1.Job, error) {
 }
 
 func status(j *batchv1.Job) string {
-	for _, c := range j.Status.Conditions {
-		if c.Status != corev1.ConditionTrue {
-			continue
-		}
-		switch c.Type {
-		case batchv1.JobComplete:
-			return "Completed"
-		case batchv1.JobFailed:
-			return "Failed"
-		}
-	}
-	if j.Status.Active > 0 {
-		return "Running"
-	}
-	return "Pending"
+	s, _ := k8s.JobStatus(j)
+	return s
 }
 
 // List returns all Lucidbench jobs, newest first.

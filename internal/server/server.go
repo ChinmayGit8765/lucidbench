@@ -11,6 +11,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
+	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
@@ -54,6 +55,7 @@ func New(cfgs ...*config.Config) http.Handler {
 		Projects: append([]string{"lucidbench"}, cfg.Docker.AllowedProjects...),
 		IsRunner: runners.Matches,
 	}})
+	k8s.Register(mux, &k8s.Service{Connect: k8s.Clientset})
 	mux.Handle("/api/projects", projects.Handler())
 	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
 	mux.Handle("/api/", http.NotFoundHandler())
