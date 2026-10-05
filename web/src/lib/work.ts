@@ -16,7 +16,13 @@ export interface WorkUsage {
   cache_write_tokens?: number
   cost_usd?: number
   duration_ms: number
+  /** How far to trust the figures, e.g. a run stopped before its final cost. */
+  note?: string
 }
+
+/** Shown wherever a session is started or watched: there is no OS sandbox yet. */
+export const SANDBOX_NOTICE =
+  "The agent runs as you on this machine. It is asked to stay in its worktree, but this isn't enforced yet. A sandboxed container environment is coming."
 
 export interface FileChange {
   path: string

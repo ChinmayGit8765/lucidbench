@@ -51,6 +51,7 @@ type Request struct {
     Model             string          // optional provider model alias
     Harness           string          // "mine" | "clean" (default); ToolsNone is always clean
     Timeout           time.Duration
+    Env               []string        // extra KEY=value pairs for the CLI (Work: TMP, TEMP, TMPDIR)
     OnEvent           func(Event)     // optional streaming callback (Work)
 }
 type Result struct { Text string; Usage Usage; Events []Event }
@@ -138,6 +139,17 @@ func Approve(id string, project string) (*boards.Card, error)
 - **Environment (beta):** a git worktree at `<repo_path>/../<repo-name>-lucid-<short-id>` on a
   new branch `lucid/<short-id>-<slug>` from the repo's current default branch. The container
   environment is optional and comes after beta.
+- **No sandbox yet:** the agent runs as the user. It is asked to stay in its worktree, which is not
+  enforced, and the Work UI says so. To keep the files a CLI writes to "the temp folder" inside the
+  worktree, `TMP`, `TEMP` and `TMPDIR` for the agent process are set to `<worktree>/.lucid-tmp`.
+  - It is created at start and listed in the repository's `info/exclude`, so git never shows it
+    (linked worktrees share that file).
+  - It is removed when the run ends.
+- **Stop ends the whole tree.** `agentexec` runs each CLI in a Windows Job Object
+  (kill-on-close) or a Unix process group and kills all of it on cancel or timeout, so a helper
+  the CLI started cannot keep editing. A stopped session is `stopped` and keeps the usage the CLI
+  had streamed (Claude reports it per message), with `usage.note` "stopped before the CLI reported
+  its final cost".
 - **The prompt** for a card is the brief (page body), plus "work only in this worktree; commit
   with clear messages; do not push".
 - **After the run:** a diff summary is shown. "Open PR" pushes the branch and runs
@@ -172,10 +184,12 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/council/sessions/{id}/events` | GET (SSE) | live updates |
 | `/api/council/sessions/{id}/again` | POST | `{notes}` re-runs a round with the operator's extra notes |
 | `/api/council/sessions/{id}/approve` | POST | `{project?}` returns the new card |
-| `/api/work/sessions` | GET / POST | list / start `{card? , project, prompt?, provider, profile?, harness}` |
-| `/api/work/sessions/{id}` | GET | session + diff summary |
+| `/api/work/sessions` | GET / POST | list / start `{card? , project, prompt?, provider, profile?, harness, model?}`; `card` is a card id on the work board or `<board>/<id>` |
+| `/api/work/sessions/{id}` | GET | session + diff summary; `?refresh=1` reads the diff again |
 | `/api/work/sessions/{id}/events` | GET (SSE) | live normalised events |
-| `/api/work/sessions/{id}/stop` | POST | stop |
+| `/api/work/sessions/{id}/raw` | GET | the CLI's own lines, as written |
+| `/api/work/sessions/{id}/stop` | POST | stop (kills the CLI's whole process tree) |
+| `/api/work/sessions/{id}/remove` | POST | `{discard}` removes the worktree; unpushed or uncommitted work needs `discard: true` |
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
 | `/api/usage/summary?days=` | GET | per provider: tokens, cost, windows |
 

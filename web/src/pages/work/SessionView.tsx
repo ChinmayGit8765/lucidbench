@@ -41,6 +41,7 @@ import {
   formatElapsed,
   openPR,
   removeWorktree,
+  SANDBOX_NOTICE,
   sessionPath,
   STATUS_INFO,
   stopSession,
@@ -187,6 +188,7 @@ export function SessionView({ id }: { id: string }) {
                 {session.profile ? ` · ${session.profile}` : ""}
               </Meta>
             </div>
+            <p className="mt-1 max-w-3xl text-2xs leading-4 text-subtle-foreground">{SANDBOX_NOTICE}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             <div className="flex items-center gap-2">
@@ -203,7 +205,7 @@ export function SessionView({ id }: { id: string }) {
               <Meta icon={Timer} title="Elapsed">
                 <span className="font-mono tabular-nums">{formatElapsed(elapsedOf(session, now))}</span>
               </Meta>
-              <Meta icon={CircleDollarSign} title={session.usage ? `${session.usage.input_tokens ?? 0} in · ${session.usage.output_tokens ?? 0} out · ${session.usage.model ?? ""}` : "Cost is known when the run ends"}>
+              <Meta icon={CircleDollarSign} title={session.usage ? `${session.usage.input_tokens ?? 0} in · ${session.usage.output_tokens ?? 0} out · ${session.usage.model ?? ""}${session.usage.note ? ` · ${session.usage.note}` : ""}` : "Cost is known when the run ends"}>
                 <span className="font-mono tabular-nums">{running ? "…" : formatCost(session.usage?.cost_usd)}</span>
               </Meta>
             </div>
