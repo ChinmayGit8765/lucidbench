@@ -3,6 +3,7 @@ module github.com/ChinmayGit8765/lucidbench
 go 1.26.0
 
 require (
+	github.com/BurntSushi/toml v1.4.0
 	go.yaml.in/yaml/v3 v3.0.4
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
@@ -12,7 +13,6 @@ require (
 
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
-	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
