@@ -55,6 +55,28 @@ func New(cfgs ...*config.Config) http.Handler {
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
 	}
+	return NewWith(cfg, Deps{})
+}
+
+// Deps are services the caller may build itself, for example to warm one up
+// at startup. A nil field is built by NewWith.
+type Deps struct {
+	Usage *usage.Service
+}
+
+// DataDir is where prefs, themes, usage, council and work records live.
+// Without a resolvable data dir they are kept in a "lucidbench" folder under
+// the working directory.
+func DataDir() string {
+	data, err := config.DataDir()
+	if err != nil {
+		return "lucidbench"
+	}
+	return data
+}
+
+// NewWith is New with a config and caller-built services.
+func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", HealthHandler)
 	mux.Handle("/api/accounts", accounts.HandlerFor(func() accounts.Roots { return accounts.FromConfig(cfg) }))
@@ -71,15 +93,13 @@ func New(cfgs ...*config.Config) http.Handler {
 	k8s.Register(mux, &k8s.Service{Connect: k8s.Clientset})
 	mux.Handle("/api/projects", projects.Handler())
 	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
-	// UI prefs and themes live in the data dir; without one they are kept in
-	// a "lucidbench" folder under the working directory.
-	data, err := config.DataDir()
-	if err != nil {
-		data = "lucidbench"
-	}
+	data := DataDir()
 	mux.Handle("/api/prefs", prefs.Handler(&prefs.Store{Path: filepath.Join(data, prefs.FileName), LegacyTheme: cfg.UI.Theme}))
 	themes.Register(mux, &themes.Store{Dir: filepath.Join(data, "themes")})
-	usage.Register(mux, usage.NewService(cfg, data))
+	if d.Usage == nil {
+		d.Usage = usage.NewService(cfg, data)
+	}
+	usage.Register(mux, d.Usage)
 	themes.RegisterGenerate(mux, &themes.Generator{
 		InContainer: cluster.InContainer,
 		LookPath:    exec.LookPath,
