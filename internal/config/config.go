@@ -34,7 +34,7 @@ const (
 	DefaultTheme       = "dark"
 
 	DefaultCIToken          SecretRef = "env:GITHUB_TOKEN"
-	DefaultCIComposeProject           = "runforge"
+	DefaultCIComposeProject           = ""
 	DefaultCIImageMatch               = "github-runner"
 )
 

@@ -61,7 +61,7 @@ ci:
     token: "env:GITHUB_TOKEN"
   runners:
     # Local runner containers: those in this docker compose project ...
-    compose_project: "runforge"
+    compose_project: ""
     # ... or whose image name contains this text. Empty disables a match.
     image_match: "github-runner"
 `

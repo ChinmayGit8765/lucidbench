@@ -8,7 +8,7 @@
         "REPO_URL=https://github.com/you/your-repo",
         "ACCESS_TOKEN=FIXTURE-ACCESS-TOKEN-7f3a",
         "RUNNER_NAME=home-runner",
-        "LABELS=runforge",
+        "LABELS=ci-runners",
         "PATH=/usr/bin"
       ]
     }

@@ -100,7 +100,7 @@ ci:
     repos: ["you/your-repo"]
     token: "env:GITHUB_TOKEN"     # falls back to `gh auth token` when empty
   runners:
-    compose_project: "runforge"   # containers of this compose project ...
+    compose_project: ""   # containers of this compose project ...
     image_match: "github-runner"  # ... or whose image contains this text
 ```
 

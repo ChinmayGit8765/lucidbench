@@ -10,7 +10,7 @@ import (
 func TestCIDefaults(t *testing.T) {
 	c := Default()
 	if c.CI.GitHub.Token != "env:GITHUB_TOKEN" || len(c.CI.GitHub.Repos) != 0 ||
-		c.CI.Runners.ComposeProject != "runforge" || c.CI.Runners.ImageMatch != "github-runner" {
+		c.CI.Runners.ComposeProject != "" || c.CI.Runners.ImageMatch != "github-runner" {
 		t.Fatalf("ci defaults %+v", c.CI)
 	}
 }

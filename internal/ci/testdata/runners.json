@@ -10,7 +10,7 @@
       "labels": [
         { "id": 1, "name": "self-hosted", "type": "read-only" },
         { "id": 2, "name": "Linux", "type": "read-only" },
-        { "id": 3, "name": "runforge", "type": "custom" }
+        { "id": 3, "name": "ci-runners", "type": "custom" }
       ]
     },
     {

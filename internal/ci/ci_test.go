@@ -28,7 +28,7 @@ func fixture(t *testing.T, name string) []byte {
 	return b
 }
 
-var runforge = Filter{ComposeProject: "runforge", ImageMatch: "github-runner"}
+var ciRunners = Filter{ComposeProject: "ci-runners", ImageMatch: "github-runner"}
 
 // fakeDocker answers ps and inspect from fixtures and records other calls.
 type fakeDocker struct {
@@ -65,7 +65,7 @@ func (f *fakeDocker) actions() [][]string {
 }
 
 func TestParseDockerPSFilters(t *testing.T) {
-	cs, err := parsePS(fixture(t, "docker_ps.jsonl"), runforge)
+	cs, err := parsePS(fixture(t, "docker_ps.jsonl"), ciRunners)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,11 +73,11 @@ func TestParseDockerPSFilters(t *testing.T) {
 	for _, c := range cs {
 		names = append(names, c.Name)
 	}
-	want := []string{"runforge-runner", "runforge-runner-other", "lone-runner"}
+	want := []string{"ci-runners-runner", "ci-runners-runner-other", "lone-runner"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("names %v, want %v", names, want)
 	}
-	if cs[0].Project != "runforge" || cs[0].Service != "runner" || cs[0].State != "running" || cs[0].Status != "Up 2 days" {
+	if cs[0].Project != "ci-runners" || cs[0].Service != "runner" || cs[0].State != "running" || cs[0].Status != "Up 2 days" {
 		t.Errorf("first container %+v", cs[0])
 	}
 	if cs[1].Up() || !cs[0].Up() {
@@ -96,7 +96,7 @@ func TestParseDockerPSFilters(t *testing.T) {
 }
 
 func TestListContainersKeepsOnlyRepoURLAndRunnerName(t *testing.T) {
-	cs, err := ListContainers(context.Background(), (&fakeDocker{t: t}).run, runforge)
+	cs, err := ListContainers(context.Background(), (&fakeDocker{t: t}).run, ciRunners)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,26 +118,26 @@ func TestListContainersKeepsOnlyRepoURLAndRunnerName(t *testing.T) {
 func TestContainerActionAllowlist(t *testing.T) {
 	ctx := context.Background()
 	fd := &fakeDocker{t: t}
-	if err := ContainerAction(ctx, fd.run, runforge, "runforge-runner", "restart"); err != nil {
+	if err := ContainerAction(ctx, fd.run, ciRunners, "ci-runners-runner", "restart"); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ name, action string }{
-		{"app-db-1", "stop"},             // exists, but not a runner
-		{"no-such-container", "stop"},    // unknown
-		{"--help", "stop"},               // flag-shaped
-		{"runforge-runner;rm", "stop"},   // shell-shaped
-		{"runforge-runner", "rm"},        // action not allowed
-		{"runforge-runner", "kill"},      // action not allowed
-		{"../runforge-runner", "start"},  // path-shaped
-		{"RUNFORGE-RUNNER-X", "restart"}, // not an exact match
+		{"app-db-1", "stop"},              // exists, but not a runner
+		{"no-such-container", "stop"},     // unknown
+		{"--help", "stop"},                // flag-shaped
+		{"ci-runners-runner;rm", "stop"},  // shell-shaped
+		{"ci-runners-runner", "rm"},       // action not allowed
+		{"ci-runners-runner", "kill"},     // action not allowed
+		{"../ci-runners-runner", "start"}, // path-shaped
+		{"CI-RUNNER-X", "restart"},        // not an exact match
 	} {
-		err := ContainerAction(ctx, fd.run, runforge, tc.name, tc.action)
+		err := ContainerAction(ctx, fd.run, ciRunners, tc.name, tc.action)
 		if !errors.Is(err, ErrNotRunner) && !errors.Is(err, ErrBadAction) {
 			t.Errorf("%s %s: err = %v, want refusal", tc.action, tc.name, err)
 		}
 	}
 	got := fd.actions()
-	if len(got) != 1 || !slices.Equal(got[0], []string{"restart", "runforge-runner"}) {
+	if len(got) != 1 || !slices.Equal(got[0], []string{"restart", "ci-runners-runner"}) {
 		t.Fatalf("docker actions run: %v", got)
 	}
 }
@@ -178,7 +178,7 @@ func newTestService(t *testing.T, repos ...string) (*Service, *fakeDocker, *int)
 	fd := &fakeDocker{t: t}
 	return &Service{
 		Repos:  repos,
-		Filter: runforge,
+		Filter: ciRunners,
 		GitHub: &GitHub{BaseURL: srv.URL, Tokens: &TokenSource{
 			Ref:    "env:TEST_GH",
 			Getenv: func(k string) string { return map[string]string{"TEST_GH": fixtureToken}[k] },
@@ -194,7 +194,7 @@ func TestParseRunnersAndRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(rs) != 2 || rs[0].Name != "home-runner" || !rs[0].Busy || rs[0].Status != "online" ||
-		!slices.Equal(rs[0].Labels, []string{"self-hosted", "Linux", "runforge"}) || rs[1].Status != "offline" {
+		!slices.Equal(rs[0].Labels, []string{"self-hosted", "Linux", "ci-runners"}) || rs[1].Status != "offline" {
 		t.Fatalf("runners %+v", rs)
 	}
 	runs, err := parseRuns("you/your-repo", fixture(t, "runs.json"))
@@ -268,7 +268,7 @@ func TestServiceSummaryAndCache(t *testing.T) {
 		t.Errorf("cache missed: %d then %d requests", first, *hits)
 	}
 	rr := s.Runners(context.Background())
-	if rr.Runners[0].Container != "runforge-runner" || rr.Runners[1].Container != "" {
+	if rr.Runners[0].Container != "ci-runners-runner" || rr.Runners[1].Container != "" {
 		t.Errorf("container link %+v", rr.Runners)
 	}
 }
@@ -299,7 +299,7 @@ func TestHTTPNeverReturnsTokens(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/api/ci/runs?repo=you/your-repo", nil),
 		confirm(httptest.NewRequest(http.MethodPost, "/api/ci/runs/you%2Fyour-repo/1003/rerun", nil)),
 		confirm(httptest.NewRequest(http.MethodPost, "/api/ci/runs/you%2Fmissing/1/rerun", nil)),
-		confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/runforge-runner/restart", nil)),
+		confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/ci-runners-runner/restart", nil)),
 	} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
@@ -330,7 +330,7 @@ func TestHTTPActions(t *testing.T) {
 		return rec
 	}
 	// The confirm header is required.
-	if rec := do(httptest.NewRequest(http.MethodPost, "/api/ci/containers/runforge-runner/stop", nil)); rec.Code != http.StatusForbidden ||
+	if rec := do(httptest.NewRequest(http.MethodPost, "/api/ci/containers/ci-runners-runner/stop", nil)); rec.Code != http.StatusForbidden ||
 		!strings.Contains(rec.Body.String(), ConfirmHeader) {
 		t.Fatalf("no header: %d %s", rec.Code, rec.Body.String())
 	}
@@ -340,17 +340,17 @@ func TestHTTPActions(t *testing.T) {
 	if rec := do(confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/app-db-1/stop", nil))); rec.Code != http.StatusForbidden {
 		t.Errorf("non-runner: %d", rec.Code)
 	}
-	if rec := do(confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/runforge-runner/remove", nil))); rec.Code != http.StatusBadRequest {
+	if rec := do(confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/ci-runners-runner/remove", nil))); rec.Code != http.StatusBadRequest {
 		t.Errorf("bad action: %d", rec.Code)
 	}
-	if rec := do(confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/runforge-runner/stop", nil))); rec.Code != http.StatusOK {
+	if rec := do(confirm(httptest.NewRequest(http.MethodPost, "/api/ci/containers/ci-runners-runner/stop", nil))); rec.Code != http.StatusOK {
 		t.Errorf("stop: %d %s", rec.Code, rec.Body.String())
 	}
-	if got := fd.actions(); len(got) != 1 || !slices.Equal(got[0], []string{"stop", "runforge-runner"}) {
+	if got := fd.actions(); len(got) != 1 || !slices.Equal(got[0], []string{"stop", "ci-runners-runner"}) {
 		t.Errorf("actions %v", got)
 	}
 	// GET is not an action.
-	if rec := do(httptest.NewRequest(http.MethodGet, "/api/ci/containers/runforge-runner/stop", nil)); rec.Code != http.StatusMethodNotAllowed {
+	if rec := do(httptest.NewRequest(http.MethodGet, "/api/ci/containers/ci-runners-runner/stop", nil)); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET action: %d", rec.Code)
 	}
 
