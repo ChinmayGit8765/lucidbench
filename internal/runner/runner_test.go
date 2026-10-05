@@ -22,43 +22,50 @@ func TestDockerPath(t *testing.T) {
 }
 
 func TestArgsHost(t *testing.T) {
-	got, err := Args("claude", HostProfile, "hi", `C:\Users\me`)
+	st := &Staged{ConfigDir: `C:\data\runs\x\cfg\.claude`, WorkDir: `C:\data\runs\x\work`}
+	got, err := Args("claude", HostProfile, "hi", st)
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := got[4]
-	if src != "/c/Users/me/.claude:/root/.claude" {
-		t.Errorf("unexpected mount %q", src)
+	if got[4] != "/c/data/runs/x/cfg/.claude:/root/.claude" || got[6] != "/c/data/runs/x/work:/work" {
+		t.Errorf("unexpected mounts %q %q", got[4], got[6])
 	}
-	if got[0] != "run" || got[1] != "--rm" || got[2] != "-i" || got[3] != "-v" || got[5] != Image {
+	if got[0] != "run" || got[1] != "--rm" || got[2] != "-i" || got[3] != "-v" || got[5] != "-v" || got[7] != Image {
 		t.Errorf("unexpected args %v", got)
 	}
-	if !reflect.DeepEqual(got[6:], []string{"claude", "-p", "hi"}) {
-		t.Errorf("unexpected command %v", got[6:])
+	want, _ := Command("claude", "hi")
+	if !reflect.DeepEqual(got[8:], want) {
+		t.Errorf("unexpected command %v", got[8:])
+	}
+	if _, err := Args("claude", HostProfile, "hi", nil); err == nil {
+		t.Error("host profile without staging must fail")
 	}
 }
 
 func TestArgsVolume(t *testing.T) {
-	got, err := Args("codex", "work", "hi", "/home/me")
+	got, err := Args("codex", "work", "hi", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got[4] != "lucidbench-codex-work:/root/.codex" {
 		t.Errorf("unexpected mount %q", got[4])
 	}
-	if _, err := Args("codex", "../x", "hi", "/h"); err == nil {
+	if !strings.Contains(strings.Join(got, " "), "--ignore-user-config") {
+		t.Errorf("volume profiles must get the clean flags: %v", got)
+	}
+	if _, err := Args("codex", "../x", "hi", nil); err == nil {
 		t.Error("expected invalid profile error")
 	}
-	if _, err := Args("nope", "work", "hi", "/h"); err == nil {
+	if _, err := Args("nope", "work", "hi", nil); err == nil {
 		t.Error("expected unknown provider error")
 	}
 }
 
 func TestCommand(t *testing.T) {
 	want := map[string][]string{
-		"claude": {"claude", "-p", "p"},
-		"codex":  {"codex", "exec", "--skip-git-repo-check", "p"},
-		"grok":   {"grok", "-p", "p"},
+		"claude": {"claude", "--safe-mode", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "-p", "p"},
+		"codex":  {"codex", "exec", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--ignore-rules", "p"},
+		"grok":   {"grok", "--no-subagents", "-p", "p"},
 	}
 	for prov, w := range want {
 		got, err := Command(prov, "p")
