@@ -23,6 +23,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
+	"github.com/ChinmayGit8765/lucidbench/internal/usage"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
 )
@@ -75,6 +76,7 @@ func New(cfgs ...*config.Config) http.Handler {
 	}
 	mux.Handle("/api/prefs", prefs.Handler(&prefs.Store{Path: filepath.Join(data, prefs.FileName), LegacyTheme: cfg.UI.Theme}))
 	themes.Register(mux, &themes.Store{Dir: filepath.Join(data, "themes")})
+	usage.Register(mux, usage.NewService(cfg, data))
 	themes.RegisterGenerate(mux, &themes.Generator{
 		InContainer: cluster.InContainer,
 		LookPath:    exec.LookPath,
