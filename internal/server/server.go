@@ -3,7 +3,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -71,9 +73,25 @@ func New(cfgs ...*config.Config) http.Handler {
 	}
 	mux.Handle("/api/prefs", prefs.Handler(&prefs.Store{Path: filepath.Join(data, prefs.FileName), LegacyTheme: cfg.UI.Theme}))
 	themes.Register(mux, &themes.Store{Dir: filepath.Join(data, "themes")})
+	themes.RegisterGenerate(mux, &themes.Generator{
+		InContainer: cluster.InContainer,
+		LookPath:    exec.LookPath,
+		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
+	})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", webui.Handler())
 	return mux
+}
+
+// hostProfileDir returns the config directory of a signed-in host account
+// profile, so a theme can be generated with that account.
+func hostProfileDir(cfg *config.Config, provider, profile string) (string, error) {
+	for _, p := range accounts.Detect(accounts.FromConfig(cfg)) {
+		if p.Provider == provider && p.Name == profile && p.Location == accounts.LocHost && p.ConfigDir != "" {
+			return p.ConfigDir, nil
+		}
+	}
+	return "", fmt.Errorf("no host %s profile named %q", provider, profile)
 }

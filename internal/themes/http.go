@@ -105,3 +105,43 @@ func Register(mux *http.ServeMux, s *Store) {
 		}
 	})
 }
+
+// RegisterGenerate adds POST /api/themes/generate, which needs
+// X-Lucid-Confirm. One generation runs at a time; a second answers 409.
+func RegisterGenerate(mux *http.ServeMux, g *Generator) {
+	busy := make(chan struct{}, 1)
+	mux.HandleFunc("POST /api/themes/generate", func(w http.ResponseWriter, r *http.Request) {
+		if !apiutil.Confirmed(w, r) {
+			return
+		}
+		var req GenerateRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			http.Error(w, "invalid request JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		select {
+		case busy <- struct{}{}:
+			defer func() { <-busy }()
+		default:
+			http.Error(w, "a theme is already being generated", http.StatusConflict)
+			return
+		}
+		p, err := g.Generate(r.Context(), req)
+		switch {
+		case err == nil:
+			apiutil.WriteJSON(w, http.StatusOK, p)
+		case errors.Is(err, ErrBadRequest):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case errors.Is(err, ErrInContainer):
+			http.Error(w, err.Error(), http.StatusNotImplemented)
+		case errors.Is(err, ErrCLIMissing), errors.Is(err, ErrNotSignedIn):
+			http.Error(w, err.Error(), http.StatusFailedDependency)
+		case errors.Is(err, ErrTimeout):
+			http.Error(w, err.Error(), http.StatusGatewayTimeout)
+		default:
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		}
+	})
+}
