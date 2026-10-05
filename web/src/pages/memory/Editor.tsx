@@ -37,7 +37,7 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
 import { commonmark } from "@milkdown/kit/preset/commonmark"
 import { gfm, insertTableCommand } from "@milkdown/kit/preset/gfm"
 import { setBlockType, wrapIn } from "@milkdown/kit/prose/commands"
-import { wrapInList } from "@milkdown/kit/prose/schema-list"
+import { liftListItem, wrapInList } from "@milkdown/kit/prose/schema-list"
 import { Plugin, PluginKey, TextSelection, type EditorState } from "@milkdown/kit/prose/state"
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view"
 import { $prose, callCommand } from "@milkdown/kit/utils"
@@ -95,6 +95,21 @@ function setChecked(view: EditorView) {
   }
 }
 
+/**
+ * Wraps the current block. A list item cannot hold a quote or callout as
+ * its first child, so inside a list the item is lifted out first, as
+ * Notion turns a list item into the new block.
+ */
+function wrapBlock(view: EditorView, type: "blockquote" | "callout", attrs?: Record<string, unknown>) {
+  const node = view.state.schema.nodes[type]
+  if (wrapIn(node, attrs)(view.state, view.dispatch)) return
+  const item = view.state.schema.nodes.list_item
+  for (let i = 0; i < 8 && liftListItem(item)(view.state, view.dispatch); i++) {
+    /* lift until the paragraph is out of every list */
+  }
+  wrapIn(node, attrs)(view.state, view.dispatch)
+}
+
 const SLASH: SlashItem[] = [
   { id: "text", label: "Text", hint: "Plain paragraph", icon: Text, keywords: "paragraph plain p", group: "Basic blocks", run: (v) => setBlockType(v.state.schema.nodes.paragraph)(v.state, v.dispatch) },
   { id: "h1", label: "Heading 1", hint: "# Big section heading", icon: Heading1, keywords: "title h1 #", group: "Basic blocks", run: (v) => setBlockType(v.state.schema.nodes.heading, { level: 1 })(v.state, v.dispatch) },
@@ -103,11 +118,11 @@ const SLASH: SlashItem[] = [
   { id: "todo", label: "To-do list", hint: "- [ ] Track tasks", icon: CheckSquare, keywords: "task checkbox check todo", group: "Basic blocks", run: (v) => { wrapInList(v.state.schema.nodes.bullet_list)(v.state, v.dispatch); setChecked(v) } },
   { id: "bullet", label: "Bulleted list", hint: "- A simple list", icon: List, keywords: "ul unordered bullet", group: "Basic blocks", run: (v) => wrapInList(v.state.schema.nodes.bullet_list)(v.state, v.dispatch) },
   { id: "number", label: "Numbered list", hint: "1. An ordered list", icon: ListOrdered, keywords: "ol ordered number", group: "Basic blocks", run: (v) => wrapInList(v.state.schema.nodes.ordered_list)(v.state, v.dispatch) },
-  { id: "quote", label: "Quote", hint: "> Capture a quote", icon: Quote, keywords: "blockquote citation", group: "Basic blocks", run: (v) => wrapIn(v.state.schema.nodes.blockquote)(v.state, v.dispatch) },
+  { id: "quote", label: "Quote", hint: "> Capture a quote", icon: Quote, keywords: "blockquote citation", group: "Basic blocks", run: (v) => wrapBlock(v, "blockquote") },
   { id: "code", label: "Code", hint: "``` A code block", icon: Code2, keywords: "snippet pre fence", group: "Basic blocks", run: (v) => setBlockType(v.state.schema.nodes.code_block)(v.state, v.dispatch) },
-  { id: "callout-note", label: "Note callout", hint: "> [!note]", icon: Info, keywords: "callout admonition note info", group: "Callouts", run: (v) => wrapIn(v.state.schema.nodes.callout, { kind: "note" })(v.state, v.dispatch) },
-  { id: "callout-tip", label: "Tip callout", hint: "> [!tip]", icon: Lightbulb, keywords: "callout admonition tip hint", group: "Callouts", run: (v) => wrapIn(v.state.schema.nodes.callout, { kind: "tip" })(v.state, v.dispatch) },
-  { id: "callout-warning", label: "Warning callout", hint: "> [!warning]", icon: TriangleAlert, keywords: "callout admonition warning caution danger", group: "Callouts", run: (v) => wrapIn(v.state.schema.nodes.callout, { kind: "warning" })(v.state, v.dispatch) },
+  { id: "callout-note", label: "Note callout", hint: "> [!note]", icon: Info, keywords: "callout admonition note info", group: "Callouts", run: (v) => wrapBlock(v, "callout", { kind: "note" }) },
+  { id: "callout-tip", label: "Tip callout", hint: "> [!tip]", icon: Lightbulb, keywords: "callout admonition tip hint", group: "Callouts", run: (v) => wrapBlock(v, "callout", { kind: "tip" }) },
+  { id: "callout-warning", label: "Warning callout", hint: "> [!warning]", icon: TriangleAlert, keywords: "callout admonition warning caution danger", group: "Callouts", run: (v) => wrapBlock(v, "callout", { kind: "warning" }) },
   { id: "link", label: "Link to page", hint: "[[ Link another page", icon: FileSymlink, keywords: "wikilink mention page reference", group: "Insert", run: (v) => v.dispatch(v.state.tr.insertText("[[")) },
   { id: "table", label: "Table", hint: "A simple grid", icon: Table, keywords: "grid columns rows", group: "Insert", run: (_, ctx) => callCommand(insertTableCommand.key, { row: 3, col: 3 })(ctx) },
   {
