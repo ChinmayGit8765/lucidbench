@@ -161,11 +161,12 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/memory/tree?dir=` | GET | folder listing |
 | `/api/memory/page?path=` | GET / PUT / DELETE | read / write / trash a page |
 | `/api/memory/move` | POST | `{from,to}` |
-| `/api/memory/search?q=` | GET | full-text hits |
+| `/api/memory/search?q=&limit=` | GET | full-text hits |
+| `/api/memory/backlinks?path=` | GET | pages that link to a page |
 | `/api/boards` | GET | board summaries |
 | `/api/boards/{id}` | GET | board with cards |
 | `/api/boards/{id}/cards` | POST | add card |
-| `/api/boards/{id}/cards/{card}` | PUT | update / move (`{column,index}`) |
+| `/api/boards/{id}/cards/{card}` | PUT | update the fields in the body, or move (`{column,index}`) |
 | `/api/council/sessions` | GET / POST | list / start `{input, project?, proposer?, critics?, rounds?}` |
 | `/api/council/sessions/{id}` | GET | session (poll) |
 | `/api/council/sessions/{id}/events` | GET (SSE) | live updates |

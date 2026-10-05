@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
@@ -18,6 +19,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
+	"github.com/ChinmayGit8765/lucidbench/internal/memory"
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
@@ -78,6 +80,11 @@ func New(cfgs ...*config.Config) http.Handler {
 		LookPath:    exec.LookPath,
 		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
 	})
+	// The vault is opened on the first Memory or Boards request, so a daemon
+	// that never uses them creates no folder.
+	vault := memory.LazyOpener(cfg)
+	memory.Register(mux, vault)
+	boards.Register(mux, vault)
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
