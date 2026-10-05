@@ -88,6 +88,22 @@ func TestHTTP(t *testing.T) {
 		t.Errorf("backlinks = %d %s", rec.Code, rec.Body)
 	}
 
+	// Info counts pages, not folder notes or boards.
+	for _, p := range []*Page{
+		{Path: "Inbox/_folder.md", Front: map[string]any{"icon": "x"}},
+		{Path: "Boards/work.md", Body: "## Inbox\n"},
+	} {
+		if err := v.Write(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec = call(mux, "GET", "/api/memory/info", "", false)
+	var info Info
+	_ = json.Unmarshal(rec.Body.Bytes(), &info)
+	if rec.Code != http.StatusOK || info.Pages != 2 || info.Root != v.Root() {
+		t.Errorf("info = %d %s", rec.Code, rec.Body)
+	}
+
 	// Move, then delete to the trash.
 	if rec := call(mux, "POST", "/api/memory/move", `{"from":"Inbox/idea.md","to":"Ready/idea.md"}`, true); rec.Code != http.StatusOK {
 		t.Errorf("move = %d %s", rec.Code, rec.Body)

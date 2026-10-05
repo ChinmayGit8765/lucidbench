@@ -12,7 +12,7 @@ func TestSPAFallback(t *testing.T) {
 		"index.html":  {Data: []byte("<html>app</html>")},
 		"assets/a.js": {Data: []byte("js")},
 	})
-	for path, want := range map[string]int{"/": 200, "/accounts": 200, "/assets/a.js": 200, "/assets/missing.js": 404} {
+	for path, want := range map[string]int{"/": 200, "/accounts": 200, "/assets/a.js": 200, "/assets/missing.js": 404, "/memory/Inbox/v1.2%20notes.md": 200, "/memory/missing.js": 200} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		if rec.Code != want {

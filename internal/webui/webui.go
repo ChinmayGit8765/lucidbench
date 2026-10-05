@@ -33,7 +33,8 @@ func handlerFor(fsys fs.FS) http.Handler {
 				files.ServeHTTP(w, r)
 				return
 			}
-			if path.Ext(p) != "" {
+			// A missing file 404s, but Memory routes end in page file names.
+			if path.Ext(p) != "" && !strings.HasPrefix(p, "memory/") {
 				http.NotFound(w, r)
 				return
 			}

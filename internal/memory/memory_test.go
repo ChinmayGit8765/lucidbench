@@ -257,6 +257,21 @@ func TestListMoveDeleteTrash(t *testing.T) {
 		t.Errorf("list = %v", names)
 	}
 
+	// Title and icon come from front matter; a folder's from its _folder.md.
+	put(t, v, "c.md", "---\ntitle: Sea\nicon: \"🌊\"\n---\nbody")
+	put(t, v, "A/_folder.md", "---\nicon: 📁\n---\n")
+	ents, _ = v.List("")
+	meta := map[string][2]string{}
+	for _, e := range ents {
+		meta[e.Name] = [2]string{e.Title, e.Icon}
+	}
+	if meta["c.md"] != [2]string{"Sea", "🌊"} || meta["A"] != [2]string{"", "📁"} || meta["b.md"] != [2]string{} {
+		t.Errorf("title and icon = %v", meta)
+	}
+	if err := v.Delete("c.md"); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := v.Move("a.md", "A/moved.md"); err != nil {
 		t.Fatal(err)
 	}
@@ -440,5 +455,22 @@ func TestOpenConfigured(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(chosen, "Inbox")); err == nil {
 		t.Error("a chosen vault should not get Inbox/ added")
+	}
+}
+
+func TestJoinFrontKeepsEmojiReadable(t *testing.T) {
+	out, err := JoinFront(map[string]any{"icon": "🚀", "note": `a \U0001F680 b`, "plain": "é"}, "body\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{"icon: 🚀", `note: a \U0001F680 b`, "plain: é"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("front matter %q lacks %q", s, want)
+		}
+	}
+	front, body := SplitFront(s)
+	if front["icon"] != "🚀" || front["note"] != `a \U0001F680 b` || body != "body\n" {
+		t.Errorf("round trip = %v %q", front, body)
 	}
 }

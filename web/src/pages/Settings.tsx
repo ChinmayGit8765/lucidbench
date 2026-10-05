@@ -30,7 +30,7 @@ export default function Settings({ subpath }: ModulePageProps) {
       {tab === "appearance" && <Appearance focus={subpath[1]} />}
       {tab === "sidebar" && <SidebarLayout />}
       {tab === "extensions" && <Extensions focus={subpath[1]} />}
-      {tab === "general" && <General />}
+      {tab === "general" && <General focus={subpath[1]} />}
     </div>
   )
 }

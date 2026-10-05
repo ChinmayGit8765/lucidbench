@@ -1,10 +1,11 @@
-import type { ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { BookOpen, ExternalLink } from "lucide-react"
 
-import { copyText } from "@/components/CopyCommand"
+import { CopyCommand, copyText } from "@/components/CopyCommand"
 import { StatusPill } from "@/components/ui/badge"
 import { ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { Section } from "@/pages/settings/controls"
 
 interface About {
@@ -34,7 +35,66 @@ function Item({ label, children, copy }: { label: string; children: ReactNode; c
   )
 }
 
-export function General() {
+interface ConfigView {
+  vault: { path: string }
+  sources: Record<string, string>
+}
+
+/**
+ * Where Memory keeps its pages. The daemon reads config at start and has no
+ * write route, so changing the vault is a config edit plus a restart; this
+ * shows the effective path and exactly what to change.
+ */
+function VaultSection({ dataDir, focus }: { dataDir?: string; focus: boolean }) {
+  const cfg = usePoll<ConfigView>("/api/config", 60000)
+  const ref = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (focus) ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [focus])
+  const c = cfg.data
+  const configured = !!c?.vault.path
+  const source = c?.sources["vault.path"] ?? "default"
+  const effective = configured ? c!.vault.path : dataDir ? `${dataDir.replace(/[\\/]+$/, "")}${dataDir.includes("\\") ? "\\" : "/"}memory` : ""
+  return (
+    <section ref={ref} id="vault" className={cn("scroll-mt-6 rounded-xl", focus && "ring-2 ring-brand/40")}>
+      <Section title="Memory vault" description="The folder of Markdown pages behind Memory and Boards. Any Obsidian vault works; Lucidbench never picks one by itself.">
+        <dl>
+          <Item label="Location" copy={effective || undefined}>
+            {cfg.error && !c ? (
+              <span className="text-xs text-danger-fg">{cfg.error.message}</span>
+            ) : !c ? (
+              <Skeleton className="h-5 w-64" />
+            ) : (
+              <>
+                <span className="truncate font-mono text-xs" title={effective}>
+                  {effective}
+                </span>
+                <StatusPill tone={configured ? "info" : "neutral"}>{configured ? `vault.path · ${source}` : "built-in default"}</StatusPill>
+              </>
+            )}
+          </Item>
+        </dl>
+        <div className="space-y-3 border-t px-5 py-4">
+          <div className="text-sm font-medium">Use a different vault</div>
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+            <li>
+              Find your config file:
+              <CopyCommand command="lucid config path" className="mt-1.5" />
+            </li>
+            <li>
+              Set the vault folder in it (a leading <code className="font-mono text-xs">~</code> is your home folder):
+              <pre className="mt-1.5 overflow-x-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs text-foreground">{"vault:\n  path: ~/Notes"}</pre>
+              or set the <code className="font-mono text-xs">LUCID_VAULT_PATH</code> environment variable.
+            </li>
+            <li>Restart Lucidbench. Memory and Boards then open that folder; nothing is copied or moved.</li>
+          </ol>
+        </div>
+      </Section>
+    </section>
+  )
+}
+
+export function General({ focus }: { focus?: string }) {
   const about = usePoll<About>("/api/about", 60000)
   const a = about.data
   return (
@@ -78,6 +138,8 @@ export function General() {
           </dl>
         )}
       </Section>
+
+      <VaultSection dataDir={a?.data_dir} focus={focus === "vault"} />
 
       <Section title="Documentation" description="How to configure Lucidbench and how to add a module of your own.">
         <ul className="border-t py-1">

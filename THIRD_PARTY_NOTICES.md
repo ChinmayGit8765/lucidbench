@@ -26,6 +26,11 @@ Lucidbench is an independent project and is not affiliated with, sponsored by or
 | `react`, `react-dom` | MIT |
 | `@radix-ui/react-slot`, `clsx`, `tailwind-merge`, `tw-animate-css`, Tailwind CSS | MIT |
 | `class-variance-authority` | Apache-2.0 |
+| `@milkdown/kit` (the Memory editor: Milkdown core, presets and plugins), loaded only when a Memory page opens | MIT |
+| ProseMirror (`prosemirror-*`, `orderedmap`, `rope-sequence`, `w3c-keyname`, `crelt`), bundled with the Memory editor | MIT |
+| remark and unified (`remark-*`, `unified`, `micromark*`, `mdast-util-*`, `unist-util-*`, `vfile*`), bundled with the Memory editor | MIT |
+| `@floating-ui/dom`, `nanoid`, `lodash-es`, bundled with the Memory editor | MIT |
+| `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` (Boards drag and drop) | MIT |
 
 Build-time only (not shipped): Vite (MIT), TypeScript (Apache-2.0), lightningcss (MPL-2.0).
 
