@@ -457,3 +457,20 @@ func TestOpenConfigured(t *testing.T) {
 		t.Error("a chosen vault should not get Inbox/ added")
 	}
 }
+
+func TestJoinFrontKeepsEmojiReadable(t *testing.T) {
+	out, err := JoinFront(map[string]any{"icon": "🚀", "note": `a \U0001F680 b`, "plain": "é"}, "body\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{"icon: 🚀", `note: a \U0001F680 b`, "plain: é"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("front matter %q lacks %q", s, want)
+		}
+	}
+	front, body := SplitFront(s)
+	if front["icon"] != "🚀" || front["note"] != `a \U0001F680 b` || body != "body\n" {
+		t.Errorf("round trip = %v %q", front, body)
+	}
+}

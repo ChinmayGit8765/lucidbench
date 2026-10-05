@@ -17,8 +17,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.yaml.in/yaml/v3"
 
@@ -729,12 +731,63 @@ func fromNode(n *yaml.Node) any {
 	return nil
 }
 
+// Emoji and other characters beyond U+FFFF go through the YAML encoder as
+// private-use placeholders and come out as themselves. The encoder would
+// escape them ("\U0001F680"): valid, but unreadable in a note's source.
+const astralOpen, astralClose = '', ''
+
+var astralRE = regexp.MustCompile("([0-9a-f]{5,6})")
+
+func hideAstral(v any) any {
+	switch x := v.(type) {
+	case string:
+		var b strings.Builder
+		for _, r := range x {
+			if r >= 0x10000 && unicode.IsGraphic(r) {
+				fmt.Fprintf(&b, "%c%x%c", astralOpen, r, astralClose)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	case map[string]any:
+		m := make(map[string]any, len(x))
+		for k, e := range x {
+			m[hideAstral(k).(string)] = hideAstral(e)
+		}
+		return m
+	case []any:
+		s := make([]any, len(x))
+		for i, e := range x {
+			s[i] = hideAstral(e)
+		}
+		return s
+	}
+	return v
+}
+
+// marshalFront encodes front matter, keeping emoji readable when it can.
+func marshalFront(front map[string]any) ([]byte, error) {
+	y, err := yaml.Marshal(front)
+	if err != nil || !bytes.Contains(y, []byte(`\U`)) || bytes.ContainsRune(y, astralOpen) {
+		return y, err
+	}
+	h, err := yaml.Marshal(hideAstral(front))
+	if err != nil {
+		return y, nil
+	}
+	return astralRE.ReplaceAllFunc(h, func(m []byte) []byte {
+		n, _ := strconv.ParseUint(string(astralRE.FindSubmatch(m)[1]), 16, 32)
+		return []byte(string(rune(n)))
+	}), nil
+}
+
 // JoinFront builds a file from front matter and a body. With no front matter
 // the file is just the body. Keys come out sorted.
 func JoinFront(front map[string]any, body string) ([]byte, error) {
 	var buf bytes.Buffer
 	if len(front) > 0 {
-		y, err := yaml.Marshal(front)
+		y, err := marshalFront(front)
 		if err != nil {
 			return nil, fmt.Errorf("front matter: %w", err)
 		}
