@@ -53,7 +53,7 @@ function CouncilTile() {
               <span
                 key={s.id}
                 title={`${s.title || "Untitled"} · ${STATUS[s.status].label}`}
-                className={cn("h-1.5 flex-1 rounded-full", DOT[s.status], s.status === "approved" && "opacity-60")}
+                className={cn("h-1.5 w-5 rounded-full", DOT[s.status], s.status === "approved" && "opacity-60")}
               />
             ))}
           </div>

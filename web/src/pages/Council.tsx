@@ -70,6 +70,9 @@ export default function Council({ subpath }: ModulePageProps) {
 
 const label = (p: string) => providerInfo(p)?.label ?? p
 
+/** Provider ids in a log line read as their names. */
+const named = (text: string) => text.replace(/\b(claude|codex|grok)\b/g, (p) => label(p))
+
 function joinNames(ps: string[]): string {
   const ls = ps.map(label)
   if (ls.length <= 1) return ls.join("")
@@ -505,12 +508,16 @@ function SessionPage({ id }: { id: string }) {
     )
   const s = session
   const done = s.status === "draft" || s.status === "approved"
+  // Until the brief is written, the newest draft names the session.
+  const latest = [...s.rounds].reverse().flatMap((r) => [r.synthesis, r.proposal]).find((st) => st?.text)
+  const title = s.title || (latest?.text ? parseBrief(latest.text).title : "")
   const refetch = () => getJSON<CouncilSession>(`${SESSIONS_PATH}/${s.id}`).then(update)
   return (
     <div className="space-y-5">
       {back}
       <PageHeader
-        title={s.title || (s.status === "failed" ? "The council could not finish" : "Drafting a brief…")}
+        eyebrow={s.status === "running" && title ? "Working title" : undefined}
+        title={title || (s.status === "failed" ? "The council could not finish" : "Drafting a brief…")}
         description={<span className="line-clamp-2">{s.input}</span>}
         actions={
           <StatusPill tone={STATUS[s.status].tone} pulse={s.status === "running"}>
@@ -524,7 +531,7 @@ function SessionPage({ id }: { id: string }) {
           <StageStrip s={s} />
           {s.status === "failed" && s.error && <ErrorState title="The council stopped" message={s.error} />}
           {s.notes.length > 0 && (
-            <Callout tone="info" icon={CircleDashed} title={s.mode === "self-critique" ? "Self-critique: one provider checked its own draft" : "Not everyone could take part"}>
+            <Callout tone="info" icon={CircleDashed} title={s.mode === "self-critique" ? "Self-critique: one provider checked its own draft" : "Not every critic took part"}>
               <ul className="space-y-0.5">
                 {s.notes.map((n) => (
                   <li key={n}>{n}</li>
@@ -1172,10 +1179,16 @@ function Aside({ s }: { s: CouncilSession }) {
                 <span className="flex-1">
                   {label(p)} <span className="text-subtle-foreground">× {r.calls}</span>
                 </span>
-                <span className="font-mono text-2xs tabular-nums text-subtle-foreground">
-                  {tokens(r.input)}/{tokens(r.output)}
-                </span>
-                <span className="w-12 text-right font-mono text-2xs tabular-nums">{r.cost ? usd(r.cost) : "n/a"}</span>
+                {r.input + r.output === 0 ? (
+                  <span className="text-2xs text-subtle-foreground">no usage reported</span>
+                ) : (
+                  <>
+                    <span className="font-mono text-2xs tabular-nums text-subtle-foreground">
+                      {tokens(r.input)}/{tokens(r.output)}
+                    </span>
+                    <span className="w-12 text-right font-mono text-2xs tabular-nums">{r.cost ? usd(r.cost) : "n/a"}</span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -1189,7 +1202,7 @@ function Aside({ s }: { s: CouncilSession }) {
           {log.map((e, i) => (
             <li key={`${e.time}-${i}`} className="flex gap-2 text-xs">
               <span className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", e.kind === "error" ? "bg-danger" : e.kind === "skipped" ? "bg-warning" : e.kind === "done" ? "bg-success" : e.kind === "critique" ? "bg-brand" : "bg-border-strong")} />
-              <span className="min-w-0 flex-1 text-muted-foreground">{e.text}</span>
+              <span className="min-w-0 flex-1 text-muted-foreground">{named(e.text)}</span>
               <time className="shrink-0 tabular-nums text-subtle-foreground" title={absoluteTime(e.time)}>
                 {relativeTime(e.time, now)}
               </time>
