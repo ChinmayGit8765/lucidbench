@@ -1,6 +1,9 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(windows)]
+mod win;
+
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::process::{Child, Command, Stdio};
@@ -95,8 +98,13 @@ fn spawn_sidecar(port: u16) -> Result<Child, String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     hide_console(&mut cmd);
-    cmd.spawn()
-        .map_err(|e| format!("could not start the daemon: {e}"))
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("could not start the daemon: {e}"))?;
+    // Tie the daemon to this app: it dies with us, even on a forced kill.
+    #[cfg(windows)]
+    win::bind_to_job(&child);
+    Ok(child)
 }
 
 /// Attach to a running daemon, or spawn the bundled one, then show the UI.
