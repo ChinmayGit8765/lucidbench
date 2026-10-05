@@ -49,6 +49,7 @@ type Request struct {
     Dir               string          // working directory; "" = new empty temp dir
     Tools             ToolMode        // ToolsNone (council, themes) | ToolsEdit (work)
     Model             string          // optional provider model alias
+    Harness           string          // "mine" | "clean" (default); ToolsNone is always clean
     Timeout           time.Duration
     OnEvent           func(Event)     // optional streaming callback (Work)
 }
@@ -65,7 +66,13 @@ var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
     grok headless JSON) and allows file edits inside `Dir` only.
 - **Harness:** Work sessions choose `harness: "mine" | "clean"`.
   - "mine" lets the CLI load the user's normal settings and hooks.
-  - "clean" adds the no-settings flags.
+  - "clean" (the default) adds the no-settings, no-hooks flags: `claude --safe-mode
+    --strict-mcp-config`, `codex --ignore-user-config --ignore-rules`. Grok has no such flag, so
+    for grok the two behave the same.
+- **Event normalisation:** `Result.Events` and `OnEvent` carry the same events. Claude and Codex
+  are read from their JSON lines, Grok from `--output-format streaming-json` (its text arrives in
+  deltas, which are joined into one `text` event). `Run` returns the partial `Result` along with
+  an error. `Body` is cut at 8 KB; `Raw` keeps the CLI's line when it is under 64 KB.
 
 ### `internal/memory`: the vault as files
 ```go
