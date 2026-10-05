@@ -203,6 +203,8 @@ func TestCodexTotalsAndRateLimits(t *testing.T) {
 	)
 	// Another session with no windows and a restarted total.
 	write(t, filepath.Join(e.home, ".codex", "sessions", "2026", "03", "02", "rollout-b.jsonl"),
+		// A session started in the home directory is "~", not the user's name.
+		fmt.Sprintf(`{"timestamp":"2026-03-02T01:00:00Z","type":"session_meta","payload":{"cwd":%q}}`, strings.ToUpper(e.home)),
 		codexTok("2026-03-02T02:00:00Z", 8, 0, 2, 10, `null`),
 		codexTok("2026-03-02T03:00:00Z", 3, 0, 1, 4, `null`),
 	)
@@ -229,7 +231,11 @@ func TestCodexTotalsAndRateLimits(t *testing.T) {
 	if !w.Stale {
 		t.Errorf("a window whose reset is in the past must be marked stale")
 	}
-	if len(c.Projects) == 0 || c.Projects[0].Name != "widget" {
+	proj := map[string]bool{}
+	for _, b := range c.Projects {
+		proj[b.Name] = true
+	}
+	if len(proj) != 2 || !proj["widget"] || !proj["~"] {
 		t.Errorf("projects %+v", c.Projects)
 	}
 	if c.Totals.CostUSD != 0 {

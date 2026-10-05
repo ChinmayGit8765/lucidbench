@@ -185,7 +185,7 @@ func (s *Service) Summary(days int) *Summary {
 			home = filepath.Join(roots.Home, ".codex")
 		}
 		dirs := append([]string{home}, roots.ExtraDirs["codex"]...)
-		entries, changed := scanCodex(dirs, s.cache, now)
+		entries, changed := scanCodex(dirs, roots.Home, s.cache, now)
 		dirty = dirty || changed
 		var ss []sample
 		var latest *codexEntry

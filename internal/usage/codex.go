@@ -83,9 +83,12 @@ var (
 )
 
 // folderOf is the last element of a working directory, whichever separator
-// the logging machine used.
-func folderOf(cwd string) string {
+// the logging machine used, or "~" for the home directory itself.
+func folderOf(cwd, home string) string {
 	cwd = strings.TrimRight(strings.ReplaceAll(cwd, `\`, "/"), "/")
+	if home != "" && strings.EqualFold(cwd, strings.TrimRight(strings.ReplaceAll(home, `\`, "/"), "/")) {
+		return "~"
+	}
 	b := path.Base(cwd)
 	if b == "." || b == "/" || b == "" {
 		return ""
@@ -93,7 +96,7 @@ func folderOf(cwd string) string {
 	return b
 }
 
-func (e *codexEntry) apply(line []byte, cutoff int64) {
+func (e *codexEntry) apply(line []byte, cutoff int64, home string) {
 	isCount := bytes.Contains(line, keyTokenCount)
 	if !isCount && !bytes.Contains(line, keyMeta) && !bytes.Contains(line, keyTurn) {
 		return
@@ -104,7 +107,7 @@ func (e *codexEntry) apply(line []byte, cutoff int64) {
 	}
 	switch {
 	case l.Type == "session_meta":
-		if f := folderOf(l.Payload.Cwd); f != "" {
+		if f := folderOf(l.Payload.Cwd, home); f != "" {
 			e.Project = f
 		}
 	case l.Type == "turn_context":
@@ -141,7 +144,7 @@ func (e *codexEntry) apply(line []byte, cutoff int64) {
 	}
 }
 
-func refreshCodex(p string, old *codexEntry, cutoff int64) (*codexEntry, bool) {
+func refreshCodex(p string, old *codexEntry, cutoff int64, home string) (*codexEntry, bool) {
 	f, err := os.Open(p)
 	if err != nil {
 		return nil, false
@@ -164,7 +167,7 @@ func refreshCodex(p string, old *codexEntry, cutoff int64) (*codexEntry, bool) {
 			e = &cp
 		}
 	}
-	off, err := readLines(f, from, func(line []byte) { e.apply(line, cutoff) })
+	off, err := readLines(f, from, func(line []byte) { e.apply(line, cutoff, home) })
 	if err != nil {
 		return nil, false
 	}
@@ -174,7 +177,7 @@ func refreshCodex(p string, old *codexEntry, cutoff int64) (*codexEntry, bool) {
 
 // scanCodex brings the cache up to date for the rollout logs under dir and
 // returns the entries.
-func scanCodex(dirs []string, c *cache, now time.Time) (entries []*codexEntry, changed bool) {
+func scanCodex(dirs []string, home string, c *cache, now time.Time) (entries []*codexEntry, changed bool) {
 	var files []string
 	seen := map[string]bool{}
 	for _, d := range dirs {
@@ -191,7 +194,7 @@ func scanCodex(dirs []string, c *cache, now time.Time) (entries []*codexEntry, c
 		mu.Lock()
 		old := c.Codex[p]
 		mu.Unlock()
-		e, upd := refreshCodex(p, old, cutoff)
+		e, upd := refreshCodex(p, old, cutoff, home)
 		if e == nil {
 			return
 		}
