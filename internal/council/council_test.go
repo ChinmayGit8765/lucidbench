@@ -72,6 +72,9 @@ func masterCopy(t *testing.T) string {
 // authReply makes the fake answer like a CLI that is not signed in.
 const authReply = "!auth"
 
+// failReply makes the fake fail the way a broken call does.
+const failReply = "!fail"
+
 func fakeCLI(dir string) int {
 	provider := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")
 	in, _ := io.ReadAll(os.Stdin)
@@ -103,6 +106,10 @@ func fakeCLI(dir string) int {
 		fmt.Println(string(b))
 	}
 	type m = map[string]any
+	if text == failReply {
+		fmt.Fprintln(os.Stderr, "upstream error 500")
+		return 2
+	}
 	if text == authReply {
 		if provider == "claude" {
 			out(m{"type": "result", "is_error": true, "result": "Not logged in · Please run /login"})
@@ -380,6 +387,19 @@ func TestCriticMissingOrSignedOut(t *testing.T) {
 		}
 		if g := sess.Rounds[0].Critiques; !g[1].Skipped && !g[0].Skipped {
 			t.Errorf("no critique marked skipped: %+v", g)
+		}
+	})
+	t.Run("critic call fails", func(t *testing.T) {
+		fakes(t, map[string][]string{
+			"claude": {brief("Draft"), brief("Revision")},
+			"codex":  {concern},
+			"grok":   {failReply},
+		})
+		s, _ := newService(t)
+		sess := start(t, s, StartRequest{Input: dump})
+		// The round goes on with the critique it has, and says what it lost.
+		if !hasNote(sess, "grok's critique in round 1 failed") || len(sess.Rounds) != 1 || sess.Rounds[0].Synthesis == nil {
+			t.Fatalf("notes %v rounds %d", sess.Notes, len(sess.Rounds))
 		}
 	})
 	t.Run("proposer signed out", func(t *testing.T) {

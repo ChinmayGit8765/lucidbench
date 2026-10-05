@@ -101,8 +101,9 @@ const MaxRounds = 2
 // MaxInput is the longest braindump or note accepted, in bytes.
 const MaxInput = 20000
 
-// DefaultTimeout bounds one model call.
-const DefaultTimeout = 5 * time.Minute
+// DefaultTimeout bounds one model call. A critic that reasons at length can
+// take several minutes, and a timed-out critic drops its verdict.
+const DefaultTimeout = 8 * time.Minute
 
 // Point is one thing a critic wants changed.
 type Point struct {
@@ -741,6 +742,7 @@ func (s *Service) critique(ctx context.Context, sess *Session, onUpdate func(Ses
 					sess.Critics = remove(sess.Critics, st.Provider)
 					s.logLocked(sess, "skipped", idx+1, st.Provider, note)
 				case err != nil:
+					sess.Notes = append(sess.Notes, fmt.Sprintf("%s's critique in round %d failed (%s); the round went on without it", st.Provider, idx+1, agentexec.Excerpt(err.Error())))
 					s.logLocked(sess, "error", idx+1, st.Provider, st.Provider+" failed: "+agentexec.Excerpt(err.Error()))
 				default:
 					verdict, points, perr := parseCritique(st.Text)
