@@ -66,6 +66,7 @@ type Request struct {
 	Model             string // optional provider model alias
 	Harness           string // "mine" | "clean"; "" = clean. ToolsNone is always clean.
 	Timeout           time.Duration
+	Env               []string    // extra KEY=value pairs for the CLI, after the inherited environment
 	OnEvent           func(Event) // optional streaming callback (Work)
 }
 
@@ -79,6 +80,9 @@ type Usage struct {
 	CacheWrite   int64   `json:"cache_write_tokens,omitempty"`
 	CostUSD      float64 `json:"cost_usd,omitempty"`
 	DurationMS   int64   `json:"duration_ms"`
+	// Note says how far to trust the figures, e.g. a run that was stopped
+	// before the CLI reported its final cost.
+	Note string `json:"note,omitempty"`
 }
 
 // Event is one normalised step of a run. Raw is the CLI's own line, when it
@@ -188,6 +192,8 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 		env = append(env, key+"="+dir)
 	}
 
+	env = append(env, r.Env...)
+
 	// aux holds files the CLI reads or writes that must not land in the
 	// user's working directory. With no Dir it is also the working directory.
 	aux, err := os.MkdirTemp("", "lucid-agent-")
@@ -220,6 +226,12 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	cmd.WaitDelay = 5 * time.Second
+	// The CLI starts helpers of its own (claude starts a claude). Cancelling
+	// must end all of them, or they keep editing the worktree unseen.
+	tree := newProcTree()
+	defer tree.close()
+	tree.prepare(cmd)
+	cmd.Cancel = func() error { return tree.kill(cmd) }
 
 	res := &Result{}
 	emit := func(e Event) {
@@ -242,7 +254,18 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 	}
 
 	start := time.Now()
-	runErr := cmd.Run()
+	runErr := cmd.Start()
+	if runErr == nil {
+		if aerr := tree.attach(cmd); aerr != nil {
+			// Without the job the tree cannot be ended as one: stop rather
+			// than run an agent that Stop cannot stop.
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			runErr = fmt.Errorf("cannot contain the %s process tree: %w", r.Provider, aerr)
+		} else {
+			runErr = cmd.Wait()
+		}
+	}
 	if lw != nil {
 		lw.flush()
 	}

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -107,8 +108,30 @@ func fakeCLI(mode string) int {
 			"modelUsage": m{"grok-x": m{}}})
 	case "slow":
 		time.Sleep(10 * time.Second)
+	case "tree":
+		// Streams one message with usage, starts a grandchild that beats into
+		// its own file, then beats into its own file too, forever.
+		out(m{"type": "assistant", "message": m{"id": "m1", "content": []any{m{"type": "text", "text": "working"}},
+			"usage": m{"input_tokens": 12, "output_tokens": 34, "cache_read_input_tokens": 5, "cache_creation_input_tokens": 6}}})
+		child := exec.Command(os.Args[0])
+		child.Env = append(os.Environ(), "LUCID_FAKE_CLI_MODE=beat", "LUCID_BEAT_FILE="+os.Getenv("LUCID_BEAT_CHILD"))
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			return 2
+		}
+		beat(os.Getenv("LUCID_BEAT_PARENT"))
+	case "beat":
+		beat(os.Getenv("LUCID_BEAT_FILE"))
 	}
 	return 0
+}
+
+// beat rewrites file with a growing counter every 50ms, forever.
+func beat(file string) {
+	for i := 1; ; i++ {
+		_ = os.WriteFile(file, []byte(strconv.Itoa(i)), 0o600)
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // installFake puts the test binary on a fresh PATH as name.
@@ -470,5 +493,62 @@ func TestLiveEdit(t *testing.T) {
 				t.Errorf("a.txt = %q", b)
 			}
 		})
+	}
+}
+
+// beats reads a heartbeat file's counter; 0 when it is not there yet.
+func beats(file string) int {
+	b, _ := os.ReadFile(file)
+	n, _ := strconv.Atoi(string(b))
+	return n
+}
+
+// Cancelling a run must end the CLI and every process it started, and keep the
+// usage already streamed.
+func TestCancelKillsTree(t *testing.T) {
+	installFake(t, "claude", "tree")
+	dir := t.TempDir()
+	parent, child := filepath.Join(dir, "parent.beat"), filepath.Join(dir, "child.beat")
+	t.Setenv("LUCID_BEAT_PARENT", parent)
+	t.Setenv("LUCID_BEAT_CHILD", child)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type out struct {
+		res *Result
+		err error
+	}
+	done := make(chan out, 1)
+	go func() {
+		res, err := Run(ctx, Request{Provider: "claude", Prompt: "go", Dir: t.TempDir(), Tools: ToolsEdit})
+		done <- out{res, err}
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for beats(parent) < 3 || beats(child) < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the fake CLI and its child never started beating (parent %d, child %d)", beats(parent), beats(child))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	var o out
+	select {
+	case o = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return within 3s of cancel")
+	}
+	if o.err == nil {
+		t.Fatal("a cancelled run returned no error")
+	}
+	if u := o.res.Usage; u.InputTokens != 12 || u.OutputTokens != 34 || u.CacheRead != 5 || u.CacheWrite != 6 {
+		t.Errorf("partial usage not kept: %+v", u)
+	}
+	p0, c0 := beats(parent), beats(child)
+	time.Sleep(1500 * time.Millisecond)
+	if p1 := beats(parent); p1 != p0 {
+		t.Errorf("the direct child still ran after cancel: %d -> %d", p0, p1)
+	}
+	if c1 := beats(child); c1 != c0 {
+		t.Errorf("the grandchild still ran after cancel: %d -> %d", c0, c1)
 	}
 }
