@@ -36,7 +36,7 @@ function UsageTile() {
           {wins.length === 0 && <div className="h-1.5 rounded-full bg-muted" />}
           {wins.slice(0, 3).map(({ p, w, pct }) => (
             <div key={`${p.id}-${w.name}`} className="flex items-center gap-2" title={`${p.label} ${w.label}: ${pct === null ? "unknown" : `${Math.round(pct)}% used`}`}>
-              <span className="w-14 shrink-0 truncate text-2xs text-subtle-foreground">
+              <span className="w-24 shrink-0 truncate text-2xs text-subtle-foreground">
                 {p.label} {w.label}
               </span>
               <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">

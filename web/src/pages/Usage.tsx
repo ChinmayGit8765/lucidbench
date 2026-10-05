@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils"
 /** The stacked series, bottom to top. Colours come from the theme's status tokens. */
 const SERIES = [
   { key: "input", label: "Input", color: "var(--info)" },
-  { key: "output", label: "Output", color: "var(--brand)" },
+  { key: "output", label: "Output", color: "var(--success)" },
   { key: "cache_write", label: "Cache write", color: "var(--warning)" },
   { key: "cache_read", label: "Cache read", color: "var(--neutral)" },
 ] as const
