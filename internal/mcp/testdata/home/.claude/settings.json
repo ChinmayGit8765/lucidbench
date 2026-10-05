@@ -1,0 +1,11 @@
+{
+  "permissions": { "allow": ["Read"] },
+  "env": { "SENTRY_TOKEN": "FAKE-SETTINGS-ENV-SECRET-5e71" },
+  "mcpServers": {
+    "sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.example/mcp?token=FAKE-SETTINGS-QUERY-SECRET-5e72",
+      "headers": { "Authorization": "Bearer FAKE-SETTINGS-HEADER-SECRET-5e73" }
+    }
+  }
+}

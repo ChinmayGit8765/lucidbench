@@ -39,6 +39,10 @@ Compiled into the `lucidd` and `lucid` binaries (direct dependencies; transitive
 | `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery` | Apache-2.0 |
 | `go.yaml.in/yaml/v3` | MIT and Apache-2.0 |
 
+## Desktop app
+
+The Windows desktop app (`desktop/`) is built with [Tauri](https://tauri.app) 2 and its plugins (MIT or Apache-2.0) and ships the `lucidd` binary described above. It renders the UI with the system WebView2 runtime, which is not redistributed.
+
 ## Agent image
 
 `images/agent/Dockerfile` installs the official Claude Code, Codex and Grok command-line tools from npm **when you build the image**. Those tools are not part of Lucidbench, are not covered by its Apache-2.0 licence, and are used under their owners' own licences and terms. This repository contains none of their code. If you publish a built agent image, you are responsible for complying with those terms.
