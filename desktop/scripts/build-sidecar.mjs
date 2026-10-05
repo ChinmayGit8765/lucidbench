@@ -1,7 +1,7 @@
 // Builds the web UI and the lucidd daemon, and places the daemon where Tauri
 // expects an externalBin sidecar: binaries/lucidd-<target-triple>.exe.
 import { execSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,13 @@ const run = (cmd, cwd) => {
   console.log(`> ${cmd}  (${cwd})`);
   execSync(cmd, { cwd, stdio: "inherit" });
 };
+
+// The sidecar must carry the same version string as the app (tauri.conf.json is
+// the source of truth); the app compares the two when it attaches to an engine.
+const version = JSON.parse(
+  readFileSync(join(root, "desktop", "src-tauri", "tauri.conf.json"), "utf8"),
+).version;
+if (!version) throw new Error("no version in desktop/src-tauri/tauri.conf.json");
 
 const host = execSync("rustc -vV", { encoding: "utf8" }).match(/^host: (.+)$/m);
 if (!host) throw new Error("could not read the target triple from `rustc -vV`");
@@ -21,7 +28,7 @@ const outDir = join(root, "desktop", "src-tauri", "binaries");
 mkdirSync(outDir, { recursive: true });
 const out = join(outDir, `lucidd-${triple}.exe`);
 run(
-  `go build -ldflags "-X github.com/ChinmayGit8765/lucidbench/internal/version.Version=0.1.0" -o "${out}" ./cmd/lucidd`,
+  `go build -ldflags "-X github.com/ChinmayGit8765/lucidbench/internal/version.Version=${version}" -o "${out}" ./cmd/lucidd`,
   root,
 );
 console.log(`sidecar ready: ${out}`);
