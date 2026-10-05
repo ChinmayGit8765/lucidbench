@@ -9,6 +9,7 @@ Shape:
 
 Tokens (set the ones you need; values are oklch(), rgb(), hsl() or #hex colours; alpha via "/ 12%"):
 --background --sidebar --card --card-foreground --elevated --foreground --muted --muted-foreground --subtle-foreground --secondary --secondary-foreground --accent --accent-foreground --border --border-strong --input --ring --primary --primary-foreground --brand --brand-soft --brand-fg --brand-2 --glow-1 --glow-2 --success --warning --danger --info (each status also has -soft and -fg).
+Status `-fg` tokens (and `--brand-fg`) are the TEXT colour drawn on top of the matching `-soft` background in pills and badges, not text on the solid colour. They must contrast with `-soft` over `--card` (WCAG AA): light tints in dark themes, dark shades in light themes.
 --glow-1 and --glow-2 are two faint radial lights at the top of the page (use 6-14% alpha).
 Keep text readable: foreground vs background contrast at least 7:1, muted-foreground at least 4.5:1. Borders on dark bases are white at 8-16% alpha. Status colours keep their meaning (green ok, amber warning, red failure).
 
