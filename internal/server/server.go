@@ -28,6 +28,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
+	"github.com/ChinmayGit8765/lucidbench/internal/work"
 )
 
 // HealthResponse is the body of GET /api/health.
@@ -90,6 +91,11 @@ func New(cfgs ...*config.Config) http.Handler {
 	memory.Register(mux, vault)
 	boards.Register(mux, vault)
 	council.Register(mux, council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}))
+	work.Register(mux, work.New(filepath.Join(data, "work", "sessions"), &agentexec.Runner{
+		InContainer: cluster.InContainer,
+		LookPath:    exec.LookPath,
+		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
+	}, vault, projects.Load))
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
