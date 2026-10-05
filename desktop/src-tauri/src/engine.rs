@@ -98,8 +98,8 @@ mod tests {
 
     #[test]
     fn paths_compare_case_insensitively() {
-        let a = PathBuf::from(r"C:\Users\x\AppData\Local\Lucidbench\lucidd.exe");
-        let b = PathBuf::from(r"\\?\c:\users\x\appdata\local\lucidbench\LUCIDD.EXE");
+        let a = PathBuf::from(r"C:\Users\<you>\AppData\Local\Lucidbench\lucidd.exe");
+        let b = PathBuf::from(r"\\?\c:\users\<you>\appdata\local\lucidbench\LUCIDD.EXE");
         assert!(same_path(&a, &b));
         assert!(!same_path(&a, &PathBuf::from(r"C:\other\lucidd.exe")));
     }
