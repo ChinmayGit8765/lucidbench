@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -31,6 +32,10 @@ const (
 	DefaultClusterName = "lucidbench"
 	DefaultAgentImage  = "lucidbench/agent:dev"
 	DefaultTheme       = "dark"
+
+	DefaultCIToken          SecretRef = "env:GITHUB_TOKEN"
+	DefaultCIComposeProject           = "runforge"
+	DefaultCIImageMatch               = "github-runner"
 )
 
 // ServerConfig configures the daemon listener.
@@ -64,6 +69,26 @@ type UIConfig struct {
 	Theme string `json:"theme"`
 }
 
+// CIGitHubConfig lists the GitHub repositories whose self-hosted runners and
+// workflow runs Lucidbench shows, and the token used to read them.
+type CIGitHubConfig struct {
+	Repos []string  `json:"repos"`
+	Token SecretRef `json:"token"`
+}
+
+// CIRunnersConfig selects the local runner containers: those in the compose
+// project, or whose image contains ImageMatch. Empty disables that match.
+type CIRunnersConfig struct {
+	ComposeProject string `json:"compose_project"`
+	ImageMatch     string `json:"image_match"`
+}
+
+// CIConfig configures the Runners & CI integration.
+type CIConfig struct {
+	GitHub  CIGitHubConfig  `json:"github"`
+	Runners CIRunnersConfig `json:"runners"`
+}
+
 // Config is the effective configuration. It holds no secret values.
 type Config struct {
 	Server    ServerConfig              `json:"server"`
@@ -72,6 +97,7 @@ type Config struct {
 	Agent     AgentConfig               `json:"agent"`
 	Vault     VaultConfig               `json:"vault"`
 	UI        UIConfig                  `json:"ui"`
+	CI        CIConfig                  `json:"ci"`
 
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
@@ -89,7 +115,11 @@ func Default() *Config {
 		Cluster:   ClusterConfig{Name: DefaultClusterName},
 		Agent:     AgentConfig{Image: DefaultAgentImage},
 		UI:        UIConfig{Theme: DefaultTheme},
-		sources:   map[string]string{},
+		CI: CIConfig{
+			GitHub:  CIGitHubConfig{Repos: []string{}, Token: DefaultCIToken},
+			Runners: CIRunnersConfig{ComposeProject: DefaultCIComposeProject, ImageMatch: DefaultCIImageMatch},
+		},
+		sources: map[string]string{},
 	}
 	for _, p := range Providers {
 		c.Providers[p] = ProviderConfig{Enabled: true, ExtraDirs: []string{}}
@@ -106,7 +136,8 @@ func Keys() []string {
 	for _, p := range Providers {
 		ks = append(ks, "providers."+p+".enabled", "providers."+p+".extra_dirs")
 	}
-	return append(ks, "cluster.name", "agent.image", "vault.path", "ui.theme")
+	return append(ks, "cluster.name", "agent.image", "vault.path", "ui.theme",
+		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -303,6 +334,8 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 			err = d.section(e, d.stringField("vault", "path", &c.Vault.Path))
 		case "ui":
 			err = d.section(e, d.stringField("ui", "theme", &c.UI.Theme))
+		case "ci":
+			err = d.ci(e)
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -379,6 +412,49 @@ func (d *fileDecoder) providers(e entry) error {
 	return nil
 }
 
+func (d *fileDecoder) ci(e entry) error {
+	return d.section(e, func(k string, v *yaml.Node) (bool, error) {
+		sub := entry{"ci." + k, v}
+		switch k {
+		case "github":
+			return true, d.section(sub, func(k string, v *yaml.Node) (bool, error) {
+				key := "ci.github." + k
+				switch k {
+				case "repos":
+					l, err := d.list(v, key)
+					d.c.CI.GitHub.Repos = l
+					d.c.sources[key] = "file"
+					return true, err
+				case "token":
+					s, err := d.str(v, key)
+					if err != nil {
+						return true, err
+					}
+					ref, err := ParseSecretRef(s)
+					if err != nil {
+						return true, d.errAt(v, key, err.Error())
+					}
+					d.c.CI.GitHub.Token = ref
+					d.c.sources[key] = "file"
+					return true, nil
+				}
+				return false, nil
+			})
+		case "runners":
+			return true, d.section(sub, func(k string, v *yaml.Node) (bool, error) {
+				switch k {
+				case "compose_project":
+					return d.stringField("ci.runners", k, &d.c.CI.Runners.ComposeProject)(k, v)
+				case "image_match":
+					return d.stringField("ci.runners", k, &d.c.CI.Runners.ImageMatch)(k, v)
+				}
+				return false, nil
+			})
+		}
+		return false, nil
+	})
+}
+
 // ---- env layer ----
 
 // envSpec maps a key to its environment variables, lowest precedence first.
@@ -388,6 +464,9 @@ var envSpecs = map[string][]string{
 	"agent.image":  {"LUCID_AGENT_IMAGE"},
 	"vault.path":   {"LUCID_VAULT_PATH"},
 	"ui.theme":     {"LUCID_UI_THEME"},
+
+	"ci.runners.compose_project": {"LUCID_CI_RUNNERS_COMPOSE_PROJECT"},
+	"ci.runners.image_match":     {"LUCID_CI_RUNNERS_IMAGE_MATCH"},
 }
 
 func providerEnv(p, field string) string {
@@ -401,6 +480,9 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 		"agent.image":  &c.Agent.Image,
 		"vault.path":   &c.Vault.Path,
 		"ui.theme":     &c.UI.Theme,
+
+		"ci.runners.compose_project": &c.CI.Runners.ComposeProject,
+		"ci.runners.image_match":     &c.CI.Runners.ImageMatch,
 	}
 	for key, names := range envSpecs {
 		for _, n := range names {
@@ -409,6 +491,19 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 				c.sources[key] = "env:" + n
 			}
 		}
+	}
+	if v := getenv("LUCID_CI_GITHUB_REPOS"); v != "" {
+		// Comma or whitespace separated owner/name list.
+		c.CI.GitHub.Repos = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+		c.sources["ci.github.repos"] = "env:LUCID_CI_GITHUB_REPOS"
+	}
+	if v := getenv("LUCID_CI_GITHUB_TOKEN"); v != "" {
+		ref, err := ParseSecretRef(v)
+		if err != nil {
+			return fmt.Errorf("env LUCID_CI_GITHUB_TOKEN: ci.github.token: %w", err)
+		}
+		c.CI.GitHub.Token = ref
+		c.sources["ci.github.token"] = "env:LUCID_CI_GITHUB_TOKEN"
 	}
 	for _, p := range Providers {
 		pc := c.Providers[p]
@@ -535,8 +630,18 @@ func (c *Config) validate() error {
 			}
 		}
 	}
+	for _, r := range c.CI.GitHub.Repos {
+		if !repoRE.MatchString(r) {
+			return c.bad("ci.github.repos", fmt.Sprintf("%q must be owner/name", r))
+		}
+	}
+	if strings.ContainsAny(c.CI.Runners.ComposeProject, " \t") {
+		return c.bad("ci.runners.compose_project", "must not contain spaces")
+	}
 	return nil
 }
+
+var repoRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 // Rows returns every key with its effective value and source, for display.
 // List values are joined with the OS path list separator. No secret values
@@ -561,6 +666,14 @@ func (c *Config) value(key string) string {
 		return c.Vault.Path
 	case "ui.theme":
 		return c.UI.Theme
+	case "ci.github.repos":
+		return "[" + strings.Join(c.CI.GitHub.Repos, ", ") + "]"
+	case "ci.github.token":
+		return c.CI.GitHub.Token.String()
+	case "ci.runners.compose_project":
+		return c.CI.Runners.ComposeProject
+	case "ci.runners.image_match":
+		return c.CI.Runners.ImageMatch
 	}
 	parts := strings.Split(key, ".")
 	if len(parts) == 3 && parts[0] == "providers" {

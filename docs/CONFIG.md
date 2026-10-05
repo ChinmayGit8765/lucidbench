@@ -59,6 +59,10 @@ is an error that names the file and the key, for example
 | `agent.image` | `lucidbench/agent:dev` | `LUCID_AGENT_IMAGE` | Image used to run provider CLIs. |
 | `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault. A leading `~` is expanded. |
 | `ui.theme` | `dark` | `LUCID_UI_THEME` | `dark`, `light` or `system`. |
+| `ci.github.repos` | `[]` | `LUCID_CI_GITHUB_REPOS` | GitHub repositories (`owner/name`) whose self-hosted runners and recent workflow runs appear under Runners & CI. The variable is a comma-separated list. |
+| `ci.github.token` | `env:GITHUB_TOKEN` | `LUCID_CI_GITHUB_TOKEN` | Secret reference for the GitHub API token. If the variable it names is empty, Lucidbench runs `gh auth token` when the GitHub CLI is installed. See [Runners & CI](#runners--ci). |
+| `ci.runners.compose_project` | `runforge` | `LUCID_CI_RUNNERS_COMPOSE_PROJECT` | Docker compose project whose containers are runners. Empty disables this match. |
+| `ci.runners.image_match` | `github-runner` | `LUCID_CI_RUNNERS_IMAGE_MATCH` | Containers whose image name contains this text are runners too. Empty disables this match. |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -77,7 +81,39 @@ References only, never values. Nothing personal ever goes in the repo.
 - Your config file, `.env` files, databases and kubeconfig are git-ignored.
   Keep them in your user directories, not in a checkout.
 
-There are no secret settings yet; this is the rule they will follow.
+The only secret setting today is `ci.github.token`.
+
+## Runners & CI
+
+The Runners & CI page, `lucid ci` and `/api/ci/*` show your self-hosted GitHub
+Actions runners: the local runner containers (any `github-runner` image, or
+every container of one compose project) and, for each repository in
+`ci.github.repos`, its registered self-hosted runners and last 10 workflow
+runs.
+
+```yaml
+ci:
+  github:
+    repos: ["you/your-repo", "you/another-repo"]
+    token: "env:GITHUB_TOKEN"
+```
+
+The token needs read access to Actions (and Administration: read to list a
+repository's runners); re-running failed jobs needs Actions: write. It is
+resolved in this order: the variable named by `ci.github.token`, then
+`gh auth token` if the GitHub CLI is installed and signed in. The token is
+never logged, never written anywhere and never returned by the API; responses
+only say where it came from (`env`, `gh` or `none`). GitHub responses are
+cached for 30 seconds per repository.
+
+Container actions (start, stop, restart) only ever apply to containers that
+match the runner filter; any other name is refused. Every `POST` under
+`/api/ci/` requires the header `X-Lucid-Confirm: yes`, which the web UI sends.
+
+In docker compose, the daemon reaches local containers through the mounted
+docker socket, but the image has no GitHub CLI. Export `GITHUB_TOKEN` in the
+shell that runs `docker compose up` (or put it in a git-ignored `.env`);
+compose passes it through to the container.
 
 ## Containers
 

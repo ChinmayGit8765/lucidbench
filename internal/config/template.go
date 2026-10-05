@@ -50,4 +50,18 @@ vault:
 ui:
   # dark, light or system.
   theme: "dark"
+
+ci:
+  # Runners & CI: self-hosted GitHub Actions runners and recent workflow runs.
+  github:
+    # Repositories to watch, as owner/name, for example ["you/your-repo"].
+    repos: []
+    # Token for the GitHub API, as an env:NAME reference. When that variable
+    # is empty, Lucidbench asks the GitHub CLI (gh auth token) if installed.
+    token: "env:GITHUB_TOKEN"
+  runners:
+    # Local runner containers: those in this docker compose project ...
+    compose_project: "runforge"
+    # ... or whose image name contains this text. Empty disables a match.
+    image_match: "github-runner"
 `
