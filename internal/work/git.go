@@ -61,7 +61,7 @@ func defaultBase(repo string) (string, error) {
 	}
 	cur, err := git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return "", fmt.Errorf("%w: cannot read the current branch: %v", ErrBadRequest, err)
+		return "", errf(ErrBadRequest, "cannot read the current branch: %v", err)
 	}
 	return cur, nil // "HEAD" when detached, which still names a commit
 }
@@ -71,11 +71,11 @@ func defaultBase(repo string) (string, error) {
 func createWorktree(localPath, id, name string) (*worktree, error) {
 	st, err := os.Stat(localPath)
 	if err != nil || !st.IsDir() {
-		return nil, fmt.Errorf("%w: local_path %s does not exist", ErrBadRequest, localPath)
+		return nil, errf(ErrBadRequest, "local_path %s does not exist", localPath)
 	}
 	top, err := git(localPath, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return nil, fmt.Errorf("%w: local_path %s is not a git repository", ErrBadRequest, localPath)
+		return nil, errf(ErrBadRequest, "local_path %s is not a git repository", localPath)
 	}
 	top = filepath.Clean(filepath.FromSlash(top))
 	base, err := defaultBase(top)
@@ -84,7 +84,7 @@ func createWorktree(localPath, id, name string) (*worktree, error) {
 	}
 	sha, err := git(top, "rev-parse", "--verify", base+"^{commit}")
 	if err != nil {
-		return nil, fmt.Errorf("%w: the repository has no commit to start from on %s", ErrBadRequest, base)
+		return nil, errf(ErrBadRequest, "the repository has no commit to start from on %s", base)
 	}
 	w := &worktree{
 		repo:    top,
@@ -94,7 +94,7 @@ func createWorktree(localPath, id, name string) (*worktree, error) {
 		baseSHA: sha,
 	}
 	if _, err := os.Stat(w.path); err == nil {
-		return nil, fmt.Errorf("%w: %s already exists", ErrConflict, w.path)
+		return nil, errf(ErrConflict, "%s already exists", w.path)
 	}
 	if _, err := git(top, "worktree", "add", "-b", w.branch, w.path, sha); err != nil {
 		return nil, fmt.Errorf("cannot create the worktree: %w", err)
@@ -254,17 +254,17 @@ func (s *Service) OpenPR(id string) (Session, error) {
 		if len(diff.Uncommitted) > 0 {
 			msg += fmt.Sprintf(" (%d uncommitted changes in the worktree: commit them first)", len(diff.Uncommitted))
 		}
-		return se, fmt.Errorf("%w: %s", ErrConflict, msg)
+		return se, errf(ErrConflict, "%s", msg)
 	}
 	if _, err := git(se.Worktree, "remote", "get-url", "origin"); err != nil {
-		return se, fmt.Errorf("%w: the repository has no origin remote to push to", ErrConflict)
+		return se, errf(ErrConflict, "the repository has no origin remote to push to")
 	}
 	if _, err := git(se.Worktree, "push", "-u", "origin", se.Branch); err != nil {
 		return se, fmt.Errorf("push failed: %w", err)
 	}
 	s.update(e, func(x *Session) { x.Pushed = true })
 	if _, err := lookPath("gh"); err != nil {
-		return s.mustGet(id), fmt.Errorf("%w: the branch was pushed, but gh is not on PATH to open the PR; install the GitHub CLI and sign in with `gh auth login`", ErrConflict)
+		return s.mustGet(id), errf(ErrConflict, "the branch was pushed, but gh is not on PATH to open the PR; install the GitHub CLI and sign in with `gh auth login`")
 	}
 	title := se.Title
 	if title == "" {
@@ -289,6 +289,21 @@ func (s *Service) OpenPR(id string) (Session, error) {
 	if se.Card != "" {
 		s.moveCard(se.Board, se.Card, "", url)
 	}
+	return s.Get(id)
+}
+
+// Refresh reads a finished session's diff again, for changes made in the
+// worktree after the run ended.
+func (s *Service) Refresh(id string) (Session, error) {
+	e, se, err := s.settled(id)
+	if err != nil {
+		return se, err
+	}
+	diff, err := summarise(se.Worktree, se.BaseSHA)
+	if err != nil {
+		return se, fmt.Errorf("cannot read the worktree: %w", err)
+	}
+	s.update(e, func(x *Session) { x.Diff = diff })
 	return s.Get(id)
 }
 
@@ -334,7 +349,7 @@ func (s *Service) Remove(id string, discard bool) (Session, error) {
 			return se, fmt.Errorf("cannot read the worktree: %w", err)
 		}
 		if (commits > 0 || changes > 0) && !discard {
-			return se, fmt.Errorf("%w: the worktree has %d unpushed commits and %d uncommitted changes; open a PR first, or confirm discarding them", ErrConflict, commits, changes)
+			return se, errf(ErrConflict, "the worktree has %s and %s; open a PR first, or confirm discarding them", plural(commits, "unpushed commit"), plural(changes, "uncommitted change"))
 		}
 		args := []string{"worktree", "remove", se.Worktree}
 		if discard {

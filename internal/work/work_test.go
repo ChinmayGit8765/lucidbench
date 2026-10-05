@@ -420,7 +420,7 @@ func TestOpenPRAndRemove(t *testing.T) {
 	_, ghLog := installFakes(t, "edit")
 
 	// Unpushed work is not removed without a discard.
-	if _, err := f.svc.Remove(se.ID, false); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "1 unpushed commits") {
+	if _, err := f.svc.Remove(se.ID, false); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "1 unpushed commit and 0 uncommitted changes") {
 		t.Fatalf("remove unpushed: %v", err)
 	}
 	got, err := f.svc.OpenPR(se.ID)
@@ -490,6 +490,12 @@ func TestNoCommitsNoPR(t *testing.T) {
 	}
 	if _, err := f.svc.Remove(se.ID, false); !errors.Is(err, ErrConflict) {
 		t.Errorf("remove dirty: %v", err)
+	}
+	// A commit made after the run shows up on refresh.
+	run(t, se.Worktree, "add", "README.md")
+	run(t, se.Worktree, "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-m", "by hand")
+	if got, err := f.svc.Refresh(se.ID); err != nil || len(got.Diff.Commits) != 1 || len(got.Diff.Uncommitted) != 0 {
+		t.Errorf("refresh: %v %+v", err, got.Diff)
 	}
 	if got, err := f.svc.Remove(se.ID, true); err != nil || !got.Removed {
 		t.Errorf("discard: %v", err)

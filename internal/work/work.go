@@ -53,6 +53,28 @@ var (
 	ErrConflict   = errors.New("conflict")
 )
 
+// kindErr is an error of one of the kinds above whose text is only the
+// message, so the UI can show it as is.
+type kindErr struct {
+	kind error
+	msg  string
+}
+
+func (e kindErr) Error() string { return e.msg }
+func (e kindErr) Unwrap() error { return e.kind }
+
+func errf(kind error, format string, a ...any) error {
+	return kindErr{kind: kind, msg: fmt.Sprintf(format, a...)}
+}
+
+// plural is "1 commit", "2 commits".
+func plural(n int, word string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", word)
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
 // Preamble opens every prompt.
 const Preamble = `You are working in a git worktree that Lucidbench created for this task, on its own branch.
 - Work only inside this worktree (your current directory). Do not read or change files outside it.
@@ -183,14 +205,14 @@ func (s *Service) load() {
 
 func (s *Service) get(id string) (*entry, error) {
 	if !idRE.MatchString(id) {
-		return nil, fmt.Errorf("%w: no session %q", ErrNotFound, id)
+		return nil, errf(ErrNotFound, "no session %q", id)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
 	e, ok := s.sessions[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: no session %q", ErrNotFound, id)
+		return nil, errf(ErrNotFound, "no session %q", id)
 	}
 	return e, nil
 }
@@ -309,7 +331,7 @@ type task struct {
 // resolve checks a start request and finds its project, card and brief.
 func (s *Service) resolve(req *StartRequest) (*task, error) {
 	if _, ok := agentexec.Logins[req.Provider]; !ok {
-		return nil, fmt.Errorf("%w: provider must be claude, codex or grok", ErrBadRequest)
+		return nil, errf(ErrBadRequest, "provider must be claude, codex or grok")
 	}
 	if req.Harness == "" {
 		req.Harness = agentexec.HarnessClean
@@ -318,7 +340,7 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 		}
 	}
 	if req.Harness != agentexec.HarnessMine && req.Harness != agentexec.HarnessClean {
-		return nil, fmt.Errorf("%w: harness must be mine or clean", ErrBadRequest)
+		return nil, errf(ErrBadRequest, "harness must be mine or clean")
 	}
 	t := &task{}
 	if req.Card != "" {
@@ -327,13 +349,13 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 		}
 	}
 	if req.Project == "" {
-		return nil, fmt.Errorf("%w: choose a project", ErrBadRequest)
+		return nil, errf(ErrBadRequest, "choose a project")
 	}
 	if strings.TrimSpace(t.body) == "" && strings.TrimSpace(req.Prompt) == "" {
-		return nil, fmt.Errorf("%w: write a prompt or pick a card", ErrBadRequest)
+		return nil, errf(ErrBadRequest, "write a prompt or pick a card")
 	}
 	if s.Projects == nil {
-		return nil, fmt.Errorf("%w: no projects file", ErrBadRequest)
+		return nil, errf(ErrBadRequest, "no projects file")
 	}
 	list, err := s.Projects()
 	if err != nil {
@@ -346,13 +368,13 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 		}
 	}
 	if !found {
-		return nil, fmt.Errorf("%w: no project %q in projects.yaml", ErrNotFound, req.Project)
+		return nil, errf(ErrNotFound, "no project %q in projects.yaml", req.Project)
 	}
 	if t.project.Visibility == "confidential" {
-		return nil, fmt.Errorf("%w: %s is confidential; Work never sends a confidential project to a provider", ErrRefused, t.project.Name)
+		return nil, errf(ErrRefused, "%s is confidential; Work never sends a confidential project to a provider", t.project.Name)
 	}
 	if t.project.LocalPath == "" {
-		return nil, fmt.Errorf("%w: %s has no local_path; add `local_path: <its checkout>` to the project in projects.yaml", ErrBadRequest, t.project.Name)
+		return nil, errf(ErrBadRequest, "%s has no local_path; add `local_path: <its checkout>` to the project in projects.yaml", t.project.Name)
 	}
 	if t.title == "" {
 		t.title = firstLine(req.Prompt, 80)
@@ -363,7 +385,7 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 // resolveCard finds the card, its project and its brief.
 func (s *Service) resolveCard(req *StartRequest, t *task) error {
 	if s.Vault == nil {
-		return fmt.Errorf("%w: cards need the Memory vault", ErrBadRequest)
+		return errf(ErrBadRequest, "cards need the Memory vault")
 	}
 	t.board, req.Card = boards.DefaultBoard, strings.TrimSpace(req.Card)
 	id := req.Card
@@ -376,7 +398,7 @@ func (s *Service) resolveCard(req *StartRequest, t *task) error {
 	}
 	b, err := boards.Get(v, t.board)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrNotFound, err)
+		return errf(ErrNotFound, "%v", err)
 	}
 	for i := range b.Cards {
 		if b.Cards[i].ID == id {
@@ -385,7 +407,7 @@ func (s *Service) resolveCard(req *StartRequest, t *task) error {
 		}
 	}
 	if t.card == nil {
-		return fmt.Errorf("%w: no card %q on board %s", ErrNotFound, id, t.board)
+		return errf(ErrNotFound, "no card %q on board %s", id, t.board)
 	}
 	if req.Project == "" {
 		req.Project = t.card.Project
@@ -394,14 +416,14 @@ func (s *Service) resolveCard(req *StartRequest, t *task) error {
 	if t.card.Memory != "" {
 		conf, err := v.IsConfidential(t.card.Memory)
 		if err != nil {
-			return fmt.Errorf("%w: the card's brief %s: %v", ErrBadRequest, t.card.Memory, err)
+			return errf(ErrBadRequest, "the card's brief %s: %v", t.card.Memory, err)
 		}
 		if conf {
-			return fmt.Errorf("%w: the card's brief %s is confidential; Work never sends it to a provider", ErrRefused, t.card.Memory)
+			return errf(ErrRefused, "the card's brief %s is confidential; Work never sends it to a provider", t.card.Memory)
 		}
 		p, err := v.Read(t.card.Memory)
 		if err != nil {
-			return fmt.Errorf("%w: the card's brief %s: %v", ErrBadRequest, t.card.Memory, err)
+			return errf(ErrBadRequest, "the card's brief %s: %v", t.card.Memory, err)
 		}
 		t.brief, t.body = p.Path, p.Body
 		if p.Title != "" {
@@ -436,14 +458,14 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	}
 	r := s.Runner
 	if r.InContainer != nil && r.InContainer() {
-		return Session{}, fmt.Errorf("%w: %v", ErrBadRequest, agentexec.ErrInContainer)
+		return Session{}, errf(ErrBadRequest, "%v", agentexec.ErrInContainer)
 	}
 	look := r.LookPath
 	if look == nil {
 		look = lookPath
 	}
 	if _, err := look(req.Provider); err != nil {
-		return Session{}, fmt.Errorf("%w: %s is not on PATH; install it and sign in with `%s`", ErrBadRequest, req.Provider, agentexec.Logins[req.Provider])
+		return Session{}, errf(ErrBadRequest, "%s is not on PATH; install it and sign in with `%s`", req.Provider, agentexec.Logins[req.Provider])
 	}
 
 	id := newID()
@@ -518,13 +540,15 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	now := time.Now().UTC()
 	se := &e.s
 	se.Ended = &now
+	// A run that ended cleanly is done, even when Stop came in while the
+	// diff was being read.
 	switch {
+	case err == nil:
+		se.Status = StatusDone
 	case e.stopping:
 		se.Status = StatusStopped
-	case err != nil:
-		se.Status, se.Error = StatusFailed, err.Error()
 	default:
-		se.Status = StatusDone
+		se.Status, se.Error = StatusFailed, err.Error()
 	}
 	if res != nil {
 		u := res.Usage
@@ -592,7 +616,7 @@ func (s *Service) Stop(id string) (Session, error) {
 	if e.s.Status != StatusRunning || e.cancel == nil {
 		se := e.s
 		e.mu.Unlock()
-		return se, fmt.Errorf("%w: the session is not running", ErrConflict)
+		return se, errf(ErrConflict, "the session is not running")
 	}
 	e.stopping = true
 	e.cancel()
@@ -684,10 +708,10 @@ func (s *Service) settled(id string) (*entry, Session, error) {
 	se := e.s
 	e.mu.Unlock()
 	if se.Status == StatusRunning {
-		return nil, se, fmt.Errorf("%w: the agent is still running; stop it first", ErrConflict)
+		return nil, se, errf(ErrConflict, "the agent is still running; stop it first")
 	}
 	if se.Removed {
-		return nil, se, fmt.Errorf("%w: the worktree was removed", ErrConflict)
+		return nil, se, errf(ErrConflict, "the worktree was removed")
 	}
 	return e, se, nil
 }

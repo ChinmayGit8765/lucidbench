@@ -3,7 +3,6 @@ package work
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -34,7 +33,7 @@ func fail(w http.ResponseWriter, err error) {
 //
 //	GET  /api/work/sessions               every session, newest first
 //	POST /api/work/sessions               start {card?, project, prompt?, provider, profile?, harness}
-//	GET  /api/work/sessions/{id}          one session with its diff summary
+//	GET  /api/work/sessions/{id}          one session with its diff summary (?refresh=1 reads it again)
 //	GET  /api/work/sessions/{id}/events   server-sent events: each normalised event, then "end"
 //	GET  /api/work/sessions/{id}/raw      raw.log as text
 //	POST /api/work/sessions/{id}/stop     stop the agent
@@ -65,7 +64,11 @@ func Register(mux *http.ServeMux, s *Service) {
 		apiutil.WriteJSON(w, http.StatusCreated, se)
 	})
 	mux.HandleFunc("GET /api/work/sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
-		se, err := s.Get(r.PathValue("id"))
+		get := s.Get
+		if r.URL.Query().Get("refresh") == "1" {
+			get = s.Refresh // reads the worktree's diff again
+		}
+		se, err := get(r.PathValue("id"))
 		if err != nil {
 			fail(w, err)
 			return
@@ -105,7 +108,7 @@ func Register(mux *http.ServeMux, s *Service) {
 			Discard bool `json:"discard"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(nil, r.Body, MaxBody)).Decode(&in); err != nil && err != io.EOF {
-			return Session{}, fmt.Errorf("%w: invalid JSON: %v", ErrBadRequest, err)
+			return Session{}, errf(ErrBadRequest, "invalid JSON: %v", err)
 		}
 		return s.Remove(id, in.Discard)
 	})
