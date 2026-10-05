@@ -48,6 +48,7 @@ import { blockedNeeds, PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
 import { isOpenable, moduleById, navOrder } from "@/modules/registry"
+import { useWorkAttention } from "@/modules/work"
 import type { Account } from "@/pages/Accounts"
 
 function greeting(d: Date): string {
@@ -127,6 +128,7 @@ export default function Overview() {
   const pl = projectsPoll.data
   const projectList = pl?.projects ?? []
   const blocked = blockedNeeds(projectList)
+  const workAttention = useWorkAttention()
 
 
   const rerun = (r: CIRun) =>
@@ -240,6 +242,7 @@ export default function Overview() {
       ),
     })
   }
+  attention.push(...workAttention)
   for (const a of expired) {
     attention.push({
       key: `acc-${a.provider}-${a.name}`,
