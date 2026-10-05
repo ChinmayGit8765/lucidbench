@@ -506,10 +506,50 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	areq := agentexec.Request{
 		Provider: req.Provider, Profile: req.Profile, Prompt: se.Prompt, Dir: wt.path,
 		Tools: agentexec.ToolsEdit, Model: req.Model, Harness: req.Harness,
+		Env:     agentTempEnv(wt.path),
 		OnEvent: func(ev agentexec.Event) { s.record(e, ev) },
 	}
 	go s.run(ctx, e, areq)
 	return se, nil
+}
+
+// tmpDirName is the agent's scratch directory inside its worktree. There is no
+// OS sandbox yet, so pointing the temp variables here keeps the files a CLI
+// writes to "the system temp folder" inside the worktree, where the session
+// can see and remove them.
+const tmpDirName = ".lucid-tmp"
+
+// agentTempEnv makes <worktree>/.lucid-tmp, keeps git from listing it, and
+// returns the temp variables that point at it.
+func agentTempEnv(worktree string) []string {
+	tmp := filepath.Join(worktree, tmpDirName)
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		return nil
+	}
+	if p, err := git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"); err == nil && p != "" {
+		p = filepath.FromSlash(p)
+		if b, _ := os.ReadFile(p); !excludes(string(b), tmpDirName) {
+			_ = os.MkdirAll(filepath.Dir(p), 0o755)
+			if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+				if len(b) > 0 && !strings.HasSuffix(string(b), "\n") {
+					_, _ = f.WriteString("\n")
+				}
+				_, _ = f.WriteString(tmpDirName + "/\n")
+				f.Close()
+			}
+		}
+	}
+	return []string{"TMP=" + tmp, "TEMP=" + tmp, "TMPDIR=" + tmp}
+}
+
+// excludes reports whether an info/exclude body already lists name.
+func excludes(body, name string) bool {
+	for _, l := range strings.Split(body, "\n") {
+		if l = strings.TrimSpace(l); l == name || l == name+"/" {
+			return true
+		}
+	}
+	return false
 }
 
 // record keeps one event: events.jsonl, raw.log and the watchers.
@@ -534,6 +574,7 @@ func (s *Service) record(e *entry, ev agentexec.Event) {
 func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	defer close(e.done)
 	res, err := s.Runner.Run(ctx, req)
+	_ = os.RemoveAll(filepath.Join(req.Dir, tmpDirName))
 	diff, derr := summarise(req.Dir, e.s.BaseSHA)
 
 	e.mu.Lock()
@@ -552,6 +593,9 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	}
 	if res != nil {
 		u := res.Usage
+		if se.Status == StatusStopped {
+			u.Note = "stopped before the CLI reported its final cost"
+		}
 		se.Usage, se.Answer = &u, res.Text
 	}
 	if derr == nil {

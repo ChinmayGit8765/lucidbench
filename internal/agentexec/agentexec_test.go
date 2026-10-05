@@ -523,7 +523,8 @@ func TestCancelKillsTree(t *testing.T) {
 		res, err := Run(ctx, Request{Provider: "claude", Prompt: "go", Dir: t.TempDir(), Tools: ToolsEdit})
 		done <- out{res, err}
 	}()
-	deadline := time.Now().Add(10 * time.Second)
+	// A fresh executable can take a while to start on a busy machine.
+	deadline := time.Now().Add(60 * time.Second)
 	for beats(parent) < 3 || beats(child) < 3 {
 		if time.Now().After(deadline) {
 			t.Fatalf("the fake CLI and its child never started beating (parent %d, child %d)", beats(parent), beats(child))
