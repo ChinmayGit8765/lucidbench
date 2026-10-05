@@ -76,7 +76,7 @@ const HARNESS: Record<Harness, { label: string; icon: typeof UserCog; blurb: str
   },
 }
 
-export function NewSession({ card: initialCard }: { card?: string }) {
+export function NewSession({ card: initialCard, project: initialProject }: { card?: string; project?: string }) {
   const { open, navigate } = useApp()
   const projects = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
   const accounts = usePoll<Account[]>("/api/accounts", 30000)
@@ -84,10 +84,11 @@ export function NewSession({ card: initialCard }: { card?: string }) {
   const board = usePoll<{ cards: BoardCard[] }>("/api/boards/work", 30000)
 
   const [provider, setProvider] = useState<WorkProvider>("claude")
+  const [providerTouched, setProviderTouched] = useState(false)
   const [profile, setProfile] = useState("")
   const [harness, setHarness] = useState<Harness>("mine")
   const [harnessTouched, setHarnessTouched] = useState(false)
-  const [project, setProject] = useState("")
+  const [project, setProject] = useState(initialProject ?? "")
   const [cardId, setCardId] = useState(initialCard ?? "")
   const [prompt, setPrompt] = useState("")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
@@ -119,9 +120,32 @@ export function NewSession({ card: initialCard }: { card?: string }) {
     setProfile("")
     if (!harnessTouched) setHarness(defaultHarness(p))
   }
+  // Until the user picks one, the agent is the first CLI that is installed and signed in.
+  useEffect(() => {
+    if (providerTouched || !accounts.data) return
+    const first = WORK_PROVIDERS.find((p) => installed(p) && signedIn(p))
+    if (first && first !== provider) pickProvider(first)
+  }, [accounts.data, tools.data, providerTouched]) // not on every provider change, so a pick sticks
+
+  // The project the card or the link asked for, when Work cannot use it.
+  const wanted = card?.project ?? initialProject
+  const blocked = wanted && projects.data && !usable.some((p) => p.id === wanted) ? all.find((p) => p.id === wanted) ?? null : null
+  const blockedWhy = !wanted || !projects.data || usable.some((p) => p.id === wanted)
+    ? null
+    : !blocked
+      ? `There is no project “${wanted}” in projects.yaml`
+      : blocked.visibility === "confidential"
+        ? `${blocked.name} is confidential, so no agent may work on it`
+        : `${blocked.name} has no local_path`
 
   const title = card?.title ?? prompt.split("\n").find((l) => l.trim())?.trim() ?? ""
-  const missing = !project ? "Pick a project" : !card && !prompt.trim() ? "Write a prompt or pick a card" : !installed(provider) ? `${providerInfo(provider)?.label} is not installed` : null
+  const missing = !chosen
+    ? (blockedWhy ?? "Pick a project")
+    : !card && !prompt.trim()
+      ? "Write a prompt or pick a card"
+      : !installed(provider)
+        ? `${providerInfo(provider)?.label} is not installed`
+        : null
   const label = providerInfo(provider)?.label ?? provider
 
   const start = () => {
@@ -218,6 +242,25 @@ export function NewSession({ card: initialCard }: { card?: string }) {
           </Section>
 
           <Section n={2} title="Project" hint="only projects with a local checkout">
+            {blockedWhy && !chosen && (
+              <div role="alert" className="mb-3 rounded-lg border border-warning/30 bg-warning-soft px-3.5 py-3 text-sm">
+                <p className="flex items-center gap-2 font-medium text-warning-fg">
+                  <TriangleAlert className="size-4 shrink-0" />
+                  {card ? "This card's project cannot be used yet" : "This project cannot be used yet"}: {blockedWhy}.
+                </p>
+                {blocked && blocked.visibility !== "confidential" && (
+                  <>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Work runs the agent in a git worktree next to the project's own checkout. In{" "}
+                      <span className="font-mono">{projects.data?.path_hint ?? "projects.yaml"}</span>, add this line under{" "}
+                      <span className="font-mono">id: {blocked.id}</span> and save; this page picks it up within half a minute.
+                    </p>
+                    <CopyCommand className="mt-2" command="local_path: <the absolute path of its git checkout>" />
+                  </>
+                )}
+                {usable.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Or pick a project below that has one.</p>}
+              </div>
+            )}
             {loading ? (
               <div className="grid gap-2 @2xl:grid-cols-2">
                 <Skeleton className="h-16" />
@@ -293,7 +336,10 @@ export function NewSession({ card: initialCard }: { card?: string }) {
                     role="radio"
                     aria-checked={on}
                     disabled={!inst}
-                    onClick={() => pickProvider(p)}
+                    onClick={() => {
+                      setProviderTouched(true)
+                      pickProvider(p)
+                    }}
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left outline-none transition-[border-color,background-color] focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                       on ? "border-brand/60 bg-brand-soft/60" : "bg-background/40 hover:border-border-strong hover:bg-accent/40",

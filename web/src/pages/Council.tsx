@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   NotebookPen,
   PenLine,
+  Play,
   RotateCcw,
   ShieldAlert,
   Sparkles,
@@ -33,6 +34,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { ApiError, errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { DEFAULT_BOARD } from "@/lib/boards"
 import {
   approveBrief,
   askAgain,
@@ -141,6 +143,7 @@ function Composer() {
   const [project, setProject] = useState("")
   const [proposer, setProposer] = useState<CouncilProvider>("claude")
   const [critics, setCritics] = useState<CouncilProvider[]>(["codex", "grok"])
+  const [rounds, setRounds] = useState(2)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<ApiError | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -167,14 +170,14 @@ function Composer() {
   const chosen = ps.find((p) => p.id === project)
   const confidential = chosen?.visibility === "confidential"
   const empty = input.trim() === ""
-  const calls = maxCalls(critics.length)
+  const calls = maxCalls(critics.length, rounds)
 
   const submit = async () => {
     if (empty || busy || confidential) return
     setBusy(true)
     setErr(null)
     try {
-      const s = await startCouncil({ input, project: project || undefined, proposer, critics })
+      const s = await startCouncil({ input, project: project || undefined, proposer, critics, rounds })
       open("council", [s.id])
     } catch (e) {
       setErr(e instanceof ApiError ? e : new ApiError(0, errorMessage(e)))
@@ -246,6 +249,25 @@ function Composer() {
             <div role="group" aria-label="Critics" className="flex gap-1">
               {COUNCIL_PROVIDERS.filter((p) => p !== proposer).map((p) => (
                 <ProviderChip key={p} provider={p} on={critics.includes(p)} signIn={signInOf(accounts.data, p)} role="checkbox" onClick={() => toggleCritic(p)} />
+              ))}
+            </div>
+          </Field>
+          <Field label="Rounds">
+            <div role="radiogroup" aria-label="Rounds" className="inline-flex h-8 rounded-md border bg-background/40 p-0.5">
+              {[1, 2].map((n) => (
+                <button
+                  key={n}
+                  role="radio"
+                  aria-checked={rounds === n}
+                  onClick={() => setRounds(n)}
+                  title={n === 1 ? "One critique and one revision: quicker and cheaper" : "A second round runs only while a critic still sees a blocker"}
+                  className={cn(
+                    "rounded px-2.5 text-xs transition-colors",
+                    rounds === n ? "bg-elevated font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {n === 1 ? "1" : "up to 2"}
+                </button>
               ))}
             </div>
           </Field>
@@ -989,7 +1011,7 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
           const card = await approveBrief(s.id)
           toast.success("Card added to Ready", {
             description: card.title,
-            action: { label: "Open Boards", onClick: () => open("boards") },
+            action: { label: "Open card", onClick: () => open("boards", [DEFAULT_BOARD, card.id]) },
           })
           await refetch()
         } catch (e) {
@@ -1040,9 +1062,14 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
               <span className="flex items-center gap-1.5 text-xs text-success-fg">
                 <CheckCircle2 className="size-3.5" /> On the work board · {s.card?.column ?? "Ready"}
               </span>
-              <Button variant="secondary" size="sm" onClick={() => open("boards")}>
-                <KanbanSquare /> Open Boards
+              <Button variant="secondary" size="sm" onClick={() => open("boards", s.card ? [DEFAULT_BOARD, s.card.id] : [DEFAULT_BOARD])}>
+                <KanbanSquare /> Open card
               </Button>
+              {s.card && (
+                <Button size="sm" onClick={() => open("work", ["new", s.card!.id])}>
+                  <Play /> Start work
+                </Button>
+              )}
             </>
           ) : (
             <>

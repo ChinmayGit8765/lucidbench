@@ -42,6 +42,8 @@ export interface Project {
   visibility: Visibility
   repo?: string
   linear?: string
+  /** The project's git checkout on this machine; Work needs it. */
+  local_path?: string
   summary?: string
   builds_into: string[]
   needs: Need[]

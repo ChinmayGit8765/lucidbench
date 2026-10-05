@@ -27,7 +27,10 @@ import { SessionView } from "@/pages/work/SessionView"
 
 /** /work lists sessions, /work/new starts one, /work/<id> shows one. */
 export default function Work({ subpath }: ModulePageProps) {
-  if (subpath[0] === "new") return <NewSession card={subpath[1]} />
+  // /work/new, /work/new/<card id>, or /work/new/project/<project id>.
+  if (subpath[0] === "new") {
+    return subpath[1] === "project" ? <NewSession project={subpath[2]} /> : <NewSession card={subpath[1]} />
+  }
   if (subpath[0]) return <SessionView id={subpath[0]} />
   return <SessionList />
 }

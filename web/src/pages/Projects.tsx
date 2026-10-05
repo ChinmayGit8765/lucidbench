@@ -6,12 +6,14 @@ import {
   CircleCheck,
   CircleDot,
   EyeOff,
+  FolderGit2,
   FolderKanban,
   GitBranch,
   Globe,
   LayoutGrid,
   Lock,
   OctagonAlert,
+  Play,
   Search,
   Share2,
   X,
@@ -45,6 +47,7 @@ import {
   type Visibility,
 } from "@/lib/projects"
 import { cn } from "@/lib/utils"
+import { homeHint } from "@/lib/work"
 
 type View = "grid" | "graph"
 
@@ -173,6 +176,7 @@ function ProjectCard({
   onFocus: (id: string) => void
   focused: boolean
 }) {
+  const { open } = useApp()
   const st = STATUS[p.status] ?? { tone: "neutral" as const, label: p.status }
   const t = typeInfo(p.type)
   return (
@@ -214,6 +218,20 @@ function ProjectCard({
       </div>
 
       {p.summary && <p className="mt-2.5 line-clamp-2 text-sm text-muted-foreground">{p.summary}</p>}
+
+      {p.local_path && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-2xs text-muted-foreground" title={`local_path: ${homeHint(p.local_path)}`}>
+            <FolderGit2 className="size-3 shrink-0 text-subtle-foreground" />
+            <span className="truncate">{homeHint(p.local_path)}</span>
+          </span>
+          {p.visibility !== "confidential" && (
+            <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={() => open("work", ["new", "project", p.id])}>
+              <Play /> Start work
+            </Button>
+          )}
+        </div>
+      )}
 
       {(p.builds_into.length > 0 || p.built_by.length > 0) && (
         <div className="mt-3 space-y-1.5">
