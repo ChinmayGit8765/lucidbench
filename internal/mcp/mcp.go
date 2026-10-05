@@ -179,8 +179,13 @@ func parseError(path string) string {
 }
 
 // folder returns the last element of a project path written with either
-// slash style, so a Windows key reads the same on any OS.
-func folder(p string) string {
+// slash style, so a Windows key reads the same on any OS. The home directory
+// itself is "~", so a user name never shows up as a folder name.
+func folder(p, home string) string {
+	norm := func(s string) string { return strings.ToLower(strings.TrimRight(strings.ReplaceAll(s, `\`, "/"), "/")) }
+	if home != "" && norm(p) == norm(home) {
+		return "~"
+	}
 	p = strings.TrimRight(strings.ReplaceAll(p, `\`, "/"), "/")
 	if i := strings.LastIndex(p, "/"); i >= 0 {
 		p = p[i+1:]
@@ -223,7 +228,7 @@ func readClaude(home string) Client {
 		for _, p := range sortedNames(doc.Projects) {
 			ms := doc.Projects[p].MCPServers
 			for _, n := range sortedNames(ms) {
-				c.Servers = append(c.Servers, ms[n].server(n, "project:"+folder(p)))
+				c.Servers = append(c.Servers, ms[n].server(n, "project:"+folder(p, home)))
 			}
 		}
 	}

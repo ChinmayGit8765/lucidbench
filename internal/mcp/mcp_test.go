@@ -178,8 +178,14 @@ func TestFolder(t *testing.T) {
 	for in, want := range map[string]string{
 		`D:\work\shop`: "shop", "/srv/blog/": "blog", "C:/a/b": "b", "/": "(root)", "solo": "solo",
 	} {
-		if got := folder(in); got != want {
+		if got := folder(in, ""); got != want {
 			t.Errorf("folder(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// The home directory itself never shows the user name.
+	for _, in := range []string{`D:\Homes\Alice`, `d:/homes/alice/`} {
+		if got := folder(in, `D:\Homes\Alice`); got != "~" {
+			t.Errorf("folder(%q, home) = %q, want ~", in, got)
 		}
 	}
 }
