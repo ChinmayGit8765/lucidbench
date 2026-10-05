@@ -147,7 +147,7 @@ export function SessionView({ id }: { id: string }) {
   const stop = () =>
     setConfirm({
       title: `Stop ${label}?`,
-      description: "The agent is cancelled where it is. Whatever it already changed stays in the worktree for you to review.",
+      description: "Lucidbench stops the agent's process. Whatever it already changed stays in the worktree; use the refresh on Changes to see anything written after the stop.",
       confirmLabel: "Stop agent",
       danger: true,
       run: async () => {
