@@ -10,10 +10,12 @@ import (
 	"runtime"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
+	"github.com/ChinmayGit8765/lucidbench/internal/council"
 	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
@@ -87,6 +89,7 @@ func New(cfgs ...*config.Config) http.Handler {
 	vault := memory.LazyOpener(cfg)
 	memory.Register(mux, vault)
 	boards.Register(mux, vault)
+	council.Register(mux, council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}))
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
