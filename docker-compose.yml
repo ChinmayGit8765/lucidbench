@@ -3,7 +3,8 @@ services:
     build: .
     image: lucidbench/lucidd:dev
     ports:
-      - "7420:7420"
+      # Published on loopback only; see docs/CONFIG.md, "Network exposure".
+      - "127.0.0.1:7420:7420"
     environment:
       LUCID_ADDR: ":7420"
       LUCID_HOST_HOME: /host-home

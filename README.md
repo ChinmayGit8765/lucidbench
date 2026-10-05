@@ -34,7 +34,7 @@ go vet ./... && go test ./...
 cd web && npm run build
 ```
 
-`LUCID_ADDR` overrides the listen address (default `:7420`). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
+`LUCID_ADDR` overrides the listen address (default `127.0.0.1:7420`, loopback only). To embed the UI in the daemon, run `npm run build` in `web/` before `go build ./cmd/lucidd`.
 
 ## Configuration
 

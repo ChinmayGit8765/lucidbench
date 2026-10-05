@@ -27,7 +27,7 @@ var Themes = []string{"dark", "light", "system"}
 
 // Built-in defaults.
 const (
-	DefaultAddr        = ":7420"
+	DefaultAddr        = "127.0.0.1:7420"
 	DefaultClusterName = "lucidbench"
 	DefaultAgentImage  = "lucidbench/agent:dev"
 	DefaultTheme       = "dark"

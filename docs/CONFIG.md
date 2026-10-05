@@ -52,7 +52,7 @@ is an error that names the file and the key, for example
 
 | Key | Default | Environment override | Notes |
 |---|---|---|---|
-| `server.addr` | `:7420` | `LUCID_SERVER_ADDR`, `LUCID_ADDR` | `host:port` the daemon listens on. The CLI uses it to reach the daemon. |
+| `server.addr` | `127.0.0.1:7420` | `LUCID_SERVER_ADDR`, `LUCID_ADDR` | `host:port` the daemon listens on. The CLI uses it to reach the daemon. Loopback only by default; see [Network exposure](#network-exposure). |
 | `providers.<p>.enabled` | `true` | `LUCID_PROVIDERS_<P>_ENABLED` | `p` is `claude`, `codex`, `grok` or `cursor`. `false` skips detection for that provider. |
 | `providers.<p>.extra_dirs` | `[]` | `LUCID_PROVIDERS_<P>_EXTRA_DIRS` | Extra config directories to scan, for example a second Claude profile. The variable is a path list (`;` on Windows, `:` elsewhere) and replaces the file value. |
 | `cluster.name` | `lucidbench` | `LUCID_CLUSTER_NAME` | Local kind cluster name. Lowercase letters, digits and dashes. |
@@ -97,3 +97,16 @@ Inside the container:
   kubeconfig) in the container's data dir.
 - Host paths written in the file (`extra_dirs`, `vault.path`) are resolved
   inside the container. The host home is visible at `/host-home`.
+
+## Network exposure
+
+`lucidd` has no login of its own, so by default only this machine can reach
+it:
+
+- `server.addr` defaults to `127.0.0.1:7420` (loopback).
+- `docker-compose.yml` publishes the port as `127.0.0.1:7420:7420`. Inside the
+  container the daemon listens on `:7420`, and only the loopback-published
+  port reaches it.
+
+Set `server.addr` to `:7420`, or publish the compose port on every
+interface, only on a network you trust.

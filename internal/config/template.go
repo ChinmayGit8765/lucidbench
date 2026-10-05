@@ -13,8 +13,10 @@ const Template = `# Lucidbench configuration.
 # a reference to an environment variable, written as env:NAME.
 
 server:
-  # Address the daemon (lucidd) listens on, as host:port.
-  addr: ":7420"
+  # Address the daemon (lucidd) listens on, as host:port. The default is
+  # loopback only. ":7420" listens on every interface; the daemon can control
+  # runner containers and re-run CI, so only do that on a network you trust.
+  addr: "127.0.0.1:7420"
 
 providers:
   # For each provider: enabled = false hides it from detection entirely.
