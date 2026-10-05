@@ -115,6 +115,69 @@ docker socket, but the image has no GitHub CLI. Export `GITHUB_TOKEN` in the
 shell that runs `docker compose up` (or put it in a git-ignored `.env`);
 compose passes it through to the container.
 
+## Projects
+
+The Projects page, `lucid projects` and `GET /api/projects` read your own
+project list: what you build, what kind of thing each project is, what builds
+into what, and what each one still needs. The file is yours and never part of
+the repository:
+
+- `<data dir>/projects.yaml` (next to `config.yaml`), or
+- the path in `LUCID_PROJECTS`.
+
+```sh
+lucid projects init        # write the example to the data dir (refuses to overwrite)
+lucid projects             # table grouped by category
+lucid projects show <id>   # one project with its links and needs
+```
+
+The shape is in [`projects.example.yaml`](../projects.example.yaml):
+
+```yaml
+version: 1
+projects:
+  - id: my-app                 # required, unique, lowercase letters, digits, dashes
+    name: My App               # required
+    category: product          # product | portfolio | tool | experiment | coursework
+    type: web-app              # game | web-app | desktop-app | cli | library | service | ml-research | site | video-system
+    status: active             # idea | active | paused | frozen | shipped | archived
+    visibility: public         # public | private | confidential
+    repo: you/my-app           # optional
+    linear: APP-1              # optional, free text
+    summary: One line.         # optional
+    builds_into: [other-id]    # optional
+    needs:                     # optional; status todo | doing | done | blocked
+      - { what: "Release pipeline", from: build-tools, status: doing }
+```
+
+A `tool` is a private project that builds other projects; `builds_into` says
+which. A need's `from` names the project that supplies it. Lucidbench derives
+the reverse links (`built_by`, `needed_by`) and each project's need progress.
+Confidential projects are marked as never sent to AI providers.
+
+A missing file is not an error: the page shows how to create one. Duplicate
+ids, unknown values and references to unknown ids are reported with the
+project id and the field, and the rest of the file still loads. The file is
+re-read on every request, so edits show up on the next refresh.
+
+## MCP servers
+
+The MCP page, `lucid mcp` and `GET /api/mcp` show which MCP servers each
+client can reach, as a matrix. Lucidbench reads, for each server, only its
+name, its transport (`stdio`, `http` or `sse`) and, for remote servers, the
+URL host. Env, headers, arguments, commands, tokens and full URLs are never
+read out, stored or returned.
+
+| Client | Where servers are read |
+|---|---|
+| Claude Code | `~/.claude.json` (`mcpServers`, and each project's `mcpServers`, shown by folder name only), plus `~/.claude/settings.json` |
+| Codex | `$CODEX_HOME/config.toml` or `~/.codex/config.toml`, `[mcp_servers.<name>]` |
+| Grok | `~/.grok/config.toml`, `[mcp_servers.<name>]`; `[compat.claude] mcps = true` (or `cursor`) marks servers it loads from that client |
+| Cursor | `~/.cursor/mcp.json`, `mcpServers` |
+
+Disabled providers (`providers.<p>.enabled: false`) are skipped, and inside
+Docker the host home comes from `LUCID_HOST_HOME`, as for accounts.
+
 ## Containers
 
 `docker-compose.yml` mounts your Lucidbench config directory read-only at
