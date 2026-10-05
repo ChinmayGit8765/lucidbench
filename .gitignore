@@ -29,3 +29,8 @@ Thumbs.db
 .idea/
 .vscode/
 shots/
+
+# Desktop app (Tauri)
+desktop/src-tauri/binaries/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

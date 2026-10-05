@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Splash page only. Remote content (the daemon UI) gets no IPC access.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
