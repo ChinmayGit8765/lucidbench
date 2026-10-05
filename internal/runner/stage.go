@@ -26,7 +26,7 @@ var authFiles = map[string][]string{
 // never leave the machine and are never logged or printed.
 type Staged struct {
 	RunDir    string // <DataDir>/runs/<id>, removed by Finish
-	ConfigDir string // RunDir/home/.<provider>, mounted at the provider's config path
+	ConfigDir string // the provider config dir under RunDir, mounted at the provider's config path
 	WorkDir   string // empty writable dir mounted as the container's cwd
 
 	hostDir string
