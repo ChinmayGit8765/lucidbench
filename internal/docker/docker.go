@@ -196,11 +196,15 @@ func List(ctx context.Context, docker Func, p Policy) ([]Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(cs) > 0 {
-		args := []string{"inspect"}
-		for _, c := range cs {
+	// Start times matter only for running containers; inspecting just those
+	// keeps the call fast on machines with many stopped ones.
+	args := []string{"inspect"}
+	for _, c := range cs {
+		if c.State == "running" {
 			args = append(args, c.ID)
 		}
+	}
+	if len(args) > 1 {
 		// Start times are a nicety; the list stands without them.
 		if out, err := docker(ctx, args...); err == nil {
 			_ = applyStarted(cs, out)

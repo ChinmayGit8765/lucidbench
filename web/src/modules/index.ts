@@ -2,8 +2,10 @@ import { accounts } from "@/modules/accounts"
 import { boards } from "@/modules/boards"
 import { browser } from "@/modules/browser"
 import { cloud } from "@/modules/cloud"
+import { containers } from "@/modules/containers"
 import { council } from "@/modules/council"
 import { databases } from "@/modules/databases"
+import { kubernetes } from "@/modules/kubernetes"
 import { linear } from "@/modules/linear"
 import { mcp } from "@/modules/mcp"
 import { memory } from "@/modules/memory"
@@ -40,6 +42,8 @@ export const MODULES: ModuleDef[] = [
   settings,
   // Extensions: added from Settings › Extensions.
   runners,
+  containers,
+  kubernetes,
   cloud,
   databases,
   payments,
