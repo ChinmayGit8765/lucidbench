@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState, type ReactNode } from "react"
+import { lazy, useEffect, useState } from "react"
 import { ArrowRight, FileDiff, KanbanSquare, Play, SquareTerminal, TriangleAlert } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
@@ -10,7 +10,7 @@ import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { useNow } from "@/lib/time"
 import { elapsedOf, formatElapsed, needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function WorkTile() {
   const { open } = useApp()
@@ -106,26 +106,20 @@ function useWorkCommands(paletteOpen: boolean): Command[] {
   ]
 }
 
-export interface WorkAttention {
-  key: string
-  icon: ReactNode
-  title: ReactNode
-  meta: ReactNode
-  action?: ReactNode
-}
-
-/** Needs attention: finished sessions whose diff waits for review. */
-export function useWorkAttention(): WorkAttention[] {
+/** Needs attention: finished or failed sessions whose diff waits for review. */
+function useWorkAttention(): AttentionItem[] | null {
   const { open } = useApp()
   const poll = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 4)
-  return (poll.data ?? [])
+  if (!poll.data) return poll.error ? [] : null
+  return poll.data
     .filter(needsReview)
     .slice(0, 6)
-    .map((s) => {
+    .map((s): AttentionItem => {
       const d = s.diff
       const failed = s.status === "failed"
       return {
         key: `work-${s.id}`,
+        severity: failed ? "danger" : "info",
         icon: failed ? <TriangleAlert className="size-3.5 text-danger" /> : <FileDiff className="size-3.5 text-info" />,
         title: (
           <>
@@ -161,4 +155,5 @@ export const work: ModuleDef = {
   component: lazy(() => import("@/pages/Work")),
   useCommands: useWorkCommands,
   overviewTile: WorkTile,
+  useAttention: useWorkAttention,
 }

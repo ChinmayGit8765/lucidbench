@@ -82,6 +82,12 @@ Concurrent polls of the same path share one request.
 - `useCommands(paletteOpen)`: a hook returning palette commands. It runs on
   every render for every module, in a fixed order, so fetch only while
   `paletteOpen` is true. A command with `children` opens a nested list.
+- `useAttention()`: a hook returning Overview's "Needs attention" entries
+  (`AttentionItem[]`, or `null` until its first load answers). Each entry has
+  a `severity`: `danger` (something broke), `warning` (something will block
+  you) or `info` (your move in the loop). Overview sorts all modules' entries
+  by severity and shows only those of modules in the sidebar. Like
+  `useCommands`, it runs on every Overview render for every module.
 - `requires`: `clis` (an entry `"a|b"` is satisfied by either), `mcp`
   (matched against the MCP servers page), `env` (presence of a variable,
   never its value), `docker`, `anyOf` (any one requirement is enough) and

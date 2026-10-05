@@ -1,14 +1,15 @@
 import { lazy, useEffect, useState } from "react"
-import { FileText, PenLine, Vote } from "lucide-react"
+import { ArrowRight, FileText, PenLine, Vote } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { StatTile } from "@/components/StatTile"
 import { StatusPill } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { COMPOSE_EVENT, COUNCIL_POLL_MS, SESSIONS_PATH, STATUS, type CouncilSummary } from "@/lib/council"
+import { councilAttention, COUNCIL_POLL_MS, newBraindump, SESSIONS_PATH, STATUS, type CouncilSummary } from "@/lib/council"
 import { cn } from "@/lib/utils"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 const DOT: Record<CouncilSummary["status"], string> = {
   running: "bg-info",
@@ -85,11 +86,7 @@ function useCouncilCommands(paletteOpen: boolean): Command[] {
       icon: PenLine,
       hint: "Council",
       keywords: "council brief idea dump plan clarify",
-      run: () => {
-        open("council")
-        // The page may already be open; ask it to focus the composer.
-        setTimeout(() => window.dispatchEvent(new Event(COMPOSE_EVENT)), 50)
-      },
+      run: () => newBraindump(open),
     },
     ...list
       .filter((s) => s.status === "draft")
@@ -106,6 +103,25 @@ function useCouncilCommands(paletteOpen: boolean): Command[] {
   ]
 }
 
+/** Needs attention: every brief that waits for the user's approval. */
+function useCouncilAttention(): AttentionItem[] | null {
+  const { open } = useApp()
+  const poll = usePoll<CouncilSummary[]>(SESSIONS_PATH, COUNCIL_POLL_MS)
+  if (!poll.data) return poll.error ? [] : null
+  return councilAttention(poll.data).map((a): AttentionItem => ({
+    key: a.key,
+    severity: "info",
+    icon: <FileText className="size-3.5 text-warning" />,
+    title: a.title,
+    meta: a.meta,
+    action: (
+      <Button variant="ghost" size="sm" onClick={() => open("council", [a.id])}>
+        Review <ArrowRight />
+      </Button>
+    ),
+  }))
+}
+
 export const council: ModuleDef = {
   id: "council",
   title: "Council",
@@ -120,4 +136,5 @@ export const council: ModuleDef = {
   component: lazy(() => import("@/pages/Council")),
   useCommands: useCouncilCommands,
   overviewTile: CouncilTile,
+  useAttention: useCouncilAttention,
 }

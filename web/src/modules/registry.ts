@@ -1,6 +1,6 @@
 import type { Prefs } from "@/lib/prefs"
 import { MODULES } from "@/modules"
-import type { ModuleDef } from "@/modules/types"
+import { SEVERITY_RANK, type AttentionItem, type ModuleDef } from "@/modules/types"
 
 export const moduleById = (id: string): ModuleDef | undefined => MODULES.find((m) => m.id === id)
 
@@ -66,3 +66,20 @@ export function matchPath(pathname: string): { module: ModuleDef | undefined; su
 
 export const pathFor = (m: ModuleDef, sub: string[] = []) =>
   (m.route === "/" ? "/" : m.route) + (sub.length ? `/${sub.map(encodeURIComponent).join("/")}` : "")
+
+/**
+ * Overview's "Needs attention": every module's entries, most urgent first.
+ * Each module's hook runs on every render in a fixed order (the rules of
+ * hooks); entries of modules that cannot be opened are dropped. Loading
+ * stays true until every openable module has answered once.
+ */
+export function useAttention(prefs: Prefs): { items: AttentionItem[]; loading: boolean } {
+  const per = MODULES.map((m) => ({ m, items: m.useAttention ? m.useAttention() : [] }))
+  const live = per.filter(({ m }) => isOpenable(m, prefs))
+  const items = live
+    .flatMap(({ items }) => items ?? [])
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => SEVERITY_RANK[x.a.severity] - SEVERITY_RANK[y.a.severity] || x.i - y.i)
+    .map(({ a }) => a)
+  return { items, loading: live.some(({ items }) => items === null) }
+}

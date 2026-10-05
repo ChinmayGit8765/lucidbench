@@ -1,4 +1,4 @@
-import type { ComponentType, LazyExoticComponent } from "react"
+import type { ComponentType, LazyExoticComponent, ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
@@ -64,4 +64,27 @@ export interface ModuleDef {
   useCommands?: (paletteOpen: boolean) => Command[]
   /** A stat tile for the Overview grid; it should link back to the module. */
   overviewTile?: ComponentType
+  /**
+   * Overview's "Needs attention" entries. A hook, called for every module on
+   * every Overview render in a fixed order; Overview keeps only the entries
+   * of modules that can be opened. Return null until the first load is in.
+   */
+  useAttention?: () => AttentionItem[] | null
+}
+
+/** How urgent an attention entry is: broken, about to block you, or your move. */
+export type AttentionSeverity = "danger" | "warning" | "info"
+
+export const SEVERITY_RANK: Record<AttentionSeverity, number> = { danger: 0, warning: 1, info: 2 }
+
+/** One "Needs attention" row on Overview. */
+export interface AttentionItem {
+  /** Unique across modules; prefix it with the module id. */
+  key: string
+  severity: AttentionSeverity
+  icon: ReactNode
+  title: ReactNode
+  meta: ReactNode
+  /** Buttons on the right; at least one should take the user to the fix. */
+  action?: ReactNode
 }

@@ -1,12 +1,13 @@
 import { lazy } from "react"
-import { Plus, Users } from "lucide-react"
+import { ArrowRight, KeyRound, Plus, Users } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { ProviderTile, PROVIDERS } from "@/components/ProviderMark"
 import { StatTile } from "@/components/StatTile"
+import { Button } from "@/components/ui/button"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 import type { Account } from "@/pages/Accounts"
 
 function AccountsTile() {
@@ -58,6 +59,29 @@ function useAccountCommands(): Command[] {
   ]
 }
 
+/** Needs attention: sign-ins that expired, so Council and Work cannot use them. */
+function useAccountAttention(): AttentionItem[] | null {
+  const { open } = useApp()
+  const poll = usePoll<Account[]>("/api/accounts", 15000)
+  if (!poll.data) return poll.error ? [] : null
+  return poll.data
+    .filter((a) => a.status === "expired")
+    .map(
+      (a): AttentionItem => ({
+        key: `acc-${a.provider}-${a.name}`,
+        severity: "warning",
+        icon: <KeyRound className="size-3.5 text-warning" />,
+        title: <>{PROVIDERS.find((p) => p.id === a.provider)?.label ?? a.provider} sign-in expired</>,
+        meta: <span className="font-mono">{a.name}</span>,
+        action: (
+          <Button variant="ghost" size="sm" onClick={() => open("accounts")}>
+            Fix <ArrowRight />
+          </Button>
+        ),
+      }),
+    )
+}
+
 export const accounts: ModuleDef = {
   id: "accounts",
   title: "Accounts",
@@ -72,4 +96,5 @@ export const accounts: ModuleDef = {
   component: lazy(() => import("@/pages/Accounts")),
   useCommands: useAccountCommands,
   overviewTile: AccountsTile,
+  useAttention: useAccountAttention,
 }
