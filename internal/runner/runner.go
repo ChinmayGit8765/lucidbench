@@ -31,15 +31,19 @@ func ValidProvider(p string) bool { _, ok := providers[p]; return ok }
 // ValidProfile reports whether name is a legal profile name.
 func ValidProfile(name string) bool { return nameRe.MatchString(name) }
 
-// Command returns the non-interactive command line for a provider.
+// Command returns the non-interactive command line for a provider. The flags
+// give a clean, cheap run: no user settings, hooks, MCP servers or saved
+// sessions, even when a volume profile carries its own config.
 func Command(provider, prompt string) ([]string, error) {
 	switch provider {
 	case "claude":
-		return []string{"claude", "-p", prompt}, nil
+		return []string{"claude", "--safe-mode", "--strict-mcp-config", "--setting-sources", "",
+			"--no-session-persistence", "-p", prompt}, nil
 	case "codex":
-		return []string{"codex", "exec", "--skip-git-repo-check", prompt}, nil
+		return []string{"codex", "exec", "--skip-git-repo-check", "--ephemeral",
+			"--ignore-user-config", "--ignore-rules", prompt}, nil
 	case "grok":
-		return []string{"grok", "-p", prompt}, nil
+		return []string{"grok", "--no-subagents", "-p", prompt}, nil
 	}
 	return nil, fmt.Errorf("unknown provider %q (want claude, codex or grok)", provider)
 }
@@ -66,22 +70,30 @@ func DockerPath(p string) string {
 	return strings.ReplaceAll(p, `\`, "/")
 }
 
-// Args builds the arguments after `docker` for a run. home is the host home
-// dir, used only when profile is HostProfile.
-func Args(provider, profile, prompt, home string) ([]string, error) {
+// WorkPath is the container working directory, mounted from an empty host dir.
+const WorkPath = "/work"
+
+// Args builds the arguments after `docker` for a run. For HostProfile, st is
+// the staged auth-only config dir (see Stage); it is mounted instead of the
+// host's own config dir. For volume profiles st may be nil.
+func Args(provider, profile, prompt string, st *Staged) ([]string, error) {
 	cmd, err := Command(provider, prompt)
 	if err != nil {
 		return nil, err
 	}
-	var src string
+	args := []string{"run", "--rm", "-i"}
 	if profile == HostProfile {
-		src = DockerPath(HostDir(home, provider))
+		if st == nil {
+			return nil, fmt.Errorf("host profile needs a staged config dir")
+		}
+		args = append(args, "-v", DockerPath(st.ConfigDir)+":"+MountPath(provider),
+			"-v", DockerPath(st.WorkDir)+":"+WorkPath)
 	} else {
 		if !ValidProfile(profile) {
 			return nil, fmt.Errorf("invalid profile name %q", profile)
 		}
-		src = VolumeName(provider, profile)
+		args = append(args, "-v", VolumeName(provider, profile)+":"+MountPath(provider))
 	}
-	args := []string{"run", "--rm", "-i", "-v", src + ":" + MountPath(provider), Image}
+	args = append(args, Image)
 	return append(args, cmd...), nil
 }

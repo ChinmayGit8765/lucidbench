@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/runner"
 )
 
@@ -31,25 +32,32 @@ func runCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	dockerArgs, err := runner.Args(provider, *profile, prompt, home)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 2
-	}
 	lockPath, err := runner.LockPath(provider, *profile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	lock, err := runner.Acquire(lockPath)
+	dataDir, err := config.DataDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: cannot run %s with profile %q: %v\n", provider, *profile, err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	defer lock.Release()
 	// One-shot headless prompt: give the container an empty stdin so CLIs
 	// that append piped stdin to the prompt (codex) do not wait on the terminal.
-	return runDocker(dockerArgs, false)
+	code, refreshed, err := runner.Run(runner.Options{
+		Provider: provider, Profile: *profile, Prompt: prompt,
+		Home: home, DataDir: dataDir, LockPath: lockPath,
+	}, func(dockerArgs []string) int { return runDocker(dockerArgs, false) })
+	for _, n := range refreshed {
+		fmt.Fprintf(os.Stderr, "note: %s refreshed its login; copied %s back to the host\n", provider, n)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	return code
 }
 
 // imageCmd implements `lucid image build`.
