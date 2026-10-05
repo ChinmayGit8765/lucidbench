@@ -6,6 +6,7 @@ import {
   CircleCheck,
   Container as ContainerIcon,
   ExternalLink,
+  Gauge,
   KeyRound,
   OctagonAlert,
   Play,
@@ -46,6 +47,7 @@ import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
 import { usePrefs } from "@/lib/prefs"
 import { blockedNeeds, PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
+import { resetsIn, usageAlerts, useUsageSummary } from "@/lib/usage"
 import { cn, isMac } from "@/lib/utils"
 import { isOpenable, moduleById, navOrder } from "@/modules/registry"
 import type { Account } from "@/pages/Accounts"
@@ -108,6 +110,7 @@ export default function Overview() {
   const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
   const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
   const projectsPoll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
+  const usagePoll = useUsageSummary()
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [helloBusy, setHelloBusy] = useState(false)
 
@@ -253,6 +256,23 @@ export default function Overview() {
       action: (
         <Button variant="ghost" size="sm" onClick={() => open("accounts")}>
           Fix <ArrowRight />
+        </Button>
+      ),
+    })
+  }
+  for (const a of usageAlerts(usagePoll.data)) {
+    attention.push({
+      key: `usage-${a.provider}-${a.window.name}`,
+      icon: <Gauge className="size-3.5 text-warning" />,
+      title: (
+        <>
+          {a.providerLabel} {a.window.label} {label("usage_meter", "usage")} at {Math.round(a.percent)}%
+        </>
+      ),
+      meta: resetsIn(a.window.resets_at, now) ? `resets in ${resetsIn(a.window.resets_at, now)}` : "reset time unknown",
+      action: (
+        <Button variant="ghost" size="sm" onClick={() => open("usage")}>
+          View <ArrowRight />
         </Button>
       ),
     })
