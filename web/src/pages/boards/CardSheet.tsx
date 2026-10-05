@@ -18,9 +18,9 @@ import { toast } from "sonner"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet } from "@/components/ui/dialog"
-import { ApiError, errorMessage, getJSON, sendJSON } from "@/lib/api"
+import { ApiError, errorMessage, getJSON } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { boardsApi, labelColor, type Board, type Card, type CardFields } from "@/lib/boards"
+import { boardsApi, DEFAULT_BOARD, labelColor, type Board, type Card, type CardFields } from "@/lib/boards"
 import { baseName, memoryApi, pageRoute, safeName, type Hit } from "@/lib/memory"
 import type { ProjectList } from "@/lib/projects"
 import { cn } from "@/lib/utils"
@@ -51,7 +51,6 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
   const [title, setTitle] = useState(card.title)
   const [projects, setProjects] = useState<string[]>([])
   const [work, setWork] = useState<WorkState>("unknown")
-  const [starting, setStarting] = useState(false)
   const [linking, setLinking] = useState(false)
 
   useEffect(() => setTitle(card.title), [card.title])
@@ -90,24 +89,11 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
     }
   }
 
-  const startWork = async () => {
-    if (!card.project) {
-      toast.error("Pick a project first", { description: "Work runs in a project's checkout." })
-      return
-    }
-    setStarting(true)
-    try {
-      const s = await sendJSON<{ id?: string }>("/api/work/sessions", "POST", { card: card.id, project: card.project })
-      toast.success("Work started", { description: s?.id ? `Session ${s.id}` : undefined })
-      if (s?.id) void save({ work: s.id })
-      open("work", s?.id ? [s.id] : [])
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) setWork("missing")
-      toast.error("Could not start work", { description: errorMessage(e) })
-    } finally {
-      setStarting(false)
-    }
-  }
+  // A run spends tokens on an account the user picks, so "Start work" opens
+  // Work's new-session page with this card chosen; Work starts the session
+  // (POST /api/work/sessions) once a provider is picked and confirmed.
+  const onWorkBoard = board.id === DEFAULT_BOARD
+  const startWork = () => open("work", ["new", card.id])
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -149,8 +135,13 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
             <SquareTerminal /> Work not available
           </Button>
         ) : (
-          <Button size="sm" disabled={work !== "ready" || starting} onClick={() => void startWork()} title={card.project ? undefined : "Pick a project first"}>
-            <Play /> {starting ? "Starting" : "Start work"}
+          <Button
+            size="sm"
+            disabled={work !== "ready" || !onWorkBoard}
+            onClick={startWork}
+            title={onWorkBoard ? "Pick a provider and start an agent on this card" : "Work starts from cards on the work board"}
+          >
+            <Play /> Start work
           </Button>
         )}
       </div>

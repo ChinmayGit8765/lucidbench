@@ -52,6 +52,12 @@ const EMOJI = [
 
 type SaveState = "saved" | "dirty" | "saving" | "error"
 
+/**
+ * A page renamed from its first title remounts under its new path; this
+ * names the page whose body should take the cursor when it does.
+ */
+let focusBodyOf: string | null = null
+
 export interface PageViewProps {
   path: string
   vaultRoot: string | null
@@ -127,6 +133,12 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
   const [backlinks, setBacklinks] = useState<string[] | null>(null)
   const [picker, setPicker] = useState<"icon" | "cover" | null>(null)
   const titleRef = useRef<HTMLTextAreaElement>(null)
+  const wantBody = useRef(false)
+  const [focusBody] = useState(() => {
+    const on = focusBodyOf === page.path
+    if (on) focusBodyOf = null
+    return on
+  })
 
   // What is on disk vs what to write. The body is only sent once the editor
   // changed it, so a properties edit never reformats an Obsidian page.
@@ -237,6 +249,12 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
     await flush()
     const to = await onRename(page.path, title.trim())
     if (to) {
+      // Nothing more goes to the old path; the page reopens under the new one.
+      if (timer.current) {
+        clearTimeout(timer.current)
+        timer.current = null
+      }
+      if (wantBody.current) focusBodyOf = to
       openPath(to)
       return
     }
@@ -369,6 +387,8 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault()
+                // If this blur renames the page, the body takes focus after it reopens.
+                wantBody.current = true
                 ;(document.querySelector(".lb-prose") as HTMLElement | null)?.focus()
               }
             }}
@@ -406,6 +426,7 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
             onOpenLink={onOpenLink}
             findPages={(q) => findPages(q, page.path)}
             onCreatePage={onCreatePage}
+            autoFocus={focusBody}
           />
         </Suspense>
 

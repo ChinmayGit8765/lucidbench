@@ -70,6 +70,8 @@ interface Props {
   findPages: (query: string) => Promise<LinkItem[]>
   /** A "[[" pick that should create its page first. */
   onCreatePage?: (item: LinkItem) => Promise<void>
+  /** Put the cursor in the body once the editor is up. */
+  autoFocus?: boolean
   className?: string
 }
 
@@ -302,7 +304,7 @@ function blockHandle(ctx: Ctx): BlockProvider {
 
 /* ---------- the component ---------- */
 
-export default function MemoryEditor({ initial, onChange, onReady, onOpenLink, findPages, onCreatePage, className }: Props) {
+export default function MemoryEditor({ initial, onChange, onReady, onOpenLink, findPages, onCreatePage, autoFocus, className }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
   const [trigger, setTrigger] = useState<Trigger | null>(null)
@@ -436,6 +438,10 @@ export default function MemoryEditor({ initial, onChange, onReady, onOpenLink, f
           provider.update()
           const view = ctx.get(editorViewCtx)
           cb.current.onReady?.(ctx.get(serializerCtx)(view.state.doc))
+          if (autoFocus) {
+            view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)))
+            view.focus()
+          }
         })
       })
       .catch((e) => console.error("editor failed to start", e))
