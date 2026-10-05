@@ -27,43 +27,88 @@ export async function getJSON<T>(path: string): Promise<T> {
   return (await request(path)).json() as Promise<T>
 }
 
+/**
+ * POSTs to an action endpoint. Actions that change things on the machine
+ * (containers, CI) require the X-Lucid-Confirm header, which only this UI
+ * sends; see docs/CONFIG.md.
+ */
+export async function postAction<T>(path: string): Promise<T> {
+  return (await request(path, { method: "POST", headers: { "X-Lucid-Confirm": "yes" } })).json() as Promise<T>
+}
+
+/** The message of any thrown value. */
+export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+const REFRESH_EVENT = "lucidbench:refresh"
+
+/** Asks every mounted poll to reload now (the header refresh button, ⌘K). */
+export function refreshAll() {
+  window.dispatchEvent(new Event(REFRESH_EVENT))
+}
+
 export interface Polled<T> {
   data: T | null
   error: ApiError | null
   loading: boolean
+  /** A load is in flight (first load or refresh). */
+  refreshing: boolean
+  /** When the last successful load finished (ms epoch). */
+  updatedAt: number | null
   refresh: () => void
 }
 
-/** Fetches JSON now and every intervalMs; keeps the last good data on errors. */
+/**
+ * Fetches JSON now and every intervalMs; keeps the last good data on errors.
+ * Polling pauses while the tab is hidden and catches up when it returns.
+ */
 export function usePoll<T>(path: string, intervalMs = 10000): Polled<T> {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<ApiError | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const alive = useRef(true)
+  const inflight = useRef<string | null>(null)
 
   const load = useCallback(async () => {
+    if (inflight.current === path) return
+    inflight.current = path
+    setRefreshing(true)
     try {
       const body = await getJSON<T>(path)
       if (!alive.current) return
       setData(body)
       setError(null)
+      setUpdatedAt(Date.now())
     } catch (e) {
       if (!alive.current) return
       setError(e instanceof ApiError ? e : new ApiError(0, String(e)))
     } finally {
-      if (alive.current) setLoading(false)
+      if (inflight.current === path) inflight.current = null
+      if (alive.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [path])
 
   useEffect(() => {
     alive.current = true
     void load()
-    const id = setInterval(() => void load(), intervalMs)
+    const id = setInterval(() => {
+      if (document.visibilityState !== "hidden") void load()
+    }, intervalMs)
+    const onVisible = () => document.visibilityState === "visible" && void load()
+    const onRefresh = () => void load()
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener(REFRESH_EVENT, onRefresh)
     return () => {
       alive.current = false
       clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener(REFRESH_EVENT, onRefresh)
     }
   }, [load, intervalMs])
 
-  return { data, error, loading, refresh: () => void load() }
+  return { data, error, loading, refreshing, updatedAt, refresh: () => void load() }
 }

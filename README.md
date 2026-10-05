@@ -114,7 +114,7 @@ The daemon serves the same data at `GET /api/ci/summary`, `GET /api/ci/runners` 
 
 ## Web UI
 
-The UI at <http://localhost:7420> has an Accounts page (every detected account, grouped by provider) and a System page (daemon, cluster and jobs, with a log viewer). It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
+The UI at <http://localhost:7420> opens on an Overview: AI accounts, runners, CI health with a pass rate and recent-run bars, the cluster, a "needs attention" list (failed runs with a re-run button, offline runners, stopped runner containers, expired sign-ins), recent activity and quick actions. Runners & CI shows the runner fleet with container controls (each asks before it acts) and every recent workflow run; Accounts groups every detected account by provider; System covers the daemon, cluster and jobs, with a log viewer. Press Ctrl+K (⌘K on macOS) for the command palette. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
 
 Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

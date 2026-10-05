@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-interface Account {
+export interface Account {
   provider: string
   name: string
   location: "host" | "volume" | "env"
@@ -315,7 +315,7 @@ function AccountsSkeleton() {
   )
 }
 
-function AddAccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AddAccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [provider, setProvider] = useState(LOGIN_PROVIDERS[0].id)
   const [name, setName] = useState("")
   const valid = NAME_RE.test(name)
@@ -388,9 +388,9 @@ function AddAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
   )
 }
 
-export default function Accounts() {
+export default function Accounts({ onAdd }: { onAdd: () => void }) {
   const { data, error, loading, refresh } = usePoll<Account[]>("/api/accounts")
-  const [adding, setAdding] = useState(false)
+
 
   const all = data ?? []
   const keys = all.filter((a) => a.location === "env")
@@ -402,10 +402,11 @@ export default function Accounts() {
   return (
     <div className="space-y-8">
       <PageHeader
+        icon={<Users />}
         title="Accounts"
         description="Your Claude, Codex, Grok and Cursor accounts in one place. Detected by presence only; tokens are never read."
         actions={
-          <Button onClick={() => setAdding(true)}>
+          <Button onClick={onAdd}>
             <Plus /> Add account
           </Button>
         }
@@ -429,7 +430,7 @@ export default function Accounts() {
             title="No accounts detected"
             description="Sign in to a provider CLI on this machine, or add a profile, and it shows up here within a few seconds."
           >
-            <Button onClick={() => setAdding(true)}>
+            <Button onClick={onAdd}>
               <Plus /> Add account
             </Button>
           </EmptyState>
@@ -443,7 +444,7 @@ export default function Accounts() {
       ))}
       {keys.length > 0 && <Section title="API keys" subtitle="from the environment" accounts={keys} />}
 
-      <AddAccountDialog key={String(adding)} open={adding} onClose={() => setAdding(false)} />
+
     </div>
   )
 }

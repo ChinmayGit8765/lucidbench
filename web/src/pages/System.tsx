@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react"
 import {
+  Activity,
   Boxes,
   ChevronRight,
   Copy,
@@ -11,7 +12,6 @@ import {
   Server,
   type LucideIcon,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import { copyText, CopyCommand } from "@/components/CopyCommand"
 import { PageHeader } from "@/components/Shell"
@@ -22,21 +22,9 @@ import { Sheet } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { ApiError, request, usePoll, type Polled } from "@/lib/api"
 import type { Health } from "@/lib/health"
+import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
-
-interface ClusterInfo {
-  name: string
-  running: boolean
-  kubeconfig_present: boolean
-}
-
-interface Job {
-  name: string
-  image: string
-  status: string
-  createdAt: string
-}
 
 const JOB_TONE: Record<string, Tone> = {
   Completed: "success",
@@ -312,18 +300,8 @@ function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunnin
 
   const runHello = async () => {
     setBusy(true)
-    const id = toast.loading("Submitting hello job")
-    try {
-      const res = await request("/api/jobs/hello", { method: "POST" })
-      const body = (await res.json()) as { name: string }
-      toast.success("Hello job submitted", { id, description: body.name })
-      refresh()
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : String(e)
-      toast.error("Could not submit the job", { id, description: msg })
-    } finally {
-      setBusy(false)
-    }
+    await runHelloJob()
+    setBusy(false)
   }
 
   const unavailable = error?.status === 503 || clusterRunning === false
@@ -392,7 +370,7 @@ export default function System({ health }: { health: Health | null | undefined }
   const jobs = usePoll<Job[]>("/api/jobs")
   return (
     <div className="space-y-6">
-      <PageHeader title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
+      <PageHeader icon={<Activity />} title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
       <Tiles health={health} cluster={cluster} jobs={jobs} />
       {cluster.error && !cluster.data && (
         <ErrorState
