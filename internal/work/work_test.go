@@ -61,9 +61,11 @@ func fakeClaude(mode string) int {
 	in, _ := io.ReadAll(os.Stdin)
 	if log := os.Getenv("LUCID_WORK_LOG"); log != "" {
 		wd, _ := os.Getwd()
-		rec, _ := json.Marshal(m{"args": os.Args[1:], "stdin": string(in), "cwd": wd})
+		rec, _ := json.Marshal(m{"args": os.Args[1:], "stdin": string(in), "cwd": wd, "tmp": os.Getenv("TMP"), "temp": os.Getenv("TEMP"), "tmpdir": os.Getenv("TMPDIR")})
 		_ = os.WriteFile(log, rec, 0o600)
 	}
+	// Scratch files go where the temp variables point.
+	_ = os.WriteFile(filepath.Join(os.Getenv("TEMP"), "scratch.txt"), []byte("x"), 0o600)
 	out(m{"type": "system", "subtype": "init"})
 	out(m{"type": "assistant", "message": m{"content": []any{
 		m{"type": "text", "text": "I'll add the line."},
@@ -354,6 +356,25 @@ func TestFreePromptAndHarness(t *testing.T) {
 	if !strings.Contains(string(data), "--safe-mode") || !strings.Contains(string(data), "Say hello in the README") {
 		t.Errorf("clean harness call: %s", data)
 	}
+	// The agent's temp folder is inside its worktree, ignored by git, and gone
+	// once the run ends.
+	var call struct{ Tmp, Temp, Tmpdir string }
+	_ = json.Unmarshal(data, &call)
+	wantTmp := filepath.Join(se.Worktree, tmpDirName)
+	if call.Tmp != wantTmp || call.Temp != wantTmp || call.Tmpdir != wantTmp {
+		t.Errorf("temp variables %+v, want all %s", call, wantTmp)
+	}
+	if _, err := os.Stat(wantTmp); !os.IsNotExist(err) {
+		t.Errorf("%s was not removed: %v", wantTmp, err)
+	}
+	if se.Diff == nil || len(se.Diff.Uncommitted) != 0 {
+		t.Errorf("uncommitted after a clean run: %+v", se.Diff)
+	}
+	if ex, _ := git(se.Worktree, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"); ex != "" {
+		if b, _ := os.ReadFile(filepath.FromSlash(ex)); !excludes(string(b), tmpDirName) {
+			t.Errorf("info/exclude does not list %s", tmpDirName)
+		}
+	}
 	// No origin/HEAD: the current branch is the base.
 	if se.BaseRef != "main" {
 		t.Errorf("base %s", se.BaseRef)
@@ -408,6 +429,9 @@ func TestStop(t *testing.T) {
 	}
 	if got.Status != StatusStopped || got.Ended == nil || time.Since(start) > 14*time.Second {
 		t.Errorf("after stop: %s in %s", got.Status, time.Since(start))
+	}
+	if got.Usage == nil || !strings.Contains(got.Usage.Note, "stopped before the CLI reported its final cost") {
+		t.Errorf("a stopped session needs a usage note: %+v", got.Usage)
 	}
 	if _, err := f.svc.Stop(se.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("second stop: %v", err)

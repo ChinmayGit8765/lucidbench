@@ -10,6 +10,7 @@ import {
   Lock,
   Play,
   ShieldCheck,
+  TriangleAlert,
   UserCog,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -30,6 +31,7 @@ import {
   branchPreview,
   defaultHarness,
   homeHint,
+  SANDBOX_NOTICE,
   startSession,
   WORK_PROVIDERS,
   type Harness,
@@ -396,6 +398,10 @@ export function NewSession({ card: initialCard }: { card?: string }) {
           <p className="flex items-start gap-1.5 px-1 text-2xs leading-4 text-subtle-foreground">
             <GitBranch className="mt-px size-3 shrink-0" />
             The agent is told to work only in its worktree, commit as it goes, and never push.
+          </p>
+          <p className="flex items-start gap-1.5 px-1 text-2xs leading-4 text-subtle-foreground">
+            <TriangleAlert className="mt-px size-3 shrink-0" />
+            {SANDBOX_NOTICE}
           </p>
         </div>
       </div>

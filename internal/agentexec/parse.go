@@ -117,13 +117,25 @@ type claudeParser struct {
 	last  []byte
 	text  string
 	isErr bool
+	// partial is the usage each assistant message reported so far, by message
+	// id, for a run that ends before its final "result" line.
+	partial map[string]partialUsage
 }
+
+type partialUsage struct{ in, out, cacheRead, cacheWrite int64 }
 
 func (p *claudeParser) line(b []byte) {
 	var m struct {
 		Type    string `json:"type"`
 		Message struct {
+			ID      string            `json:"id"`
 			Content []json.RawMessage `json:"content"`
+			Usage   *struct {
+				In         int64 `json:"input_tokens"`
+				Out        int64 `json:"output_tokens"`
+				CacheRead  int64 `json:"cache_read_input_tokens"`
+				CacheWrite int64 `json:"cache_creation_input_tokens"`
+			} `json:"usage"`
 		} `json:"message"`
 	}
 	if json.Unmarshal(b, &m) != nil {
@@ -131,6 +143,12 @@ func (p *claudeParser) line(b []byte) {
 	}
 	switch m.Type {
 	case "assistant":
+		if u := m.Message.Usage; u != nil && m.Message.ID != "" {
+			if p.partial == nil {
+				p.partial = map[string]partialUsage{}
+			}
+			p.partial[m.Message.ID] = partialUsage{u.In, u.Out, u.CacheRead, u.CacheWrite}
+		}
 		for _, raw := range m.Message.Content {
 			var blk struct {
 				Type  string          `json:"type"`
@@ -229,6 +247,13 @@ func (p *claudeParser) finish() {}
 
 func (p *claudeParser) result(u *Usage) (string, bool, []string) {
 	if len(p.last) == 0 {
+		// No final line: the run was cut short. Report what was streamed.
+		for _, pu := range p.partial {
+			u.InputTokens += pu.in
+			u.OutputTokens += pu.out
+			u.CacheRead += pu.cacheRead
+			u.CacheWrite += pu.cacheWrite
+		}
 		return "", false, nil
 	}
 	text, isErr := parseClaude(p.last, u)
