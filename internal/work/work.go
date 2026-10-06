@@ -110,11 +110,13 @@ type Session struct {
 	Ended   *time.Time       `json:"ended,omitempty"`
 	Usage   *agentexec.Usage `json:"usage,omitempty"`
 	Answer  string           `json:"answer,omitempty"`
-	Events  int              `json:"events"`
-	Diff    *Diff            `json:"diff,omitempty"`
-	PR      string           `json:"pr_url,omitempty"`
-	Pushed  bool             `json:"pushed,omitempty"`
-	Removed bool             `json:"removed,omitempty"`
+	// AllowedCommands are the shell commands the agent may run without asking.
+	AllowedCommands []string `json:"allowed_commands,omitempty"`
+	Events          int      `json:"events"`
+	Diff            *Diff    `json:"diff,omitempty"`
+	PR              string   `json:"pr_url,omitempty"`
+	Pushed          bool     `json:"pushed,omitempty"`
+	Removed         bool     `json:"removed,omitempty"`
 }
 
 // StartRequest is the body of POST /api/work/sessions.
@@ -129,6 +131,10 @@ type StartRequest struct {
 	// skills) or "clean". Empty means mine for claude, clean for the others.
 	Harness string `json:"harness,omitempty"`
 	Model   string `json:"model,omitempty"`
+	// AllowedCommands replaces the project's default list for this session:
+	// plain command prefixes such as "go" or "git status". Nil means the
+	// default (see DefaultAllowed); an empty list allows only the base set.
+	AllowedCommands []string `json:"allowed_commands,omitempty"`
 }
 
 // Service runs and keeps the sessions.
@@ -468,6 +474,10 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		return Session{}, errf(ErrBadRequest, "%s is not on PATH; install it and sign in with `%s`", req.Provider, agentexec.Logins[req.Provider])
 	}
 
+	allowed, err := sessionAllowed(&req, t.project)
+	if err != nil {
+		return Session{}, err
+	}
 	id := newID()
 	wt, err := createWorktree(t.project.LocalPath, id, slug(t.title))
 	if err != nil {
@@ -477,7 +487,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		ID: id, Provider: req.Provider, Profile: req.Profile, Harness: req.Harness, Project: t.project.ID,
 		RepoPath: wt.repo, RepoHint: s.hint(wt.repo), Branch: wt.branch, BaseRef: wt.baseRef, BaseSHA: wt.baseSHA,
 		Worktree: wt.path, WorktreeHint: s.hint(wt.path), Title: t.title, Prompt: prompt(t, req.Prompt),
-		Board: t.board, Brief: t.brief, Status: StatusRunning, Started: time.Now().UTC(),
+		Board: t.board, Brief: t.brief, AllowedCommands: allowed, Status: StatusRunning, Started: time.Now().UTC(),
 	}
 	if t.card != nil {
 		se.Card = t.card.ID
@@ -506,6 +516,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	areq := agentexec.Request{
 		Provider: req.Provider, Profile: req.Profile, Prompt: se.Prompt, Dir: wt.path,
 		Tools: agentexec.ToolsEdit, Model: req.Model, Harness: req.Harness,
+		Allow: allowed, Deny: denyRules(),
 		Env:     agentTempEnv(wt.path),
 		OnEvent: func(ev agentexec.Event) { s.record(e, ev) },
 	}

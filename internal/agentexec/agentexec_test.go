@@ -180,6 +180,15 @@ func readCall(t *testing.T, log string) call {
 	return c
 }
 
+func indexOf(args []string, a string) int {
+	for i, x := range args {
+		if x == a {
+			return i
+		}
+	}
+	return -1
+}
+
 func has(args []string, flag string, val ...string) bool {
 	for i, a := range args {
 		if a != flag {
@@ -312,6 +321,34 @@ func TestToolsEditStreams(t *testing.T) {
 			t.Errorf("working dir polluted: %v", ents)
 		}
 	})
+	t.Run("claude allow list", func(t *testing.T) {
+		log := installFake(t, "claude", "claude-stream")
+		_, err := Run(ctx, Request{Provider: "claude", Prompt: "edit", Dir: work, Tools: ToolsEdit, Harness: HarnessMine,
+			Allow: []string{"go", "git status", "bad(*)", ""}, Deny: []string{"git push"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := readCall(t, log)
+		i, j, k := indexOf(c.Args, "--allowedTools"), indexOf(c.Args, "--disallowedTools"), indexOf(c.Args, "--no-session-persistence")
+		if i < 0 || j != i+3 || k != j+2 {
+			t.Fatalf("want --allowedTools <2 rules> --disallowedTools <1 rule> last, got %v", c.Args)
+		}
+		if got := strings.Join(c.Args[i+1:i+3], " | "); got != "Bash(go:*) | Bash(git status:*)" {
+			t.Errorf("allowed rules = %q", got)
+		}
+		if c.Args[j+1] != "Bash(git push:*)" {
+			t.Errorf("denied rule = %q", c.Args[j+1])
+		}
+	})
+	t.Run("claude without allow list", func(t *testing.T) {
+		log := installFake(t, "claude", "claude-stream")
+		if _, err := Run(ctx, Request{Provider: "claude", Prompt: "edit", Dir: work, Tools: ToolsEdit}); err != nil {
+			t.Fatal(err)
+		}
+		if c := readCall(t, log); has(c.Args, "--allowedTools") || has(c.Args, "--disallowedTools") {
+			t.Errorf("no rules were asked for: %v", c.Args)
+		}
+	})
 	t.Run("claude mine", func(t *testing.T) {
 		log := installFake(t, "claude", "claude-stream")
 		if _, err := Run(ctx, Request{Provider: "claude", Prompt: "edit", Dir: work, Tools: ToolsEdit, Harness: HarnessMine}); err != nil {
@@ -328,6 +365,9 @@ func TestToolsEditStreams(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := readCall(t, log)
+		if !has(c.Args, "-c", "sandbox_workspace_write.network_access=false") {
+			t.Errorf("codex must run in the sandbox with the network off: %v", c.Args)
+		}
 		if !has(c.Args, "--json") || !has(c.Args, "--sandbox", "workspace-write") || !has(c.Args, "--ignore-user-config") || !has(c.Args, "--skip-git-repo-check") {
 			t.Errorf("args = %v", c.Args)
 		}
@@ -352,11 +392,14 @@ func TestToolsEditStreams(t *testing.T) {
 	})
 	t.Run("grok", func(t *testing.T) {
 		log := installFake(t, "grok", "grok-stream")
-		res, err := Run(ctx, Request{Provider: "grok", Prompt: "edit", Dir: work, Tools: ToolsEdit})
+		res, err := Run(ctx, Request{Provider: "grok", Prompt: "edit", Dir: work, Tools: ToolsEdit, Allow: []string{"go"}, Deny: []string{"git push"}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		c := readCall(t, log)
+		if !has(c.Args, "--allow", "Bash(go:*)") || !has(c.Args, "--deny", "Bash(git push:*)") {
+			t.Errorf("grok allow/deny rules missing: %v", c.Args)
+		}
 		if !has(c.Args, "--output-format", "streaming-json") || !has(c.Args, "--permission-mode", "acceptEdits") || !has(c.Args, "--prompt-file") || has(c.Args, "--max-turns") {
 			t.Errorf("args = %v", c.Args)
 		}

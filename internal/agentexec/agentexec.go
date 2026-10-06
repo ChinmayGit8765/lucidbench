@@ -66,8 +66,13 @@ type Request struct {
 	Model             string // optional provider model alias
 	Harness           string // "mine" | "clean"; "" = clean. ToolsNone is always clean.
 	Timeout           time.Duration
-	Env               []string    // extra KEY=value pairs for the CLI, after the inherited environment
-	OnEvent           func(Event) // optional streaming callback (Work)
+	// Allow lists shell commands the agent may run without asking, as plain
+	// command prefixes ("go", "git status"); Deny lists prefixes it may never
+	// run. Only ToolsEdit uses them, and each CLI gets its own spelling: claude
+	// and grok take permission rules, codex relies on its workspace sandbox.
+	Allow, Deny []string
+	Env         []string    // extra KEY=value pairs for the CLI, after the inherited environment
+	OnEvent     func(Event) // optional streaming callback (Work)
 }
 
 // Usage is what one run cost, as far as the CLI reports it.
@@ -343,6 +348,22 @@ type invocation struct {
 	stream  bool   // stdout is JSON lines to normalise
 }
 
+// bashRules turns command prefixes into permission rules: "go" becomes
+// "Bash(go:*)" and "git status" becomes "Bash(git status:*)". Blank entries
+// and entries with a rule's own punctuation are dropped, so a caller cannot
+// smuggle in a wildcard.
+func bashRules(cmds []string) []string {
+	var out []string
+	for _, c := range cmds {
+		c = strings.Join(strings.Fields(c), " ")
+		if c == "" || strings.ContainsAny(c, "()*:\"'`$;&|<>\\") {
+			continue
+		}
+		out = append(out, "Bash("+c+":*)")
+	}
+	return out
+}
+
 // buildArgs returns the CLI arguments for r. The flags come from each CLI's
 // --help. ToolsNone is always the "clean" shape: no tools, no MCP servers, no
 // hooks, no saved session.
@@ -386,6 +407,18 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 		if r.Tools == ToolsNone {
 			in.argv = append(in.argv, "--tools", "")
 		}
+		if r.Tools == ToolsEdit {
+			// Both flags take a list that ends at the next flag, so they go
+			// last. The colon form is the prefix match claude documents.
+			if rules := bashRules(r.Allow); len(rules) > 0 {
+				in.argv = append(in.argv, "--allowedTools")
+				in.argv = append(in.argv, rules...)
+			}
+			if rules := bashRules(r.Deny); len(rules) > 0 {
+				in.argv = append(in.argv, "--disallowedTools")
+				in.argv = append(in.argv, rules...)
+			}
+		}
 		in.argv = append(in.argv, "--no-session-persistence")
 	case "codex":
 		in.argv = []string{"exec", "--skip-git-repo-check", "--ephemeral"}
@@ -400,7 +433,10 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 			// --json adds the usage line; the answer still comes from -o.
 			in.argv = append(in.argv, "--sandbox", "read-only", "--color", "never", "--json", "-o", in.outFile, "-")
 		} else {
-			in.argv = append(in.argv, "--sandbox", "workspace-write", "--color", "never", "--json", "-")
+			// Codex has no per-command allow list. Its workspace-write sandbox
+			// lets commands run inside the worktree and keeps the network
+			// off, so tests run and a push cannot reach a remote.
+			in.argv = append(in.argv, "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=false", "--color", "never", "--json", "-")
 			in.stream = true
 		}
 		in.stdin = prompt
@@ -416,6 +452,12 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 			}
 			in.argv = []string{"--prompt-file", f, "--output-format", "streaming-json", "--permission-mode", "acceptEdits", "--disable-web-search", "--no-subagents"}
 			in.stream = true
+			for _, rule := range bashRules(r.Allow) {
+				in.argv = append(in.argv, "--allow", rule)
+			}
+			for _, rule := range bashRules(r.Deny) {
+				in.argv = append(in.argv, "--deny", rule)
+			}
 		}
 		if r.Model != "" {
 			in.argv = append(in.argv, "-m", r.Model)

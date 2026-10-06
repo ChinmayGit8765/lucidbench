@@ -45,6 +45,14 @@ func Register(mux *http.ServeMux, s *Service) {
 	mux.HandleFunc("GET /api/work/sessions", func(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteJSON(w, http.StatusOK, s.List())
 	})
+	mux.HandleFunc("GET /api/work/defaults", func(w http.ResponseWriter, r *http.Request) {
+		cmds, err := s.Defaults(r.URL.Query().Get("project"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		apiutil.WriteJSON(w, http.StatusOK, map[string]any{"allowed_commands": cmds})
+	})
 	mux.HandleFunc("POST /api/work/sessions", func(w http.ResponseWriter, r *http.Request) {
 		if !apiutil.Confirmed(w, r) {
 			return

@@ -63,6 +63,8 @@ type Project struct {
 	Summary    string   `json:"summary,omitempty" yaml:"summary"`
 	BuildsInto []string `json:"builds_into" yaml:"builds_into"`
 	Needs      []Need   `json:"needs" yaml:"needs"`
+	// Work tunes Work sessions on this project; omitted means the defaults.
+	Work *WorkConfig `json:"work,omitempty" yaml:"work"`
 
 	// Derived: projects that list this one in builds_into, projects whose
 	// needs name this one in from, and how many of this project's needs are
@@ -70,6 +72,14 @@ type Project struct {
 	BuiltBy  []string `json:"built_by" yaml:"-"`
 	NeededBy []string `json:"needed_by" yaml:"-"`
 	Progress Progress `json:"progress" yaml:"-"`
+}
+
+// WorkConfig is a project's optional `work:` block.
+type WorkConfig struct {
+	// AllowedCommands are the shell commands a Work session may run without
+	// asking, such as "go" or "git status". Omitted means the defaults for
+	// the project's detected stack.
+	AllowedCommands []string `json:"allowed_commands,omitempty" yaml:"allowed_commands"`
 }
 
 // List is the loaded file. A missing file is not an error: Configured is
