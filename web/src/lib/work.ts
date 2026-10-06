@@ -43,6 +43,14 @@ export interface Diff {
   deleted: number
 }
 
+export type PRState = "draft" | "open" | "merged" | "closed"
+
+export interface PRChecks {
+  passing: number
+  failing: number
+  pending: number
+}
+
 export interface WorkSession {
   id: string
   provider: WorkProvider
@@ -70,6 +78,11 @@ export interface WorkSession {
   events: number
   diff?: Diff
   pr_url?: string
+  /** draft, open, merged or closed as GitHub last said; absent when unknown (no gh, or not asked yet). */
+  pr_state?: PRState
+  pr_checks?: PRChecks
+  /** The shell commands the agent may run without asking. */
+  allowed_commands?: string[]
   pushed?: boolean
   removed?: boolean
 }
@@ -88,6 +101,8 @@ export interface StartRequest {
   provider: WorkProvider
   profile?: string
   harness: Harness
+  /** Replaces the project's default allowed commands for this session. */
+  allowed_commands?: string[]
 }
 
 /** A project as /api/projects returns it, with the checkout Work needs. */
@@ -117,6 +132,29 @@ export const STATUS_INFO: Record<WorkStatus, { label: string; tone: "info" | "su
 
 /** A finished session whose diff still waits for a PR or a cleanup. */
 export const needsReview = (s: WorkSession) => (s.status === "done" || s.status === "failed") && !s.pr_url && !s.removed
+
+/**
+ * A PR that is still open on GitHub. When its state is not known (no gh, or
+ * not asked yet) it counts as open: the session did open it.
+ */
+export const prIsOpen = (s: WorkSession) => !!s.pr_url && !s.removed && s.pr_state !== "merged" && s.pr_state !== "closed"
+
+export const PR_INFO: Record<PRState, { label: string; tone: "success" | "info" | "neutral" | "danger" }> = {
+  draft: { label: "Draft PR", tone: "neutral" },
+  open: { label: "PR open", tone: "info" },
+  merged: { label: "PR merged", tone: "success" },
+  closed: { label: "PR closed", tone: "danger" },
+}
+
+/** "2 passing · 1 failing · 1 pending", or "no checks". */
+export function checksLabel(c?: PRChecks): string {
+  if (!c) return ""
+  const parts = [c.passing && `${c.passing} passing`, c.failing && `${c.failing} failing`, c.pending && `${c.pending} pending`].filter(Boolean)
+  return parts.length ? parts.join(" · ") : "no checks"
+}
+
+/** What a new session on a project may run without asking, from GET /api/work/defaults. */
+export const defaultsPath = (project: string) => `/api/work/defaults?project=${encodeURIComponent(project)}`
 
 /** "$0.04", "<$0.01", or "-" when the CLI reported no cost. */
 export function formatCost(usd?: number): string {

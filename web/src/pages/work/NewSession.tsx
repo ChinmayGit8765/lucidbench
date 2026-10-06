@@ -9,9 +9,12 @@ import {
   KanbanSquare,
   Lock,
   Play,
+  RotateCcw,
   ShieldCheck,
+  Terminal,
   TriangleAlert,
   UserCog,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,13 +26,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Skeleton } from "@/components/ui/states"
-import { errorMessage, usePoll } from "@/lib/api"
+import { errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { PROJECTS_POLL_MS, typeInfo, type ProjectList } from "@/lib/projects"
 import { cn, isMac } from "@/lib/utils"
 import {
   branchPreview,
   defaultHarness,
+  defaultsPath,
   homeHint,
   SANDBOX_NOTICE,
   startSession,
@@ -93,6 +97,10 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   const [prompt, setPrompt] = useState("")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [showUnusable, setShowUnusable] = useState(false)
+  // The commands the agent may run without asking: the project's defaults
+  // until the user edits the list for this session.
+  const [defaults, setDefaults] = useState<string[] | null>(null)
+  const [edited, setEdited] = useState<string[] | null>(null)
 
   const all = (projects.data?.projects ?? []) as WorkProject[]
   const usable = all.filter((p) => p.local_path && p.visibility !== "confidential")
@@ -109,6 +117,21 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   useEffect(() => {
     if (!project && usable.length === 1) setProject(usable[0].id)
   }, [project, usable])
+
+  // The defaults follow the project; a new project drops any edits.
+  useEffect(() => {
+    setEdited(null)
+    setDefaults(null)
+    if (!project) return
+    let alive = true
+    getJSON<{ allowed_commands: string[] }>(defaultsPath(project))
+      .then((d) => alive && setDefaults(d.allowed_commands))
+      .catch(() => alive && setDefaults([]))
+    return () => {
+      alive = false
+    }
+  }, [project])
+  const allowed = edited ?? defaults ?? []
 
   const hostAccounts = (p: string) => (accounts.data ?? []).filter((a) => a.provider === p && a.location === "host")
   const signedIn = (p: string) => hostAccounts(p).some((a) => a.status === "logged_in")
@@ -163,6 +186,7 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
             project,
             card: card?.id,
             prompt: prompt.trim() || undefined,
+            allowed_commands: edited ?? undefined,
           })
           navigate(`/work/${s.id}`)
         } catch (e) {
@@ -409,6 +433,15 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
               </div>
               <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">{HARNESS[harness].blurb}</p>
             </div>
+
+            <AllowedCommands
+              commands={allowed}
+              loading={!!project && defaults === null}
+              edited={edited !== null}
+              onChange={setEdited}
+              onReset={() => setEdited(null)}
+              provider={provider}
+            />
           </Section>
         </Card>
 
@@ -453,6 +486,84 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
       </div>
 
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </div>
+  )
+}
+
+/**
+ * The shell commands the agent may run without asking. A session cannot answer
+ * a permission prompt, so a command that is not listed is refused: the agent
+ * could not run its own tests. Git push, rm and shells are never allowed.
+ */
+function AllowedCommands({
+  commands,
+  loading,
+  edited,
+  onChange,
+  onReset,
+  provider,
+}: {
+  commands: string[]
+  loading: boolean
+  edited: boolean
+  onChange: (c: string[]) => void
+  onReset: () => void
+  provider: WorkProvider
+}) {
+  const [draft, setDraft] = useState("")
+  const add = () => {
+    const c = draft.trim().replace(/\s+/g, " ")
+    if (!c) return
+    if (!commands.includes(c)) onChange([...commands, c])
+    setDraft("")
+  }
+  return (
+    <div className="mt-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Terminal className="size-3.5 text-subtle-foreground" />
+        <span className="text-xs font-medium">Commands it may run without asking</span>
+        <span className="text-2xs text-subtle-foreground">{edited ? "edited for this session" : "defaults for this project"}</span>
+        {edited && (
+          <button onClick={onReset} className="ml-auto inline-flex items-center gap-1 text-2xs text-muted-foreground hover:text-foreground">
+            <RotateCcw className="size-3" /> Reset
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <Skeleton className="h-14" />
+      ) : (
+        <ul aria-label="Allowed commands" className="flex flex-wrap gap-1.5">
+          {commands.map((c) => (
+            <li key={c} className="inline-flex h-6 items-center gap-1 rounded-full border bg-background/60 pl-2.5 pr-1 font-mono text-2xs text-muted-foreground">
+              {c}
+              <button onClick={() => onChange(commands.filter((x) => x !== c))} aria-label={`Remove ${c}`} className="flex size-4 items-center justify-center rounded-full hover:bg-accent hover:text-foreground">
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+          <li>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  add()
+                }
+              }}
+              onBlur={add}
+              aria-label="Add a command"
+              placeholder="add a command"
+              className="h-6 w-32 rounded-full border border-dashed bg-transparent px-2.5 font-mono text-2xs outline-none placeholder:text-subtle-foreground focus-visible:border-ring"
+            />
+          </li>
+        </ul>
+      )}
+      <p className="mt-2 max-w-xl text-2xs leading-4 text-subtle-foreground">
+        A command is a prefix: <span className="font-mono">go</span> allows every <span className="font-mono">go …</span>, <span className="font-mono">git status</span> only that.
+        The agent cannot be asked, so anything not listed is refused. Pushing, deleting folders and shells are never allowed.
+        {provider === "codex" && " Codex has no per-command list: it runs in its workspace sandbox with the network off."}
+      </p>
     </div>
   )
 }
