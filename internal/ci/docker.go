@@ -32,6 +32,20 @@ type Container struct {
 // Up reports whether the container is running.
 func (c Container) Up() bool { return c.State == "running" }
 
+// Repo returns the owner/name repository the container's REPO_URL points
+// at, or "" when it is not a repository URL (an organisation runner, say).
+func (c Container) Repo() string {
+	u := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(c.RepoURL), "/"), ".git")
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+3:]
+	}
+	parts := strings.Split(u, "/")
+	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
+		return ""
+	}
+	return parts[1] + "/" + parts[2]
+}
+
 // Filter selects runner containers: those in the compose project, or whose
 // image contains ImageMatch. An empty field disables that match, so an empty
 // filter matches nothing.

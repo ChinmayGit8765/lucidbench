@@ -19,6 +19,9 @@ The first beta: the core loop works end to end.
   draft PR on request.
 - **Usage:** local token use and Codex rate-limit windows, plus what Lucidbench's own runs cost.
 - **Agent runs:** each run gets a clean, minimal config; refreshed logins are copied back safely.
+- **On-demand infrastructure:** the kind cluster sleeps when idle and wakes when a job needs it.
+  Runner containers can do the same on queued runs (opt in with `power.runners: on-demand`), and
+  compose stacks start and stop as a group. A Power tile shows what runs and the memory it uses.
 
 ## 0.2.0
 

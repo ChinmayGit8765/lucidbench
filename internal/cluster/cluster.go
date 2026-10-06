@@ -76,6 +76,32 @@ func Up() error {
 	)
 }
 
+// RefreshKubeconfig writes the kubeconfig of an existing cluster again, for
+// example after its node was restarted. Unlike Up it never creates a
+// cluster. Inside a container the kubeconfig is built on demand, so there is
+// nothing to write.
+func RefreshKubeconfig() error {
+	if InContainer() {
+		return nil
+	}
+	kc, err := KubeconfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(kc), 0o700); err != nil {
+		return err
+	}
+	p := provider()
+	ok, err := exists(p)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("no kind cluster named %q", Name)
+	}
+	return p.ExportKubeConfig(Name, kc, false)
+}
+
 // Down deletes the cluster and its kubeconfig. It is idempotent.
 func Down() error {
 	kc, err := KubeconfigPath()

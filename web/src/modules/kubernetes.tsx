@@ -1,5 +1,5 @@
 import { lazy } from "react"
-import { Boxes, ScrollText, Ship } from "lucide-react"
+import { Boxes, Moon, ScrollText, Ship } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { StatTile } from "@/components/StatTile"
@@ -8,6 +8,7 @@ import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import type { ClusterInfo } from "@/lib/jobs"
 import { isTroubled, K8S_POLL_MS, type K8sJob, type K8sPod } from "@/lib/k8s"
+import { isAsleep, MODE_LABEL, usePower } from "@/lib/power"
 import type { ModuleDef } from "@/modules/types"
 
 function KubernetesTile() {
@@ -21,12 +22,40 @@ function KubernetesTile() {
   const running = list.filter((p) => p.phase === "Running").length
   const troubled = list.filter(isTroubled).length
   const jobList = jobs.data ?? []
+  // The node can be stopped while the cluster still exists: power knows.
+  const power = usePower()
+  const pc = power.data?.cluster
+  // Until power answers, /api/cluster's "running" only means the cluster exists.
+  const powerPending = power.loading && !power.data && !power.error
+  if (pc && (isAsleep(pc) || pc.state === "starting")) {
+    const starting = pc.state === "starting"
+    return (
+      <StatTile
+        icon={Ship}
+        label="Kubernetes"
+        onOpen={() => open("kubernetes")}
+        value={starting ? "Starting" : pc.state === "sleeping" ? "Sleeping" : "Stopped"}
+        aside={
+          <StatusPill tone={starting ? "info" : "neutral"} pulse={starting}>
+            {starting ? "waking" : MODE_LABEL[pc.mode]}
+          </StatusPill>
+        }
+        sub={<span className="font-mono">kind · {pc.name}</span>}
+        footer={
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Moon className="size-3.5 text-subtle-foreground" />
+            {pc.mode === "off" ? "Start it from the Kubernetes page" : "Wakes when a job is submitted"}
+          </div>
+        }
+      />
+    )
+  }
   return (
     <StatTile
       icon={Ship}
       label="Kubernetes"
       onOpen={() => open("kubernetes")}
-      loading={cluster.loading && !c && !cluster.error}
+      loading={(cluster.loading && !c && !cluster.error) || powerPending}
       value={c ? (c.running ? "Running" : "Stopped") : "Offline"}
       aside={
         troubled > 0 ? (
@@ -61,7 +90,6 @@ function useKubernetesCommands(): Command[] {
     { id: "k8s-events", label: "Show cluster events", group: "Actions", icon: ScrollText, keywords: "kubernetes events warnings", run: () => open("kubernetes", ["events"]) },
   ]
 }
-
 export const kubernetes: ModuleDef = {
   id: "kubernetes",
   title: "Kubernetes",

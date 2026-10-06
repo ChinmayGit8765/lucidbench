@@ -6,17 +6,20 @@ import {
   HardDrive,
   Layers,
   Lock,
+  Moon,
   Play,
   RotateCw,
   ScrollText,
   Ship,
   Square,
+  Zap,
 } from "lucide-react"
 
 import { CopyCommand } from "@/components/CopyCommand"
 import { LogDrawer } from "@/components/LogDrawer"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill, type Tone } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Menu, type MenuItem } from "@/components/ui/menu"
@@ -28,6 +31,7 @@ import {
   DOCKER_POLL_MS,
   dockerAction,
   percent,
+  projectAction,
   shortStatus,
   statFor,
   type DockerAction,
@@ -38,6 +42,7 @@ import {
   type DockerStat,
   type DockerVolume,
 } from "@/lib/docker"
+import { MODE_LABEL, usePower, type PowerMode } from "@/lib/power"
 import { usePrefs } from "@/lib/prefs"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -108,19 +113,26 @@ function Meter({ value, label, tone }: { value: number; label: string; tone: str
 function GroupCard({
   g,
   stats,
+  stackMode,
   onLogs,
   onAction,
+  onProject,
 }: {
   g: DockerGroup
   stats: DockerStat[] | null
+  /** The project's power mode when it is listed in power.stacks. */
+  stackMode?: PowerMode
   onLogs: (c: DockerContainer) => void
   onAction: (c: DockerContainer, a: DockerAction) => void
+  onProject: (g: DockerGroup, a: "start" | "stop") => void
 }) {
   const now = useNow()
   const { label } = usePrefs()
   const Icon = GROUP_ICON[g.kind]
   const up = g.containers.filter((c) => c.state === "running").length
   const controllable = g.containers.some((c) => c.actions.length > 0)
+  // Project-wide actions only when every container may be controlled.
+  const wholeProject = g.kind === "compose" && g.containers.every((c) => c.actions.length > 0)
   const title = g.kind === "standalone" ? "Standalone containers" : g.project
   return (
     <Card className="overflow-hidden">
@@ -131,15 +143,32 @@ function GroupCard({
           </span>
           <h2 className="truncate text-sm font-semibold">{title}</h2>
           <Badge>{g.kind === "kind" ? "kind cluster" : g.kind === "compose" ? "compose" : "no project"}</Badge>
+          {stackMode && (
+            <Badge title="Listed in power.stacks">
+              {stackMode === "on-demand" ? <Moon /> : <Zap />} {MODE_LABEL[stackMode]}
+            </Badge>
+          )}
           {!controllable && (
-            <span className="flex items-center gap-1 text-2xs text-subtle-foreground" title="Lucidbench only acts on its own project, runner containers, kind nodes and docker.allowed_projects">
+            <span className="flex items-center gap-1 text-2xs text-subtle-foreground" title="Lucidbench only acts on its own project, runner containers, kind nodes, docker.allowed_projects and power.stacks">
               <Lock className="size-3" /> read-only
             </span>
           )}
         </div>
-        <span className="text-xs tabular-nums text-subtle-foreground">
-          {up}/{g.containers.length} running
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs tabular-nums text-subtle-foreground">
+            {up}/{g.containers.length} running
+          </span>
+          {wholeProject && up < g.containers.length && (
+            <Button variant="secondary" size="sm" onClick={() => onProject(g, "start")}>
+              <Play /> Start{g.containers.length > 1 ? " all" : ""}
+            </Button>
+          )}
+          {wholeProject && up > 0 && (
+            <Button variant="secondary" size="sm" onClick={() => onProject(g, "stop")}>
+              <Square /> Stop{g.containers.length > 1 ? " all" : ""}
+            </Button>
+          )}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-sm">
@@ -309,6 +338,7 @@ export default function Containers({ subpath }: ModulePageProps) {
   const volumes = usePoll<DockerVolume[]>("/api/docker/volumes", 60000)
   const [logs, setLogs] = useState<DockerContainer | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  const power = usePower(30000)
 
   const all = [containers, stats, images, volumes]
   const updated = all.map((p) => p.updatedAt).filter((t): t is number => t !== null)
@@ -330,6 +360,19 @@ export default function Containers({ subpath }: ModulePageProps) {
       danger: a === "stop",
       run: async () => {
         if (await dockerAction(c.name, a)) setTimeout(refreshAll, 800)
+      },
+    })
+  const actProject = (g: DockerGroup, a: "start" | "stop") =>
+    setConfirm({
+      title: `${VERBS[a]} every container of ${g.project}?`,
+      description:
+        a === "stop"
+          ? `${g.containers.filter((c) => c.state === "running").length} running container(s) stop. Anything they serve goes offline until you start them again.`
+          : `${g.containers.filter((c) => c.state !== "running").length} stopped container(s) start with their existing configuration.`,
+      confirmLabel: a === "stop" ? "Stop all" : "Start all",
+      danger: a === "stop",
+      run: async () => {
+        if (await projectAction(g.project, a)) setTimeout(refreshAll, 800)
       },
     })
 
@@ -385,7 +428,15 @@ export default function Containers({ subpath }: ModulePageProps) {
             ) : (
               <div className="space-y-4">
                 {groups.map((g) => (
-                  <GroupCard key={`${g.kind}/${g.project}`} g={g} stats={stats.data} onLogs={setLogs} onAction={act} />
+                  <GroupCard
+                    key={`${g.kind}/${g.project}`}
+                    g={g}
+                    stats={stats.data}
+                    stackMode={g.kind === "compose" ? power.data?.stacks.find((s) => s.name === g.project)?.mode : undefined}
+                    onLogs={setLogs}
+                    onAction={act}
+                    onProject={actProject}
+                  />
                 ))}
               </div>
             ))}

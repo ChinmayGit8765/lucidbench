@@ -27,6 +27,7 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   council/<session-id>.json     council session record (rounds, critiques, usage)
   work/sessions/<id>/           session.json, events.jsonl (normalised events), raw.log
   runs/<id>/                    existing per-run auth staging (internal/runner)
+  power/activity.jsonl          every start and stop of the cluster, runners and stacks (internal/power)
 ```
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault

@@ -376,6 +376,51 @@ func Act(ctx context.Context, docker Func, p Policy, name, action string) error 
 	return ErrNotFound
 }
 
+// ProjectRE matches a compose project name.
+var ProjectRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,127}$`)
+
+// ActProject starts or stops every container of a compose project that the
+// policy allows, skipping those already in that state. It returns the names
+// acted on. A project with no container is ErrNotFound; one with a container
+// the policy does not allow is refused as a whole.
+func ActProject(ctx context.Context, docker Func, p Policy, project, action string) ([]string, error) {
+	if action != "start" && action != "stop" {
+		return nil, errors.New("action must be start or stop")
+	}
+	if !ProjectRE.MatchString(project) {
+		return nil, ErrNotFound
+	}
+	cs, err := List(ctx, docker, p)
+	if err != nil {
+		return nil, err
+	}
+	var todo []string
+	found := false
+	for _, c := range cs {
+		if c.Project != project || c.KindCluster != "" {
+			continue
+		}
+		found = true
+		if len(c.Actions) == 0 {
+			return nil, ErrRefused
+		}
+		if slices.Contains(c.Actions, action) {
+			todo = append(todo, c.Name)
+		}
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	done := []string{}
+	for _, name := range todo {
+		if _, err := docker(ctx, action, name); err != nil {
+			return done, err
+		}
+		done = append(done, name)
+	}
+	return done, nil
+}
+
 // LogArgs are the docker arguments for a log tail of n lines, optionally
 // following new output.
 func LogArgs(name string, tail int, follow bool) []string {

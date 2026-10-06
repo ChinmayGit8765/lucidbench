@@ -5,10 +5,12 @@ import {
   ExternalLink,
   GitBranch,
   KeyRound,
+  Moon,
   Play,
   RotateCw,
   Square,
   Workflow,
+  Zap,
 } from "lucide-react"
 
 import { CopyCommand, copyText } from "@/components/CopyCommand"
@@ -40,6 +42,7 @@ import {
   type CISummary,
   type SourceError,
 } from "@/lib/ci"
+import { formatSeconds, MODE_LABEL, usePower, type PowerItem } from "@/lib/power"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
@@ -221,19 +224,31 @@ function repoFromURL(url?: string): string | undefined {
   return m?.[1]
 }
 
-function RunnerCard({ e, onAct }: { e: FleetEntry; onAct: (c: CIContainer, a: "start" | "stop" | "restart") => void }) {
+function RunnerCard({
+  e,
+  power,
+  onAct,
+}: {
+  e: FleetEntry
+  /** The container's power state, when the daemon manages power. */
+  power?: PowerItem
+  onAct: (c: CIContainer, a: "start" | "stop" | "restart") => void
+}) {
   const { runner: r, container: c } = e
   const busy = !!r?.busy && r.status === "online"
   const repo = r?.repo ?? repoFromURL(c?.repo_url)
   const name = r?.name ?? c?.runner_name ?? c?.name ?? "runner"
-  const status = r
-    ? busy
-      ? { tone: "info" as const, label: "Busy" }
-      : r.status === "online"
-        ? { tone: "success" as const, label: "Idle" }
-        : { tone: "neutral" as const, label: "Offline" }
-    : { tone: "neutral" as const, label: "Not watched" }
   const up = c?.state === "running"
+  const sleeping = !up && power?.state === "sleeping"
+  const status = sleeping
+    ? { tone: "neutral" as const, label: "Sleeping" }
+    : r
+      ? busy
+        ? { tone: "info" as const, label: "Busy" }
+        : r.status === "online"
+          ? { tone: "success" as const, label: "Idle" }
+          : { tone: "neutral" as const, label: "Offline" }
+      : { tone: "neutral" as const, label: "Not watched" }
   const labels = (r?.labels ?? []).filter((l) => l !== "self-hosted")
   return (
     <Card
@@ -255,6 +270,20 @@ function RunnerCard({ e, onAct }: { e: FleetEntry; onAct: (c: CIContainer, a: "s
             <StatusPill tone={status.tone} pulse={busy}>
               {status.label}
             </StatusPill>
+            {power && (
+              <Badge
+                title={
+                  power.mode === "on-demand"
+                    ? "Started when its repository has a queued run, stopped when idle"
+                    : power.mode === "always"
+                      ? "Lucidbench never stops it"
+                      : "Lucidbench never starts or stops it on its own"
+                }
+              >
+                {power.mode === "on-demand" ? <Moon /> : <Zap />}
+                {MODE_LABEL[power.mode]}
+              </Badge>
+            )}
             <span className="truncate text-xs text-muted-foreground" title={repo}>
               {repo ?? "no repository"}
             </span>
@@ -305,10 +334,14 @@ function RunnerCard({ e, onAct }: { e: FleetEntry; onAct: (c: CIContainer, a: "s
             </span>
             <span className="flex-1" />
             <span
-              className={cn("shrink-0 tabular-nums", up ? "text-muted-foreground" : "text-warning-fg")}
+              className={cn("shrink-0 tabular-nums", up || sleeping ? "text-muted-foreground" : "text-warning-fg")}
               title={c.started_at ? `Started ${absoluteTime(c.started_at)}` : undefined}
             >
-              {c.status}
+              {sleeping
+                ? "asleep · wakes on a queued run"
+                : up && power?.stops_in_seconds !== undefined
+                  ? `idle · sleeps in ${formatSeconds(power.stops_in_seconds)}`
+                  : c.status}
             </span>
           </>
         ) : (
@@ -465,6 +498,7 @@ export default function Runners() {
   const summary = usePoll<CISummary>("/api/ci/summary", CI_POLL_MS)
   const fleetData = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
   const runsData = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
+  const power = usePower()
   const now = useNow(5000)
   const [repo, setRepo] = useState("")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
@@ -541,7 +575,7 @@ export default function Runners() {
         ) : (
           <div className="grid gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {entries.map((e) => (
-              <RunnerCard key={e.key} e={e} onAct={act} />
+              <RunnerCard key={e.key} e={e} power={e.container && power.data?.runners.find((p) => p.name === e.container!.name)} onAct={act} />
             ))}
           </div>
         )}

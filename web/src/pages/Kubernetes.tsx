@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Boxes, Ellipsis, ListChecks, Play, ScrollText, Server, Ship, Trash2, TriangleAlert } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Boxes, Ellipsis, ListChecks, Moon, Play, ScrollText, Server, Ship, Trash2, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 
 import { CopyCommand } from "@/components/CopyCommand"
@@ -27,6 +27,7 @@ import {
   type K8sNode,
   type K8sPod,
 } from "@/lib/k8s"
+import { isAsleep, powerAction, usePower, type PowerState } from "@/lib/power"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
@@ -236,6 +237,55 @@ function Events({ events, now }: { events: K8sEvent[]; now: number }) {
   )
 }
 
+/**
+ * The cluster's node is stopped. Start wakes it; while it starts, the card
+ * shows how long it has taken, since the API answers only once the node is up.
+ */
+function ClusterSleeping({ power }: { power: PowerState }) {
+  const c = power.cluster
+  const starting = c.state === "starting"
+  const [since, setSince] = useState<number | null>(null)
+  const now = useNow(1000)
+  useEffect(() => {
+    if (starting && since === null) setSince(Date.now())
+    if (!starting) setSince(null)
+  }, [starting, since])
+  const mode = power.modes.cluster
+  const elapsed = since ? Math.max(0, Math.round((now - since) / 1000)) : 0
+  return (
+    <Card className="border-dashed">
+      <EmptyState
+        icon={starting ? <Ship /> : <Moon />}
+        title={starting ? "Starting the cluster" : "Cluster is sleeping"}
+        description={
+          starting
+            ? `Starting the kind node and waiting for it to report Ready${elapsed ? ` · ${elapsed}s` : ""}. Pods, jobs and events appear as soon as it is up.`
+            : mode === "on-demand"
+              ? `Its node is stopped to save memory. Submitting a job wakes it, and it sleeps again after ${power.modes.cluster_idle_minutes} idle minutes.`
+              : mode === "always"
+                ? "Its node is stopped. Submitting a job starts it again."
+                : "Its node is stopped, and power.cluster is off, so only Start wakes it."
+        }
+      >
+        {starting ? (
+          <div className="h-1 w-48 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Starting the cluster">
+            <div className="busy-shimmer h-full w-full" />
+          </div>
+        ) : (
+          <Button onClick={() => void powerAction("cluster", c.name, "start")}>
+            <Play /> Start
+          </Button>
+        )}
+      </EmptyState>
+      {c.error && !starting && (
+        <div className="px-6 pb-6">
+          <ErrorState title="The last start failed" message={c.error} onRetry={() => void powerAction("cluster", c.name, "start")} />
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function Kubernetes({ subpath }: ModulePageProps) {
   const { navigate } = useApp()
   const now = useNow(5000)
@@ -251,9 +301,24 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
   const [helloBusy, setHelloBusy] = useState(false)
   const tab = subpath[0] === "jobs" || subpath[0] === "events" ? subpath[0] : "pods"
 
+  const [fastPoll, setFastPoll] = useState(false)
+  // Poll quickly only while the node starts or stops, so the page follows it.
+  const power = usePower(fastPoll ? 3000 : 10000)
+  const pc = power.data?.cluster
+  const moving = pc?.state === "starting" || pc?.state === "stopping"
+  useEffect(() => setFastPoll(moving), [moving])
+  // A stopped or starting node: the k8s reads fail or hold stale data, so
+  // the sleeping card replaces them.
+  const asleep = !!pc && (isAsleep(pc) || pc.state === "starting")
+  const wasAsleep = useRef(asleep)
+  useEffect(() => {
+    if (wasAsleep.current && !asleep) refreshAll()
+    wasAsleep.current = asleep
+  }, [asleep])
+
   const all = [namespaces, nodes, pods, jobs, events]
   const updated = all.map((p) => p.updatedAt).filter((t): t is number => t !== null)
-  const down = nodes.error && !nodes.data
+  const down = !asleep && nodes.error && !nodes.data
   const podList = pods.data ?? []
   const troubled = podList.filter(isTroubled).length
   const warnings = (events.data ?? []).filter((e) => e.type === "Warning").length
@@ -301,10 +366,10 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
             <Button
               variant="secondary"
               size="sm"
-              disabled={!!down || helloBusy}
+              disabled={!!down || helloBusy || (asleep && power.data?.modes.cluster === "off")}
               onClick={async () => {
                 setHelloBusy(true)
-                await runHelloJob()
+                await runHelloJob(asleep)
                 setHelloBusy(false)
               }}
             >
@@ -315,7 +380,9 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
         }
       />
 
-      {nodes.loading && !nodes.data && !nodes.error && (
+      {asleep && power.data && <ClusterSleeping power={power.data} />}
+
+      {!asleep && nodes.loading && !nodes.data && !nodes.error && (
         <div className="grid gap-3 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <Skeleton className="h-36 rounded-xl" />
           <Skeleton className="h-36 rounded-xl" />
@@ -339,7 +406,7 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
         </Card>
       )}
 
-      {nodes.data && (
+      {!asleep && nodes.data && (
         <>
           <div className="grid gap-3 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <div className="space-y-3">

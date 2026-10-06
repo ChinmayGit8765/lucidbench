@@ -140,6 +140,9 @@ type APIError struct {
 	Status  int
 	Path    string
 	Message string
+	// RetryAt is when GitHub asked to be called again (Retry-After or, when
+	// the rate limit is used up, X-RateLimit-Reset); zero when it did not say.
+	RetryAt time.Time
 }
 
 func (e *APIError) Error() string {
@@ -165,36 +168,92 @@ func (g *GitHub) client() *http.Client {
 }
 
 func (g *GitHub) do(ctx context.Context, method, path string) ([]byte, error) {
+	body, _, err := g.doETag(ctx, method, path, "")
+	return body, err
+}
+
+// ErrNotModified is returned by a conditional request when the resource has
+// not changed since the ETag sent with it. GitHub does not count such a
+// request against the rate limit.
+var ErrNotModified = errors.New("not modified")
+
+// doETag sends a request with If-None-Match when etag is set, and returns the
+// body and the response's ETag.
+func (g *GitHub) doETag(ctx context.Context, method, path, etag string) ([]byte, string, error) {
 	tok, _ := g.Tokens.Token(ctx)
 	if tok == "" {
-		return nil, ErrNoToken
+		return nil, "", ErrNoToken
 	}
 	req, err := http.NewRequestWithContext(ctx, method, g.base()+path, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "lucidbench")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
 	resp, err := g.client().Do(req)
 	if err != nil {
 		// url.Error carries only the URL, which holds no credentials.
-		return nil, fmt.Errorf("GitHub %s: %w", path, errors.Unwrap(err))
+		return nil, "", fmt.Errorf("GitHub %s: %w", path, errors.Unwrap(err))
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, etag, ErrNotModified
 	}
 	if resp.StatusCode/100 != 2 {
 		var m struct {
 			Message string `json:"message"`
 		}
 		_ = json.Unmarshal(body, &m)
-		return nil, &APIError{Status: resp.StatusCode, Path: path, Message: m.Message}
+		return nil, "", &APIError{Status: resp.StatusCode, Path: path, Message: m.Message, RetryAt: retryAt(resp.Header, time.Now())}
 	}
-	return body, nil
+	return body, resp.Header.Get("ETag"), nil
+}
+
+// retryAt reads when GitHub wants to be asked again: Retry-After seconds, or
+// the rate-limit reset time when no requests remain.
+func retryAt(h http.Header, now time.Time) time.Time {
+	if s, err := strconv.Atoi(h.Get("Retry-After")); err == nil && s >= 0 {
+		return now.Add(time.Duration(s) * time.Second)
+	}
+	if h.Get("X-RateLimit-Remaining") == "0" {
+		if s, err := strconv.ParseInt(h.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+			return time.Unix(s, 0)
+		}
+	}
+	return time.Time{}
+}
+
+// RunsByStatus lists the repository's workflow runs with one status, such
+// as queued or in_progress, without the cache. With the ETag of an earlier
+// answer it returns ErrNotModified when nothing changed. The returned ETag
+// goes with the next call.
+func (g *GitHub) RunsByStatus(ctx context.Context, repo, status, etag string) ([]Run, string, error) {
+	path := repoPath(repo) + "/actions/runs?status=" + url.QueryEscape(status) + "&per_page=20"
+	body, tag, err := g.doETag(ctx, http.MethodGet, path, etag)
+	if err != nil {
+		return nil, tag, err
+	}
+	runs, err := parseRuns(repo, body)
+	return runs, tag, err
+}
+
+// RunnersNow lists the repository's self-hosted runners without the cache,
+// for a decision that must not rest on a stale busy flag.
+func (g *GitHub) RunnersNow(ctx context.Context, repo string) ([]Runner, error) {
+	body, err := g.do(ctx, http.MethodGet, repoPath(repo)+"/actions/runners?per_page=100")
+	if err != nil {
+		return nil, err
+	}
+	return parseRunners(repo, body)
 }
 
 // get fetches path through the cache. Errors are cached too, so a repo that
