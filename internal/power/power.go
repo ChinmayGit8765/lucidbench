@@ -68,14 +68,15 @@ type Supervisor struct {
 
 	clusterMu sync.Mutex // one cluster start or stop at a time
 
-	mu      sync.Mutex // guards the fields below
-	begun   bool
-	cl      clusterState
-	runners map[string]*runnerState // by container name
-	repos   map[string]*repoState
-	ticked  time.Time
-	stats   map[string]int64 // memory per container name
-	statsAt time.Time
+	mu        sync.Mutex // guards the fields below
+	begun     bool
+	cl        clusterState
+	runners   map[string]*runnerState // by container name
+	repos     map[string]*repoState
+	ticked    time.Time
+	stats     map[string]int64 // memory per container name
+	statsAt   time.Time
+	statsBusy bool
 }
 
 type clusterState struct {
@@ -178,6 +179,8 @@ func (s *Supervisor) Tick(ctx context.Context) {
 	s.mu.Unlock()
 	s.tickCluster(ctx)
 	s.tickRunners(ctx)
+	// Warm the memory sample so GET /api/power never waits for docker stats.
+	s.memory(ctx)
 }
 
 // ---- cluster ----

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
@@ -45,8 +46,10 @@ type Memory struct {
 // State is the body of GET /api/power.
 type State struct {
 	Modes struct {
-		Cluster string `json:"cluster"`
-		Runners string `json:"runners"`
+		Cluster            string `json:"cluster"`
+		ClusterIdleMinutes int    `json:"cluster_idle_minutes"`
+		Runners            string `json:"runners"`
+		RunnerIdleMinutes  int    `json:"runner_idle_minutes"`
 	} `json:"modes"`
 	PollSeconds int        `json:"poll_seconds"`
 	CheckedAt   *time.Time `json:"checked_at,omitempty"`
@@ -105,16 +108,33 @@ func errAt(t time.Time) *time.Time {
 // a couple of seconds.
 const StatsTTL = 15 * time.Second
 
-// memory returns the memory in use per running container name.
+// memory returns the memory in use per running container name. The first
+// call samples and waits; later calls answer from the last sample at once
+// and take a new one in the background when it is older than StatsTTL.
 func (s *Supervisor) memory(ctx context.Context) (map[string]int64, bool) {
 	s.mu.Lock()
-	if !s.statsAt.IsZero() && time.Since(s.statsAt) < StatsTTL {
-		m := s.stats
-		s.mu.Unlock()
-		return m, true
+	have, stale := !s.statsAt.IsZero(), time.Since(s.statsAt) >= StatsTTL
+	m := s.stats
+	if have && stale && !s.statsBusy {
+		s.statsBusy = true
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			s.sampleMemory(ctx)
+		}()
 	}
 	s.mu.Unlock()
+	if have {
+		return m, true
+	}
+	return s.sampleMemory(ctx)
+}
+
+func (s *Supervisor) sampleMemory(ctx context.Context) (map[string]int64, bool) {
 	stats, err := docker.Stats(ctx, s.Docker)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.statsBusy = false
 	if err != nil {
 		return map[string]int64{}, false
 	}
@@ -122,9 +142,7 @@ func (s *Supervisor) memory(ctx context.Context) (map[string]int64, bool) {
 	for _, x := range stats {
 		m[x.Name] = ParseMemory(x.MemUsage)
 	}
-	s.mu.Lock()
 	s.stats, s.statsAt = m, time.Now()
-	s.mu.Unlock()
 	return m, true
 }
 
@@ -139,14 +157,35 @@ func (s *Supervisor) State(ctx context.Context) State {
 
 	st := State{PollSeconds: int(s.poll().Seconds()), Runners: []Item{}, Stacks: []Item{}, Activity: []Entry{}, Errors: []string{}}
 	st.Modes.Cluster, st.Modes.Runners = s.Cfg.Cluster, s.Cfg.Runners
+	st.Modes.ClusterIdleMinutes, st.Modes.RunnerIdleMinutes = s.Cfg.ClusterIdleMinutes, s.Cfg.RunnerIdleMinutes
 	if !ticked.IsZero() {
 		st.CheckedAt = &ticked
 	}
-	all, err := docker.List(ctx, s.Docker, s.StackPolicy())
+	// Three independent docker reads, side by side: every container (one
+	// ps), the runner containers (ps and inspect, for REPO_URL) and memory.
+	var (
+		all   []docker.Container
+		err   error
+		rcs   []ci.Container
+		rErr  error
+		mem   map[string]int64
+		known bool
+		wg    sync.WaitGroup
+	)
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		var out []byte
+		if out, err = s.Docker(ctx, "ps", "-a", "--no-trunc", "--format", "{{json .}}"); err == nil {
+			all, err = docker.ParsePS(out)
+		}
+	}()
+	go func() { defer wg.Done(); rcs, rErr = ci.ListContainers(ctx, s.Docker, s.Runners) }()
+	go func() { defer wg.Done(); mem, known = s.memory(ctx) }()
+	wg.Wait()
 	if err != nil {
 		st.Errors = append(st.Errors, "docker: "+err.Error())
 	}
-	mem, known := s.memory(ctx)
 	st.Memory.Known = known
 	for _, b := range mem {
 		st.Memory.DockerBytes += b
@@ -195,7 +234,7 @@ func (s *Supervisor) State(ctx context.Context) State {
 	st.Cluster = c
 
 	// runners
-	if rcs, err := ci.ListContainers(ctx, s.Docker, s.Runners); err == nil {
+	if rErr == nil {
 		idleFor := time.Duration(s.Cfg.RunnerIdleMinutes) * time.Minute
 		s.mu.Lock()
 		for _, x := range rcs {
