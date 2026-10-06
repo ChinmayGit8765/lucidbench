@@ -32,7 +32,7 @@ test("the whole loop: braindump, council, approve, work, diff, PR, merged, Done"
   await page.getByPlaceholder(/./).first().fill("I keep losing track of which side projects still build. A tiny script that runs each one's build and prints pass or fail.")
   await page.getByRole("combobox").first().selectOption({ label: "Demo" })
   await page.getByRole("button", { name: /Convene council/ }).click()
-  await expect(page.getByRole("heading", { name: TITLE })).toBeVisible({ timeout: 45_000 })
+  await expect(page.getByRole("heading", { level: 1, name: TITLE })).toBeVisible({ timeout: 45_000 })
   await expect(page.getByText("Draft · waiting for you")).toBeVisible()
   expect(calls(d)).toMatch(/^codex /m)
   expect(calls(d)).toMatch(/^grok /m)
