@@ -311,6 +311,37 @@ func (s *Service) saveBrief(sess *Session, title, brief string) (string, error) 
 // column of the work board. project, when set, replaces the session's
 // project. Approving twice returns the same card.
 func (s *Service) Approve(id, project string) (*boards.Card, error) {
+	return s.approve(id, project, false, false)
+}
+
+// LatestBlockers are the blocker points of the newest round's critiques: what
+// a critic still wants changed in the brief as it stands.
+func LatestBlockers(sess *Session) []Point {
+	var out []Point
+	if len(sess.Rounds) == 0 {
+		return out
+	}
+	for _, c := range sess.Rounds[len(sess.Rounds)-1].Critiques {
+		if c == nil || c.Skipped {
+			continue
+		}
+		for _, p := range c.Points {
+			if p.Severity == SeverityBlocker {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// ApproveChecked is Approve for a person at the screen: when the latest
+// critiques still hold a blocker it refuses with ErrBlockers unless anyway is
+// set, and then records approved_with_blockers on the session.
+func (s *Service) ApproveChecked(id, project string, anyway bool) (*boards.Card, error) {
+	return s.approve(id, project, anyway, true)
+}
+
+func (s *Service) approve(id, project string, anyway, enforce bool) (*boards.Card, error) {
 	sess, err := s.Get(id)
 	if err != nil {
 		return nil, err
@@ -323,6 +354,11 @@ func (s *Service) Approve(id, project string) (*boards.Card, error) {
 	case sess.Status != StatusDraft || sess.BriefPath == "":
 		return nil, fmt.Errorf("%w: this session has no draft brief to approve", ErrBadRequest)
 	}
+	blockers := LatestBlockers(sess)
+	if enforce && len(blockers) > 0 && !anyway {
+		return nil, fmt.Errorf("%w: approve anyway to accept %d %s", ErrBlockers, len(blockers), plural(len(blockers), "blocker", "blockers"))
+	}
+	withBlockers := len(blockers) > 0 && (anyway || !enforce)
 	project = strings.TrimSpace(project)
 	if project != "" {
 		l, err := s.loadProjects()
@@ -384,7 +420,12 @@ func (s *Service) Approve(id, project string) (*boards.Card, error) {
 	}
 	cur.Status, cur.Project, cur.Card = StatusApproved, project, &card
 	cur.Updated = s.now()
-	cur.Log = append(cur.Log, Event{Time: cur.Updated, Kind: "done", Text: "Approved: a card was added to Ready on the work board"})
+	cur.ApprovedWithBlockers = withBlockers
+	text := "Approved: a card was added to Ready on the work board"
+	if withBlockers {
+		text = fmt.Sprintf("Approved with %d %s still open: a card was added to Ready on the work board", len(blockers), plural(len(blockers), "blocker", "blockers"))
+	}
+	cur.Log = append(cur.Log, Event{Time: cur.Updated, Kind: "done", Text: text})
 	if err := s.persistLocked(cur); err != nil {
 		return nil, err
 	}

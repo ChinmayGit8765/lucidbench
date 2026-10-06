@@ -45,6 +45,9 @@ var (
 	ErrNotFound     = errors.New("council session not found")
 	ErrBusy         = errors.New("the council is still running")
 	ErrApproved     = errors.New("the brief is already approved")
+	// ErrBlockers refuses an approval over a blocker that the caller has not
+	// explicitly accepted.
+	ErrBlockers = errors.New("the latest critiques still contain a blocker")
 )
 
 // Session statuses.
@@ -95,7 +98,10 @@ var (
 	DefaultCritics  = []string{"codex", "grok"}
 )
 
-// MaxRounds is the most critique rounds a run makes on its own.
+// MaxRounds is the most critique rounds the automatic loop makes on its own,
+// and the cap on a run's `rounds` setting. It does not limit Ask again: each
+// Ask again adds one round after the loop, so a session can show more rounds
+// than MaxRounds (the UI says "3 rounds (incl. Ask again)", not "3 of 2").
 const MaxRounds = 2
 
 // MaxInput is the longest braindump or note accepted, in bytes.
@@ -147,30 +153,33 @@ type Event struct {
 
 // Session is one council run, persisted as <dir>/<id>.json.
 type Session struct {
-	ID           string            `json:"id"`
-	Input        string            `json:"input"`
-	Project      string            `json:"project,omitempty"`
-	Title        string            `json:"title,omitempty"`
-	Proposer     string            `json:"proposer"`
-	Critics      []string          `json:"critics"` // the critics still taking part
-	Mode         string            `json:"mode"`
-	MaxRounds    int               `json:"max_rounds"`
-	Rounds       []Round           `json:"rounds"`
-	StoppedEarly bool              `json:"stopped_early"`
-	Stage        string            `json:"stage"`
-	Thinking     []string          `json:"thinking"` // providers with a call in flight
-	Notes        []string          `json:"notes"`    // skipped providers and fallbacks
-	Warnings     []string          `json:"warnings"` // the brief does not follow the format
-	Log          []Event           `json:"log"`
-	Brief        string            `json:"brief,omitempty"`
-	BriefPath    string            `json:"brief_path,omitempty"`
-	Status       string            `json:"status"`
-	Error        string            `json:"error,omitempty"`
-	Card         *boards.Card      `json:"card,omitempty"`
-	Usage        []agentexec.Usage `json:"usage"`
-	Prompts      map[string]string `json:"prompts"` // prompt name -> version
-	Created      time.Time         `json:"created"`
-	Updated      time.Time         `json:"updated"`
+	ID           string   `json:"id"`
+	Input        string   `json:"input"`
+	Project      string   `json:"project,omitempty"`
+	Title        string   `json:"title,omitempty"`
+	Proposer     string   `json:"proposer"`
+	Critics      []string `json:"critics"` // the critics still taking part
+	Mode         string   `json:"mode"`
+	MaxRounds    int      `json:"max_rounds"`
+	Rounds       []Round  `json:"rounds"`
+	StoppedEarly bool     `json:"stopped_early"`
+	// ApprovedWithBlockers is set when the brief was approved while the
+	// latest critiques still held a blocker, and the user said so.
+	ApprovedWithBlockers bool              `json:"approved_with_blockers,omitempty"`
+	Stage                string            `json:"stage"`
+	Thinking             []string          `json:"thinking"` // providers with a call in flight
+	Notes                []string          `json:"notes"`    // skipped providers and fallbacks
+	Warnings             []string          `json:"warnings"` // the brief does not follow the format
+	Log                  []Event           `json:"log"`
+	Brief                string            `json:"brief,omitempty"`
+	BriefPath            string            `json:"brief_path,omitempty"`
+	Status               string            `json:"status"`
+	Error                string            `json:"error,omitempty"`
+	Card                 *boards.Card      `json:"card,omitempty"`
+	Usage                []agentexec.Usage `json:"usage"`
+	Prompts              map[string]string `json:"prompts"` // prompt name -> version
+	Created              time.Time         `json:"created"`
+	Updated              time.Time         `json:"updated"`
 }
 
 // StartRequest is the body of POST /api/council/sessions.
@@ -350,7 +359,7 @@ func (s *Service) Begin(in StartRequest) (*Session, error) {
 	return snap, nil
 }
 
-// AskAgain runs one more round on a draft brief with the user's notes: the
+// AskAgain runs one more round on a draft brief, beyond MaxRounds if need be, with the user's notes: the
 // critics read the brief and the notes, and the proposer revises it.
 func (s *Service) AskAgain(ctx context.Context, id, notes string, onUpdate func(Session)) (*Session, error) {
 	sess, err := s.claimAgain(id, notes)

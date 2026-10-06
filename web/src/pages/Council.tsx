@@ -41,7 +41,9 @@ import {
   COMPOSE_EVENT,
   COUNCIL_POLL_MS,
   COUNCIL_PROVIDERS,
+  latestBlockers,
   maxCalls,
+  roundsLabel,
   seconds,
   SESSIONS_PATH,
   SEVERITY,
@@ -61,7 +63,7 @@ import {
 } from "@/lib/council"
 import { PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
-import { cn, isMac } from "@/lib/utils"
+import { cn, isMac, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
 import type { Account } from "@/pages/Accounts"
 
@@ -476,7 +478,7 @@ function SessionsList({ list }: { list: CouncilSummary[] }) {
                 <div className="flex shrink-0 items-center gap-4 text-xs tabular-nums text-subtle-foreground">
                   <ProviderStack providers={[s.proposer, ...s.critics]} />
                   <span className="w-16 max-[900px]:hidden">
-                    {s.rounds} {s.rounds === 1 ? "round" : "rounds"}
+                    {plural(s.rounds, "round")}
                   </span>
                   <span className="w-12 text-right font-mono text-2xs max-[900px]:hidden" title={`${tokens(s.input_tokens)} in · ${tokens(s.output_tokens)} out`}>
                     {usd(s.cost_usd)}
@@ -620,11 +622,13 @@ function StageStrip({ s }: { s: CouncilSession }) {
           )}
           {s.status !== "running" && (
             <span>
-              {round} {round === 1 ? "round" : "rounds"}
-              {s.stopped_early ? " · stopped early, no blocker left" : round >= s.max_rounds && s.status !== "failed" ? " · round cap reached" : ""}
+              {roundsLabel({ rounds: round, max_rounds: s.max_rounds })}
+              {s.stopped_early ? " · stopped early, no blocker left" : round === s.max_rounds && s.status !== "failed" ? " · round cap reached" : ""}
             </span>
           )}
-          {s.status === "running" && thinking.length === 0 && <span>Round {Math.max(round, 1)} of {s.max_rounds}</span>}
+          {s.status === "running" && thinking.length === 0 && (
+            <span>{Math.max(round, 1) > s.max_rounds ? `Round ${round} (Ask again)` : `Round ${Math.max(round, 1)} of ${s.max_rounds}`}</span>
+          )}
         </div>
       </div>
     </Card>
@@ -654,7 +658,7 @@ function RoundView({ r, s, last }: { r: CouncilRound; s: CouncilSession; last: b
   return (
     <li className="space-y-3">
       <div className="flex items-center gap-3">
-        <span className="flex h-6 items-center rounded-full border bg-elevated px-2.5 text-xs font-semibold tabular-nums shadow-card">Round {r.n}</span>
+        <span className="flex h-6 items-center rounded-full border bg-elevated px-2.5 text-xs font-semibold tabular-nums shadow-card">Round {r.n}{r.n > s.max_rounds ? " · Ask again" : ""}</span>
         <span className="h-px flex-1 bg-border" />
       </div>
       {r.notes && (
@@ -988,7 +992,7 @@ function CostLine({ s }: { s: CouncilSession }) {
   const t = totals(s.usage)
   return (
     <span className="font-mono text-2xs tabular-nums text-subtle-foreground" title={t.uncosted.length ? `${joinNames(t.uncosted)} did not report a cost` : undefined}>
-      {t.calls} calls · {tokens(t.input)} in · {tokens(t.output)} out · {usd(t.cost)}
+      {plural(t.calls, "call")} · {tokens(t.input)} in · {tokens(t.output)} out · {usd(t.cost)}
       {t.uncosted.length > 0 && "+"} · {seconds(t.ms)} model time
     </span>
   )
@@ -1001,14 +1005,34 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
   const b = useMemo(() => parseBrief(s.brief ?? ""), [s.brief])
   const approved = s.status === "approved"
 
+  // A blocker in the newest critiques is still open: say so, and ask twice.
+  const blockers = latestBlockers(s)
   const approve = () =>
     setConfirm({
-      title: "Approve this brief?",
-      description: `The page in Memory is marked approved and a card is added to Ready on the work board${s.project ? `, on ${s.project}` : ""}.`,
-      confirmLabel: "Approve and add card",
+      title: blockers.length > 0 ? "A critic still sees a blocker" : "Approve this brief?",
+      description:
+        blockers.length > 0
+          ? `The latest critiques list ${plural(blockers.length, "blocker")} that the brief may not have fixed. Ask again with your notes, or approve anyway: the page in Memory is marked approved and a card is added to Ready${s.project ? `, on ${s.project}` : ""}.`
+          : `The page in Memory is marked approved and a card is added to Ready on the work board${s.project ? `, on ${s.project}` : ""}.`,
+      body:
+        blockers.length > 0 ? (
+          <ul aria-label="Open blockers" className="max-h-56 space-y-1.5 overflow-auto rounded-lg border border-danger/30 bg-danger-soft/60 p-3 text-xs">
+            {blockers.map((b, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-danger" />
+                <span className="min-w-0">
+                  <span className="font-medium text-danger-fg">{label(b.provider)}: </span>
+                  {b.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : undefined,
+      confirmLabel: blockers.length > 0 ? "Approve anyway" : "Approve and add card",
+      danger: blockers.length > 0,
       run: async () => {
         try {
-          const card = await approveBrief(s.id)
+          const card = await approveBrief(s.id, undefined, blockers.length > 0)
           toast.success("Card added to Ready", {
             description: card.title,
             action: { label: "Open card", onClick: () => open("boards", [DEFAULT_BOARD, card.id]) },
@@ -1034,7 +1058,7 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
             <h2 className="mt-1 text-xl font-semibold tracking-[-0.015em]">{b.title || s.title}</h2>
           </div>
           {approved ? (
-            <StatusPill tone="success">Approved</StatusPill>
+            <StatusPill tone={s.approved_with_blockers ? "warning" : "success"}>{s.approved_with_blockers ? "Approved with blockers" : "Approved"}</StatusPill>
           ) : (
             <StatusPill tone="warning">Draft · waiting for you</StatusPill>
           )}

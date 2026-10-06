@@ -79,6 +79,8 @@ export interface CouncilSession {
   max_rounds: number
   rounds: CouncilRound[]
   stopped_early: boolean
+  /** The brief was approved while the latest critiques still held a blocker. */
+  approved_with_blockers?: boolean
   stage: Stage
   thinking: string[]
   notes: string[]
@@ -158,8 +160,30 @@ export const SEVERITY: Record<Severity, { label: string; dot: string; text: stri
 }
 
 export const startCouncil = (req: StartRequest) => sendJSON<CouncilSession>(SESSIONS_PATH, "POST", req)
-export const approveBrief = (id: string, project?: string) =>
-  sendJSON<BoardCard>(`${SESSIONS_PATH}/${id}/approve`, "POST", project ? { project } : {})
+/** anyway accepts a blocker still open in the latest critiques; the server refuses with 409 without it. */
+export const approveBrief = (id: string, project?: string, anyway = false) =>
+  sendJSON<BoardCard>(`${SESSIONS_PATH}/${id}/approve`, "POST", {
+    ...(project ? { project } : {}),
+    ...(anyway ? { approved_with_blockers: true } : {}),
+  })
+
+/** The blocker points of the newest round's critiques: what a critic still wants changed. */
+export function latestBlockers(s: CouncilSession): { provider: CouncilProvider; text: string }[] {
+  const last = s.rounds[s.rounds.length - 1]
+  if (!last) return []
+  return last.critiques
+    .filter((c) => !c.skipped)
+    .flatMap((c) => (c.points ?? []).filter((p) => p.severity === "blocker").map((p) => ({ provider: c.provider, text: p.text })))
+}
+
+/**
+ * "2 rounds", or "3 rounds (incl. Ask again)": the automatic loop stops at
+ * max_rounds, and each Ask again adds one round after it.
+ */
+export function roundsLabel(s: { rounds: number; max_rounds?: number }): string {
+  const n = s.rounds
+  return `${n} ${n === 1 ? "round" : "rounds"}${s.max_rounds !== undefined && n > s.max_rounds ? " (incl. Ask again)" : ""}`
+}
 export const askAgain = (id: string, notes: string) => sendJSON<CouncilSession>(`${SESSIONS_PATH}/${id}/again`, "POST", { notes })
 
 /** How many model calls a run can make: the draft, then per round each critic plus the revision. */
