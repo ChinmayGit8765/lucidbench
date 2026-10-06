@@ -1,8 +1,8 @@
+import { lazy } from "react"
 import { AppWindow } from "lucide-react"
 
 import type { ModuleDef } from "@/modules/types"
 
-/** Extension on the roadmap: listed in the gallery, not addable yet. */
 export const browser: ModuleDef = {
   id: "browser",
   title: "Live browser",
@@ -12,9 +12,9 @@ export const browser: ModuleDef = {
   kind: "extension",
   order: 14,
   defaultEnabled: false,
-  status: "soon",
-  category: "productivity",
-  description: "Watch and drive a browser your agents use.",
-  requires: {},
-  keywords: "browser preview automation",
+  category: "devops",
+  description: "Watch and drive the browser your agents use: a Chromium container with its own profile, a live view, take-over and a dev server preview.",
+  requires: { docker: true },
+  keywords: "browser preview automation chromium cdp screenshot headless agent",
+  component: lazy(() => import("@/pages/Browser")),
 }

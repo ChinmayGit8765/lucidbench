@@ -83,13 +83,15 @@ export interface WorkSession {
   pr_checks?: PRChecks
   /** The shell commands the agent may run without asking. */
   allowed_commands?: string[]
+  /** The agent browser was attached to this session. */
+  browser?: boolean
   pushed?: boolean
   removed?: boolean
 }
 
 export interface WorkEvent {
   time: string
-  kind: "text" | "tool" | "tool_result" | "diff" | "approval" | "error" | "done"
+  kind: "text" | "tool" | "tool_result" | "diff" | "approval" | "error" | "done" | "image"
   title?: string
   body?: string
 }
@@ -103,6 +105,8 @@ export interface StartRequest {
   harness: Harness
   /** Replaces the project's default allowed commands for this session. */
   allowed_commands?: string[]
+  /** Attach the agent browser (Live browser extension). */
+  browser?: boolean
 }
 
 /** A project as /api/projects returns it, with the checkout Work needs. */
@@ -220,6 +224,7 @@ export type Step =
   | { type: "tools"; key: string; kind: ToolKind; items: ToolItem[] }
   | { type: "error"; key: string; title?: string; text: string; time: string }
   | { type: "done"; key: string; ok: boolean; time: string }
+  | { type: "image"; key: string; title: string; src: string; time: string }
 
 function kindOf(name: string): ToolKind {
   const n = name.toLowerCase()
@@ -347,6 +352,12 @@ export function buildSteps(events: WorkEvent[], worktree: string): Step[] {
         break
       case "done":
         steps.push({ type: "done", key, ok: e.title === "ok", time: e.time })
+        break
+      case "image":
+        // Only the screenshots the daemon saved are shown.
+        if (/^\/api\/browser\/shots\/[0-9a-f]{16}\.png$/.test(e.body ?? "")) {
+          steps.push({ type: "image", key, title: e.title ?? "Screenshot", src: e.body!, time: e.time })
+        }
         break
     }
   })
