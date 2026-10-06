@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
 	"github.com/ChinmayGit8765/lucidbench/internal/assess"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/council"
@@ -116,7 +117,9 @@ func TestLint(t *testing.T) {
 		t.Errorf("empty task: %+v", fs)
 	}
 
-	secret := []Section{{ID: Task, Body: "Use ghp_" + strings.Repeat("a1B2", 9) + " and password = hunter2hunter2 — done when it works, proof: test"}}
+	// Key-shaped strings are built from parts, so no scanner mistakes the
+	// test for a leaked key.
+	secret := []Section{{ID: Task, Body: "Use " + "gh" + "p_" + strings.Repeat("a1B2", 9) + " and password = hunter2hunter2 — done when it works, proof: test"}}
 	fs := Lint(secret, Render(secret, nil, nil), nil, TargetCopy)
 	n := 0
 	for _, f := range fs {
@@ -129,6 +132,11 @@ func TestLint(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("want 2 secret findings, got %+v", fs)
+	}
+	for _, s := range []string{"-----BEGIN " + "RSA PRIVATE" + " KEY-----", "AK" + "IA" + strings.Repeat("Q", 16), "ey" + "J" + strings.Repeat("a", 12) + "." + strings.Repeat("b", 12) + "." + strings.Repeat("c", 12)} {
+		if len(FindSecrets("x "+s+" y")) != 1 {
+			t.Errorf("not flagged: %.12s…", s)
+		}
 	}
 	if len(FindSecrets("token: env:GITHUB_TOKEN and sk-short")) != 0 {
 		t.Error("a secret reference or a short sk- word was flagged")
@@ -391,13 +399,32 @@ func TestImproveRefusesBeforeAnyProvider(t *testing.T) {
 		{ImproveRequest{Text: ""}, ErrBadRef},
 		{ImproveRequest{Text: "fix it", Project: "vault"}, ErrConfidential},
 		{ImproveRequest{Text: "see [[Notes/secret]]"}, ErrConfidential},
-		{ImproveRequest{Text: "key sk-" + strings.Repeat("x", 30)}, ErrBadRef},
+		{ImproveRequest{Text: "key " + "s" + "k-" + strings.Repeat("x", 30)}, ErrBadRef},
 		{ImproveRequest{Text: "fix it", Provider: "gpt"}, ErrBadRef},
 	} {
 		if _, err := im.Improve(t.Context(), c.req); !errors.Is(err, c.want) {
 			t.Errorf("%+v: %v, want %v", c.req, err, c.want)
 		}
 	}
+}
+
+// Each Improve call leaves a record the Usage page reads (internal/usage
+// reads "created" and "usage" from <data dir>/prompts/runs/*.json).
+func TestImproveRecordsUsage(t *testing.T) {
+	dir := t.TempDir()
+	im := &Improver{RunsDir: dir, Now: func() time.Time { return time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC) }}
+	im.record(agentexec.Usage{Provider: "claude", Model: "haiku", CostUSD: 0.002, DurationMS: 900}, nil)
+	im.record(agentexec.Usage{Provider: "claude"}, errors.New("not on PATH")) // nothing reported: no record
+	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	if len(files) != 1 {
+		t.Fatalf("%d records", len(files))
+	}
+	data, _ := os.ReadFile(files[0])
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil || string(raw["created"]) != `"2026-02-03T04:05:06Z"` || !strings.Contains(string(raw["usage"]), `"cost_usd":0.002`) {
+		t.Errorf("record %s", data)
+	}
+	(&Improver{}).record(agentexec.Usage{CostUSD: 1}, nil) // no RunsDir: nothing, no panic
 }
 
 func TestParseSections(t *testing.T) {

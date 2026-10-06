@@ -77,8 +77,9 @@ const (
 // RulesFiles are the files offered as "project rules", in this order.
 var RulesFiles = []string{"docs/BETA-CONTRACTS.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md"}
 
-// repoSkip are folders a repo map leaves out.
-var repoSkip = map[string]bool{".git": true, "node_modules": true, "dist": true, ".claude": true}
+// repoSkip are folders a repo map leaves out: git's own, dependencies, build
+// output (dist, and target for Cargo) and agent settings.
+var repoSkip = map[string]bool{".git": true, "node_modules": true, "dist": true, ".claude": true, "target": true}
 
 // Resolver reads context sources.
 type Resolver struct {
@@ -196,7 +197,7 @@ func (r *Resolver) projectSource(ref Ref) (Source, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Project: %s (id %s)\n", p.Name, p.ID)
-	fmt.Fprintf(&b, "Kind: a %s %s, status %s, visibility %s\n", p.Category, p.Type, p.Status, p.Visibility)
+	fmt.Fprintf(&b, "Category: %s · type: %s · status: %s · visibility: %s\n", p.Category, p.Type, p.Status, p.Visibility)
 	if p.Repo != "" {
 		fmt.Fprintf(&b, "Repository: %s\n", p.Repo)
 	}
@@ -313,7 +314,7 @@ func (r *Resolver) repoSource(ref Ref) (Source, error) {
 }
 
 // RepoMap is the tree of root two levels deep, each folder with the number
-// of files below it, leaving out .git, node_modules, dist and .claude.
+// of files below it, leaving out .git, node_modules, dist, target and .claude.
 func RepoMap(root string) (string, bool) {
 	var lines []string
 	cut := false
@@ -359,7 +360,7 @@ func RepoMap(root string) (string, bool) {
 	if more {
 		head = fmt.Sprintf("more than %d files in all", total)
 	}
-	head += " (.git, node_modules, dist and .claude left out)"
+	head += " (.git, node_modules, dist, target and .claude left out)"
 	return head + "\n" + strings.Join(lines, "\n"), cut
 }
 

@@ -411,7 +411,7 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 		return nil, errf(ErrBadRequest, "%s has no local_path; add `local_path: <its checkout>` to the project in projects.yaml", t.project.Name)
 	}
 	if t.title == "" {
-		t.title = firstLine(req.Prompt, 80)
+		t.title = firstLine(taskPart(req.Prompt), 80)
 	}
 	return t, nil
 }
@@ -483,6 +483,13 @@ func prompt(t *task, extra string, allowed []string) string {
 		task = extra
 	}
 	constraints := builder.Body(prompts.Constraints)
+	// A composed prompt's own constraints join Work's, after the safety rules.
+	if own, rest, ok := cutSection(task, "Constraints"); ok {
+		task = rest
+		if own != "" {
+			constraints += "\n" + own
+		}
+	}
 	if len(allowed) > 0 {
 		constraints += "\n- You may run only these commands without asking: `" + strings.Join(allowed, "`, `") +
 			"`. Anything else is refused; do not try to get around the list."
@@ -505,6 +512,41 @@ func prompt(t *task, extra string, allowed []string) string {
 		secs = append(secs, prompts.Section{ID: prompts.Report, Body: builder.Body(prompts.Report)})
 	}
 	return prompts.Render(secs, nil, nil).Text
+}
+
+// cutSection takes the "## name" section out of text: its body (up to the
+// next heading) and the text without it.
+func cutSection(text, name string) (body, rest string, ok bool) {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		h, isH := strings.CutPrefix(strings.TrimSpace(l), "## ")
+		if !isH || !strings.EqualFold(strings.TrimSpace(h), name) {
+			continue
+		}
+		end := len(lines)
+		for j := i + 1; j < len(lines); j++ {
+			if strings.HasPrefix(strings.TrimSpace(lines[j]), "#") {
+				end = j
+				break
+			}
+		}
+		body = strings.TrimSpace(strings.Join(lines[i+1:end], "\n"))
+		rest = strings.TrimSpace(strings.Join(append(append([]string{}, lines[:i]...), lines[end:]...), "\n"))
+		return body, rest, true
+	}
+	return "", text, false
+}
+
+// taskPart is what follows a "# Task" heading, or all of text without one:
+// a prompt composed in Prompt Studio opens with its context, not its task.
+func taskPart(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "# Task") {
+			return strings.Join(lines[i+1:], "\n")
+		}
+	}
+	return text
 }
 
 // hasHeading reports whether text has a "## name" heading of its own.

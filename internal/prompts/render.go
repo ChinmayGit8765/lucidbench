@@ -280,7 +280,8 @@ var secretPatterns = []struct {
 	kind string
 	re   *regexp.Regexp
 }{
-	{"private key", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)},
+	// Written in parts so this file is not itself flagged as holding a key.
+	{"private key", regexp.MustCompile(`-----BEGIN [A-Z ]*` + `PRIVATE` + ` KEY-----`)},
 	{"API key", regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`)},
 	{"GitHub token", regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})`)},
 	{"AWS access key", regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)},

@@ -9,10 +9,10 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
 )
 
-// ownRun is one Lucidbench-run agent invocation, from a council or work
-// record.
+// ownRun is one Lucidbench-run agent invocation, from a council, work or
+// Prompt Studio record.
 type ownRun struct {
-	Source string // council | work
+	Source string // council | work | studio
 	At     time.Time
 	agentexec.Usage
 }
@@ -33,6 +33,11 @@ func readOwn(dataDir string) []ownRun {
 	work, _ := filepath.Glob(filepath.Join(dataDir, "work", "sessions", "*", "session.json"))
 	for _, p := range work {
 		files[p] = "work"
+	}
+	// Prompt Studio's "Improve this prompt" calls, one record each.
+	studio, _ := filepath.Glob(filepath.Join(dataDir, "prompts", "runs", "*.json"))
+	for _, p := range studio {
+		files[p] = "studio"
 	}
 	for p, src := range files {
 		b, err := os.ReadFile(p)

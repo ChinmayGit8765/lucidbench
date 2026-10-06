@@ -335,22 +335,24 @@ func TestOwnRuns(t *testing.T) {
 		`{"id":"w1","started":"2026-03-03T01:00:00Z","usage":{"provider":"claude","input_tokens":7,"output_tokens":3,"cache_read_tokens":100,"cost_usd":0.5,"duration_ms":2}}`)
 	write(t, filepath.Join(e.data, "work", "sessions", "w2", "session.json"), `{"id":"w2","status":"running"}`)
 	write(t, filepath.Join(e.data, "council", "bad.json"), `{nope`)
+	write(t, filepath.Join(e.data, "prompts", "runs", "r1.json"),
+		`{"created":"2026-03-03T02:00:00Z","usage":{"provider":"claude","model":"haiku","input_tokens":4,"output_tokens":2,"cost_usd":0.125,"duration_ms":1}}`)
 
 	o := e.svc.Summary(7).Lucidbench
-	if o.Runs != 3 || o.Totals.Input != 20 || o.Totals.Output != 9 || o.Totals.CacheRead != 100 {
+	if o.Runs != 4 || o.Totals.Input != 24 || o.Totals.Output != 11 || o.Totals.CacheRead != 100 {
 		t.Errorf("own totals %+v runs %d", o.Totals, o.Runs)
 	}
-	if o.Totals.CostUSD != 0.75 {
+	if o.Totals.CostUSD != 0.875 {
 		t.Errorf("cost %v", o.Totals.CostUSD)
 	}
-	if d := day(Provider{Daily: o.Daily}, "2026-03-03"); d.Input != 7 || d.CostUSD != 0.5 {
+	if d := day(Provider{Daily: o.Daily}, "2026-03-03"); d.Input != 11 || d.CostUSD != 0.625 { // the work run and the studio run
 		t.Errorf("Mar 3 %+v", d)
 	}
 	src := map[string]int64{}
 	for _, b := range o.Sources {
 		src[b.Name] = b.Total
 	}
-	if src["council"] != 19 || src["work"] != 110 {
+	if src["council"] != 19 || src["work"] != 110 || src["studio"] != 6 {
 		t.Errorf("sources %v", src)
 	}
 }

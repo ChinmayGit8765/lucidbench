@@ -155,7 +155,11 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	prompts.Register(mux, &prompts.API{
 		Store:    &prompts.Store{Dir: filepath.Join(data, "prompts")},
 		Resolver: resolver,
-		Improver: &prompts.Improver{Runner: &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}, Resolver: resolver},
+		Improver: &prompts.Improver{
+			Runner:   &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath},
+			Resolver: resolver,
+			RunsDir:  filepath.Join(data, "prompts", "runs"),
+		},
 	})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))

@@ -2,10 +2,13 @@ package prompts
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -70,6 +73,41 @@ type ImproveResult struct {
 type Improver struct {
 	Runner   *agentexec.Runner
 	Resolver *Resolver
+	// RunsDir keeps one record per call (<DataDir>/prompts/runs), so the
+	// Usage page counts what Improve spent; "" records nothing.
+	RunsDir string
+	Now     func() time.Time
+}
+
+// RunRecord is what one Improve call cost, as the Usage page reads it.
+type RunRecord struct {
+	Kind    string          `json:"kind"` // "improve"
+	Created time.Time       `json:"created"`
+	Error   string          `json:"error,omitempty"`
+	Usage   agentexec.Usage `json:"usage"`
+}
+
+// record keeps the usage of one call. A call that failed before the CLI
+// reported anything is not recorded.
+func (im *Improver) record(u agentexec.Usage, runErr error) {
+	if im.RunsDir == "" || (u.DurationMS == 0 && u.InputTokens == 0 && u.OutputTokens == 0 && u.CostUSD == 0) {
+		return
+	}
+	now := time.Now
+	if im.Now != nil {
+		now = im.Now
+	}
+	rec := RunRecord{Kind: "improve", Created: now().UTC(), Usage: u}
+	if runErr != nil {
+		rec.Error = agentexec.Excerpt(runErr.Error())
+	}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	b := make([]byte, 3)
+	_, _ = rand.Read(b)
+	_ = writeFile(filepath.Join(im.RunsDir, rec.Created.Format("20060102-150405")+"-"+hex.EncodeToString(b)+".json"), data)
 }
 
 func (im *Improver) runner() *agentexec.Runner {
@@ -162,6 +200,9 @@ func (im *Improver) Improve(ctx context.Context, req ImproveRequest) (*ImproveRe
 		Provider: provider, SystemPrompt: improveSystem, Prompt: "The rough prompt:\n\n" + text,
 		Tools: agentexec.ToolsNone, Model: model, Timeout: ImproveTimeout,
 	})
+	if res != nil {
+		im.record(res.Usage, err)
+	}
 	if err != nil {
 		return nil, err
 	}
