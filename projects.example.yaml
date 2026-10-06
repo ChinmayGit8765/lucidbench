@@ -16,6 +16,11 @@
 #             project that supplies it, if any.
 # local_path: optional absolute path of the project's checkout on this
 #             machine. Work sessions need it; it is checked when used.
+# deploy:     optional list of where it runs, so its card can show the live
+#             deploy status from the Cloud extension: provider (gcloud |
+#             wrangler | vercel), service (the Cloud Run service, Worker or
+#             Pages project, or Vercel project name) and, for gcloud only,
+#             region and project.
 
 version: 1
 projects:
@@ -28,6 +33,8 @@ projects:
     repo: you/my-app
     # local_path: <absolute path to your checkout>
     linear: APP-1
+    # deploy:
+    #   - { provider: vercel, service: my-app }
     summary: The thing people actually use.
     needs:
       - { what: "Release pipeline", from: build-tools, status: doing }

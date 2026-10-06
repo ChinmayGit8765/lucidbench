@@ -29,6 +29,9 @@ var (
 	Statuses     = []string{"idea", "active", "paused", "frozen", "shipped", "archived"}
 	Visibilities = []string{"public", "private", "confidential"}
 	NeedStatuses = []string{"todo", "doing", "done", "blocked"}
+	// DeployProviders are the CLIs that can report a deploy (az and aws only
+	// show who is signed in).
+	DeployProviders = []string{"gcloud", "wrangler", "vercel"}
 )
 
 // FileName is the projects file name inside the data dir.
@@ -66,6 +69,9 @@ type Project struct {
 	Needs      []Need   `json:"needs" yaml:"needs"`
 	// Work tunes Work sessions on this project; omitted means the defaults.
 	Work *WorkConfig `json:"work,omitempty" yaml:"work"`
+	// Deploy lists where the project runs, so its card can show the live
+	// deploy status from the Cloud extension.
+	Deploy []Deploy `json:"deploy,omitempty" yaml:"deploy"`
 	// Assessment is the project's confirmed answers to its kind's questions.
 	// It may be written in projects.yaml, or confirmed in the app, which keeps
 	// it beside projects.yaml (see assessment.go); the app's copy wins.
@@ -81,6 +87,16 @@ type Project struct {
 	Risk string `json:"risk,omitempty" yaml:"-"`
 	// AssessmentFrom is where the assessment came from: "projects.yaml" or "app".
 	AssessmentFrom string `json:"assessment_from,omitempty" yaml:"-"`
+}
+
+// Deploy is one place a project is deployed. Service is the Cloud Run
+// service, Cloudflare Worker or Pages project, or Vercel project name.
+// Region and Project (the Google Cloud project id) apply to gcloud only.
+type Deploy struct {
+	Provider string `json:"provider" yaml:"provider"`
+	Service  string `json:"service" yaml:"service"`
+	Region   string `json:"region,omitempty" yaml:"region"`
+	Project  string `json:"project,omitempty" yaml:"project"`
 }
 
 // WorkConfig is a project's optional `work:` block.
@@ -246,6 +262,32 @@ func Parse(data []byte) ([]Project, []string) {
 					fmt.Sprintf("unknown value %q (want one of %s)", n.Status, strings.Join(NeedStatuses, ", ")))
 			}
 		}
+		// Entries that fail validation are reported and dropped.
+		var deploys []Deploy
+		for j, d := range p.Deploy {
+			field := func(name string) string { return fmt.Sprintf("deploy[%d].%s", j, name) }
+			ok := true
+			switch {
+			case !slices.Contains(DeployProviders, d.Provider):
+				bad(p.ID, field("provider"), fmt.Sprintf("unknown value %q (want one of %s)", d.Provider, strings.Join(DeployProviders, ", ")))
+				ok = false
+			case strings.TrimSpace(d.Service) == "":
+				bad(p.ID, field("service"), "required")
+				ok = false
+			}
+			if d.Provider != "gcloud" && d.Region != "" {
+				bad(p.ID, field("region"), "only used with provider gcloud")
+				ok = false
+			}
+			if d.Provider != "gcloud" && d.Project != "" {
+				bad(p.ID, field("project"), "only used with provider gcloud")
+				ok = false
+			}
+			if ok {
+				deploys = append(deploys, d)
+			}
+		}
+		p.Deploy = deploys
 		if p.Assessment != nil {
 			if err := assess.Validate(*p.Assessment); err != nil {
 				bad(p.ID, "assessment", err.Error())
