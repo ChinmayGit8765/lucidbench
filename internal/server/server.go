@@ -35,8 +35,10 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
+	"github.com/ChinmayGit8765/lucidbench/internal/sections"
 	"github.com/ChinmayGit8765/lucidbench/internal/setup"
 	"github.com/ChinmayGit8765/lucidbench/internal/stripe"
+	"github.com/ChinmayGit8765/lucidbench/internal/team"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -197,6 +199,21 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 			Resolver: resolver,
 			RunsDir:  filepath.Join(data, "prompts", "runs"),
 		},
+	})
+	// The AI team (lucid-team.yaml): Council and Work read a project's roles.
+	teams := &team.Store{DataDir: data, Default: cfg.Team, Projects: projects.Load, Home: home}
+	team.Register(mux, &team.API{Store: teams,
+		Accounts: func() []accounts.Profile { return accounts.Detect(accounts.FromConfig(cfg)) },
+		MCP:      func() mcp.Matrix { return mcp.Read(mcp.FromConfig(cfg)) },
+		Estimate: func() func(string, string) (float64, int) { return team.Estimator(data) },
+	})
+	councilSvc.Team, workSvc.Team = teams.CouncilRoles, teams.WorkBuilder(data)
+	councilSvc.Runner.ProfileDir = func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }
+	sectionStore := &sections.Store{Dir: filepath.Join(data, "sections")}
+	sections.Register(mux, sectionStore, &sections.Generator{
+		Runner:  &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath, ProfileDir: func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }},
+		Store:   sectionStore,
+		RunsDir: filepath.Join(data, "sections", "runs"),
 	})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
