@@ -1,0 +1,137 @@
+---
+import Base from '../layouts/Base.astro';
+import { url, RELEASES, REPO, DOCS } from '../lib/site';
+
+const loop = [
+  { t: 'Braindump', d: 'Write the messy idea down.' },
+  { t: 'Council', d: 'One model drafts, two critique, up to two revisions.' },
+  { t: 'Brief', d: 'You approve it; it is saved as a page in Memory.' },
+  { t: 'Board', d: 'Approving puts a card on your board.' },
+  { t: 'Work', d: 'An agent runs the card in its own git worktree.' },
+  { t: 'Draft PR', d: 'You confirm, it opens a draft. Merging is yours.' },
+  { t: 'CI', d: 'Runs and runners show up on the Overview.' },
+];
+---
+
+<Base title="Lucidbench" current="home">
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Open source · Apache-2.0 · <span class="pill">Beta</span></p>
+      <h1>One desktop workspace for <span class="gradient-text">your own</span> Claude, ChatGPT/Codex, Grok and Cursor subscriptions.</h1>
+      <p class="lede">
+        Lucidbench turns a messy idea into clear, reviewed work and runs agents on it, using the AI accounts you
+        already pay for. It is a Windows desktop app today, and you can also run it from source or in Docker.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href={RELEASES}>Download from GitHub Releases</a>
+        <a class="btn" href={url('download/')}>Install notes and checksums</a>
+      </div>
+      <p class="small">Windows installer (not code-signed yet, see <a href={url('download/')}>the SmartScreen note</a>). There is no Lucidbench account: it works through the CLIs you are already signed in to.</p>
+
+      <div class="mock" role="img" aria-label="Illustration of a three-column kanban board with made-up cards: Brief, Working and Draft PR. Not a screenshot.">
+        <div class="mock-bar"><i></i><i></i><i></i><b>Board · example</b></div>
+        <div class="mock-body" aria-hidden="true">
+          <div class="col">
+            <h4>Ready</h4>
+            <div class="kcard">Add a dark mode to the settings page<small>Brief approved</small></div>
+            <div class="kcard">Retry failed uploads<small>Brief approved</small></div>
+          </div>
+          <div class="col">
+            <h4>Working</h4>
+            <div class="kcard">Fix the login redirect<small>Codex · own worktree · 2 steps</small></div>
+          </div>
+          <div class="col">
+            <h4>In review</h4>
+            <div class="kcard">Speed up the report export<small>Draft PR · CI passing</small></div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">An illustration drawn for this page with made-up cards, not a screenshot of the app.</p>
+    </div>
+  </section>
+
+  <section id="loop">
+    <div class="wrap">
+      <h2>The core loop</h2>
+      <p class="lede">From a half-formed thought to a draft pull request, with you approving at every hand-off.</p>
+      <ol class="loop">
+        {loop.map((s) => (<li><strong>{s.t}</strong><span>{s.d}</span></li>))}
+      </ol>
+      <p class="small" style="margin-top:1rem">The Council is the part that tests an idea before any code is written: three different models argue over one brief, and you get the result, not the transcript. The Work step uses Claude Code, Codex or Grok under your own logins.</p>
+    </div>
+  </section>
+
+  <section id="modules">
+    <div class="wrap">
+      <h2>Core modules and extensions</h2>
+      <p class="lede">The core needs nothing but the engine. Extensions are for tools and accounts you may not have, and you add the ones you want.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>Core</h3>
+          <ul>
+            <li><strong>Council</strong>, <strong>Memory</strong> (a Markdown vault Obsidian can open, with wikilinks and backlinks) and <strong>Boards</strong> (kanban stored as Markdown).</li>
+            <li><strong>Work</strong>: agent runs with the steps shown like a conversation, the diff inline, and a Stop that stops.</li>
+            <li><strong>Accounts</strong>, <strong>MCP servers</strong> matrix, <strong>Projects</strong> map, <strong>Usage</strong>, System and Settings.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Extensions, added from a gallery</h3>
+          <ul>
+            <li><strong>Runners &amp; CI</strong>, <strong>Containers</strong>, <strong>Kubernetes</strong> (a local kind cluster).</li>
+            <li><strong>Cloud</strong> (read-only inventory), <strong>Databases</strong> (read-only), <strong>Picture</strong> (Mermaid and Excalidraw), <strong>Live browser</strong> (isolated Chromium).</li>
+            <li><strong>Linear</strong>, <strong>Trello</strong> and <strong>Payments</strong> (Stripe, test mode only for writes) need credentials from your environment.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Make it yours</h3>
+          <ul>
+            <li>Themes you can describe in words, and state sprites.</li>
+            <li>Sections: small read-only widgets on the Overview.</li>
+            <li>An AI-team file that names the model and budget of each role in a project.</li>
+          </ul>
+          <p class="small" style="margin-top:.6rem">Every extension ships inside Lucidbench. Installing third-party extensions at runtime is <a href={`${DOCS}/EXTENDING.md#not-supported-yet-third-party-extensions`}>not supported yet</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="safety">
+    <div class="wrap">
+      <h2>Safety and privacy</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Local-first</h3>
+          <p>The daemon listens on loopback (<code>127.0.0.1</code>) by default. Memory, boards and settings are files in your own data and config folders, not ours.</p>
+        </div>
+        <div class="card">
+          <h3>Your logins, never read out</h3>
+          <p>Accounts are detected by presence only. Token values are never read, printed, logged or copied. Config holds <code>env:NAME</code> references, not secrets.</p>
+        </div>
+        <div class="card">
+          <h3>No telemetry</h3>
+          <p>The source has no analytics or telemetry code. Your prompts go only to the providers whose CLIs you run, under your own accounts. Pages marked <code>confidential: true</code> are never sent to a provider.</p>
+        </div>
+        <div class="card">
+          <h3>Human in the loop</h3>
+          <p>Agents open <strong>draft</strong> PRs only; merging is always your call. Every run shows its cost. Lucidbench never rotates between your accounts to dodge usage limits.</p>
+        </div>
+      </div>
+      <div class="note">
+        <p><strong>Read this before you run an agent.</strong> Work agents run as you on your machine. They are told to stay in their worktree, but that is <strong>not sandboxed yet</strong>. They can spend real money on your subscriptions or API keys. The Windows installer is not code-signed yet, so SmartScreen will warn on first run.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="beta">
+    <div class="wrap">
+      <h2>Beta, honestly</h2>
+      <p class="lede">Lucidbench is in beta. Expect rough edges, and expect things to change.</p>
+      <ul class="prose">
+        <li>The desktop installer is Windows only. There are no macOS or Linux installers; those platforms can run from source or in Docker.</li>
+        <li>Usage ships as a minimal page; the planner, the Kubernetes runner for acting agents and a conversational terminal are on the <a href={`${REPO}#roadmap`}>roadmap</a>, not built.</li>
+        <li>Linear and Trello are one-way views with a link, not a two-way sync: the remote owns the item.</li>
+      </ul>
+      <p>Found something broken? <a href={`${REPO}/issues`}>Open an issue</a>. See what changed in the <a href={url('changelog/')}>changelog</a>.</p>
+    </div>
+  </section>
+</Base>

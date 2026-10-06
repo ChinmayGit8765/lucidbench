@@ -1,0 +1,63 @@
+---
+import Base from '../layouts/Base.astro';
+import { RELEASES, REPO } from '../lib/site';
+---
+
+<Base title="Download" current="download" description="Download the Lucidbench Windows installer, verify it, or build from source.">
+  <section>
+    <div class="wrap prose">
+      <h1>Download</h1>
+      <p class="lede">Lucidbench is in beta. The Windows installer is on GitHub Releases, and every release also lists a <code>SHA256SUMS.txt</code>.</p>
+      <div class="cta">
+        <a class="btn primary" href={RELEASES}>Open GitHub Releases</a>
+      </div>
+      <p class="small">Releases of a <code>-beta</code> version are marked as pre-releases.</p>
+
+      <h2>Windows</h2>
+      <p>Download <code>Lucidbench_&lt;version&gt;_x64-setup.exe</code> from the latest release. It installs per user, so there is no admin prompt. Updating over an older install first stops the Lucidbench processes running from the install folder (and only those), so a locked file does not block it.</p>
+      <div class="note">
+        <p><strong>SmartScreen will warn.</strong> The installer is not code-signed yet. On first run choose <em>More info</em>, then <em>Run anyway</em>. This is one reason to verify the checksum below.</p>
+      </div>
+
+      <h2>Verify the download</h2>
+      <p>Download <code>SHA256SUMS.txt</code> from the same release, next to the installer, then compare.</p>
+      <h3>Windows PowerShell</h3>
+      <ol class="steps">
+        <li>Open PowerShell in the folder with both files.</li>
+        <li>Print the hash of the installer:
+          <pre><code>Get-FileHash .\Lucidbench_&lt;version&gt;_x64-setup.exe -Algorithm SHA256</code></pre></li>
+        <li>Open <code>SHA256SUMS.txt</code> and check that the hash on the line for that file name is identical (case does not matter).</li>
+      </ol>
+      <h3>macOS, Linux or Git Bash</h3>
+      <pre><code>sha256sum -c SHA256SUMS.txt</code></pre>
+      <p>It should print <code>OK</code> for the installer. If it says <code>FAILED</code> or the hashes differ, do not run the file; download it again, and report it if it persists.</p>
+      <p class="small">A checksum published next to a file proves the download was not corrupted. It does not prove who built it, because both come from the same release page. Releases are built by the repository's own workflow from a tag.</p>
+
+      <h2>macOS and Linux</h2>
+      <p>There is no macOS or Linux desktop installer. The desktop app is a Windows build today. On other systems you can run the same UI from source or in Docker, below.</p>
+
+      <h2>With Docker</h2>
+      <pre><code>git clone {REPO}.git
+cd lucidbench
+docker compose up</code></pre>
+      <p>Then open <code>http://localhost:7420</code>. Mounting the Docker socket gives the daemon control of your Docker engine, so only do this on a machine you trust.</p>
+
+      <h2>Build from source</h2>
+      <p>You need Go 1.26, Node 22 and Docker.</p>
+      <pre><code># 1. Build the web UI, which the daemon embeds
+cd web
+npm ci
+npm run build
+cd ..
+
+# 2. Run the daemon (serves the API and the UI on 127.0.0.1:7420)
+go run ./cmd/lucidd</code></pre>
+      <p>To build the Windows installer yourself you also need Rust (stable) and WebView2:</p>
+      <pre><code>cd desktop
+npm ci
+npm run build:sidecar
+npx tauri build</code></pre>
+      <p>The installer lands in <code>desktop/src-tauri/target/release/bundle/nsis/</code>. See the <a href={`${REPO}#desktop-app`}>README</a> for how the app attaches to or starts the daemon.</p>
+    </div>
+  </section>
+</Base>
