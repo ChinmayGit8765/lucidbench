@@ -300,7 +300,9 @@ func TestSessionOnCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(rec.Stdin, Preamble) || !strings.Contains(rec.Stdin, "Add a README line saying hello.") ||
-		!strings.Contains(rec.Stdin, "Done when README.md says hello.") {
+		!strings.Contains(rec.Stdin, "Done when README.md says hello.") ||
+		!strings.Contains(rec.Stdin, "\n## Verify\n") || !strings.Contains(rec.Stdin, "\n## Report\n") ||
+		!strings.Contains(rec.Stdin, "You may run only these commands without asking: `git status`") {
 		t.Errorf("prompt:\n%s", rec.Stdin)
 	}
 	if !strings.EqualFold(canon(rec.Cwd), canon(se.Worktree)) {

@@ -250,13 +250,13 @@ function OwnCard({ o, withCache }: { o: UsageOwn; withCache: boolean }) {
           </span>
           <div>
             <h2 className="text-sm font-semibold">Lucidbench runs</h2>
-            <p className="text-xs text-subtle-foreground">What council and work sessions started here spent.</p>
+            <p className="text-xs text-subtle-foreground">What council and work sessions and Prompt Studio’s Improve calls started here spent.</p>
           </div>
         </div>
         {o.runs > 0 && <Legend keys={keys} />}
       </div>
       {o.runs === 0 ? (
-        <p className="border-t px-5 py-6 text-sm text-muted-foreground">No council or work runs in this range yet.</p>
+        <p className="border-t px-5 py-6 text-sm text-muted-foreground">No council, work or Prompt Studio runs in this range yet.</p>
       ) : (
         <div className="space-y-5 border-t px-5 py-4">
           <div className="flex flex-wrap gap-x-8 gap-y-3">

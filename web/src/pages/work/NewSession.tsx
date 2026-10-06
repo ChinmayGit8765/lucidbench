@@ -14,6 +14,7 @@ import {
   Terminal,
   TriangleAlert,
   UserCog,
+  WandSparkles,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -29,6 +30,7 @@ import { Skeleton } from "@/components/ui/states"
 import { errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { PROJECTS_POLL_MS, typeInfo, type ProjectList } from "@/lib/projects"
+import { putHandoff, takeHandoff } from "@/lib/prompts"
 import { cn, isMac } from "@/lib/utils"
 import {
   branchPreview,
@@ -94,7 +96,9 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   const [harnessTouched, setHarnessTouched] = useState(false)
   const [project, setProject] = useState(initialProject ?? "")
   const [cardId, setCardId] = useState(initialCard ?? "")
-  const [prompt, setPrompt] = useState("")
+  // A prompt composed in Prompt Studio arrives once, with its project.
+  const [handoff] = useState(() => takeHandoff("work"))
+  const [prompt, setPrompt] = useState(handoff?.text ?? "")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [showUnusable, setShowUnusable] = useState(false)
   // The commands the agent may run without asking: the project's defaults
@@ -161,7 +165,9 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
         ? `${blocked.name} is confidential, so no agent may work on it`
         : `${blocked.name} has no local_path`
 
-  const title = card?.title ?? prompt.split("\n").find((l) => l.trim())?.trim() ?? ""
+  // A prompt composed in Prompt Studio opens with its context: its title is the task's first line, as Work names it.
+  const taskText = /^# Task/m.test(prompt) ? prompt.slice(prompt.search(/^# Task/m)).split("\n").slice(1).join("\n") : prompt
+  const title = card?.title ?? taskText.split("\n").find((l) => l.trim())?.trim().replace(/^[#>*\- ]+/, "") ?? ""
   const missing = !chosen
     ? (blockedWhy ?? "Pick a project")
     : !card && !prompt.trim()
@@ -260,9 +266,22 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
               placeholder={card ? "Anything to add to the brief (optional)" : "What should the agent do? For example: add a README line saying hello."}
               className="w-full resize-y rounded-lg border bg-background/50 px-3 py-2.5 text-sm leading-6 outline-none placeholder:text-subtle-foreground focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <p className="mt-1.5 text-2xs text-subtle-foreground">
-              <kbd className="rounded border bg-muted px-1 font-sans">{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd className="rounded border bg-muted px-1 font-sans">Enter</kbd> to start
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-2xs text-subtle-foreground">
+                <kbd className="rounded border bg-muted px-1 font-sans">{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd className="rounded border bg-muted px-1 font-sans">Enter</kbd> to start
+                {handoff && prompt === handoff.text && " · composed in Prompt Studio"}
+              </p>
+              <button
+                onClick={() => {
+                  putHandoff({ to: "studio", text: prompt, project: project || undefined, template: "builder", from: "work" })
+                  open("studio", ["builder"])
+                }}
+                title="Compose this task in Prompt Studio, with context sources, lint and a preview"
+                className="ml-auto inline-flex items-center gap-1 text-2xs text-muted-foreground hover:text-foreground"
+              >
+                <WandSparkles className="size-3" /> Open in Studio
+              </button>
+            </div>
           </Section>
 
           <Section n={2} title="Project" hint="only projects with a local checkout">

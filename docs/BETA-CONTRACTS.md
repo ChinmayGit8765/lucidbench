@@ -155,7 +155,7 @@ func Approve(id string, project string) (*boards.Card, error)
   had streamed (Claude reports it per message), with `usage.note` "stopped before the CLI reported
   its final cost".
 - **The prompt** for a card is the brief (page body), plus "work only in this worktree; commit
-  with clear messages; do not push".
+  with clear messages; do not push". It is built from the builder template; see Prompt Studio below.
 - **After the run:** a diff summary is shown. "Open PR" pushes the branch and runs
   `gh pr create --draft`, only after the user confirms it in the UI (`X-Lucid-Confirm`). Merging
   is always the user's click on GitHub.
@@ -242,3 +242,45 @@ func Approve(id string, project string) (*boards.Card, error)
 
 **Power**
 - `GET /api/power`, `POST /api/power/{kind}/{name}/{start|stop}`, `POST /api/power/sleep` and `POST /api/docker/projects/{project}/{start|stop}`. See docs/CONFIG.md `power`.
+
+**Prompt Studio** (`internal/prompts`, web module `studio`, AI section)
+- **Templates** have sections, each optional: `role`, `context`, `contract`, `task`, `constraints`, `verify`, `report`. The built-ins are versioned in `internal/prompts/templates/*.yaml`: builder, critic, scout, researcher, reviewer and braindump. The user's templates and snippets live in `<data dir>/prompts/templates/` and `<data dir>/prompts/snippets/`. A user template with a built-in's id overrides it in Studio. The council's three prompts are listed read-only as `council-propose`, `council-critique` and `council-synthesise`.
+- **Variables:** `{{project.id|name|repo|local_path|summary|kind|risk|criteria|checks}}` and `{{date}}`, filled from the chosen project (`local_path` with home as `~`). An unknown or empty variable is left as written, with a lint note.
+- **Work** builds every prompt from the built-in builder template, never from a user override. The order is its role and constraints (worktree only, commit, never push), then the session's allowed commands as the last constraint, the task, and its verify and report sections. A prompt composed in Studio keeps its own Verify and Report sections, and its Constraints lines join Work's.
+- **Context sources** each return `{label, text, format, chars, tokens, confidential, truncated?}`:
+  - `project`: the projects.yaml entry and its assessment's criteria and checks;
+  - `page`: a Memory page;
+  - `rules`: `docs/BETA-CONTRACTS.md`, `CONTRIBUTING.md`, `AGENTS.md` and `CLAUDE.md` from the project's checkout;
+  - `repo`: the tree two levels deep with file counts, leaving out `.git`, `node_modules`, `dist`, `target` and `.claude`;
+  - `card`: a card and its brief;
+  - `decisions`: the project's recent council briefs and their outcomes.
+- **Render** re-reads every source on the daemon, so text and confidentiality never come from the caller. `tokens` is an estimate (characters ÷ 4). For target `work`, the role and Work's own safety lines are left out, because Work adds them.
+- **Lint** findings are `{severity: error|warning|info, code, message, section?}`:
+  - errors: `confidential` (a confidential source or project with target `work` or `council`), `empty-task`, `source` (one cannot be read), `too-long` (a Council braindump over 20,000 characters);
+  - warnings: `no-verify`, `no-report`, `no-done-criteria`, `secret`;
+  - info: `unfilled`, `work-adds`.
+  Any error sets `blocked`. Copy is never blocked.
+- **Improve** is one call with no tools, on the chosen provider. The default is the first installed of claude, codex and grok; the claude model defaults to `haiku`. It sends the sections' text only, never the context sources. It refuses a confidential project (403), a `[[link]]` to a confidential page (403) and secret-looking text (400). The answer is a preview and is never applied. Each call's usage is kept in `<data dir>/prompts/runs/*.json`, and the Usage page counts it as source `studio`.
+- **Send** is a hand-off in the browser. Work's New Session and the Council composer open with the text; nothing starts until the user starts it there.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/prompts/templates` | GET | `{templates, sections, variables}` |
+| `/api/prompts/templates/{id}` | PUT / DELETE | save a user template or override / delete it (a built-in comes back); council ids are 409 |
+| `/api/prompts/snippets` | GET | the user's snippets, newest first |
+| `/api/prompts/snippets/{id}` | PUT / DELETE | `{name, section?, body}` |
+| `/api/prompts/context?kind=&project=&path=&board=&id=` | GET | one context source |
+| `/api/prompts/render` | POST | `{sections, context: [{kind, project?, path?, board?, id?}], project?, target: work\|council\|copy}` returns `{text, chars, tokens, tokens_note, unfilled, lint, blocked, sources}`; changes nothing, so no confirm header |
+| `/api/prompts/improve` | POST | `{text\|sections, provider?, model?, project?}` returns `{sections, text, provider, model, usage}` |
+
+**Ideas** (`internal/ideas`, web module `ideas`, Workspace section)
+- An idea is derived on every request; nothing is stored. A council session gives the idea `id` = the session id. A card with no council link gives `card:<board>/<card id>`. A `card:` id of a card the council made resolves to the council's idea.
+- The joins: a card's `council::` names the session, and a Work session names its card (`card` + `board`), or the card's `work::` names the session.
+- **Stage:** `merged` (a session's PR is merged), `pr` (a session has a PR), `work` (a session ran), `card` (a card exists), `brief` (a brief was written), else `braindump`.
+- **Card history** is rebuilt from the records: Ready at the council's approval, In progress at a session's start, Review at its end, and Done when its PR was first seen merged. Moves made by hand are not recorded, and `history_note` says so. The time a PR was opened is not stored, so that timeline event is `untimed`.
+- Ideas only read. They never ask gh or git: the PR state shown is the one Work last read.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/ideas` | GET | `[{id, title, stage, status, project, created, updated, cost_usd, council, card, sessions, pr_url, pr_state}]`, newest first; `cost_usd` sums what the council and Work runs reported |
+| `/api/ideas/{id...}` | GET | the summary plus `council_session`, `brief {path, title, status, body, exists, confidential}`, `card_view {…card, board, history, history_note}`, `work` (session summaries with diff stat, cost, `pr_url`, `pr_state`, `pr_checks`), `links` (pages that link the brief), `timeline`, `costs` (by provider and part) and `missing` (pieces that could not be read) |

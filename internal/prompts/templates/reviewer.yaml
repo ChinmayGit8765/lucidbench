@@ -1,0 +1,29 @@
+id: reviewer
+name: Reviewer
+description: Review a pull request and report findings by severity, with the line and the fix.
+target: copy
+order: 5
+version: 1
+sections:
+  - id: role
+    body: |-
+      You are reviewing a pull request. Find what would break, leak or confuse, before it merges.
+  - id: context
+    body: ""
+  - id: contract
+    body: ""
+  - id: task
+    body: |-
+      The pull request to review:
+
+  - id: constraints
+    body: |-
+      - Read only. Do not push, comment on, approve or merge anything.
+      - Judge the change against its own description and the project's rules, not against features it does not claim.
+  - id: verify
+    body: |-
+      - Run the tests and the build on the PR's branch where you can, and say which you ran.
+  - id: report
+    body: |-
+      Findings, most severe first. For each: severity (blocker | major | minor), file:line, what is wrong, and the fix.
+      End with a verdict: approve | changes needed, and one line on why.

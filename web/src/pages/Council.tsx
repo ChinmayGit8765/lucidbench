@@ -10,6 +10,7 @@ import {
   FileText,
   FlaskConical,
   KanbanSquare,
+  Lightbulb,
   Loader2,
   MessagesSquare,
   NotebookPen,
@@ -20,6 +21,7 @@ import {
   Sparkles,
   TriangleAlert,
   Vote,
+  WandSparkles,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -62,6 +64,7 @@ import {
   useCouncilSession,
 } from "@/lib/council"
 import { PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
+import { putHandoff, takeHandoff } from "@/lib/prompts"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
@@ -151,6 +154,12 @@ function Composer() {
   const area = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    // A braindump composed in Prompt Studio arrives here once.
+    const h = takeHandoff("council")
+    if (h) {
+      setInput(h.text.slice(0, 20000))
+      if (h.project) setProject(h.project)
+    }
     area.current?.focus()
     const onCompose = () => area.current?.focus()
     window.addEventListener(COMPOSE_EVENT, onCompose)
@@ -274,6 +283,17 @@ function Composer() {
             </div>
           </Field>
           <div className="ml-auto flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Shape this braindump in Prompt Studio, with context from the project and Memory"
+              onClick={() => {
+                putHandoff({ to: "studio", text: input, project: project || undefined, template: "braindump", from: "council" })
+                open("studio", ["braindump"])
+              }}
+            >
+              <WandSparkles /> Open in Studio
+            </Button>
             <span className="text-right text-xs leading-tight text-subtle-foreground max-[720px]:hidden">
               {critics.length === 0 ? "Self-critique" : `${critics.length} ${critics.length === 1 ? "critic" : "critics"}`} · up to {calls} calls
               <br />
@@ -799,12 +819,12 @@ function CriticCard({ step }: { step: CouncilStep }) {
 
 /* brief */
 
-interface ParsedBrief {
+export interface ParsedBrief {
   title: string
   sections: { heading: string; lines: string[] }[]
 }
 
-function parseBrief(md: string): ParsedBrief {
+export function parseBrief(md: string): ParsedBrief {
   const out: ParsedBrief = { title: "", sections: [] }
   let cur: { heading: string; lines: string[] } | null = null
   for (const raw of md.replace(/\r\n/g, "\n").split("\n")) {
@@ -954,7 +974,7 @@ function Section({ heading, lines, compact }: { heading: string; lines: string[]
   )
 }
 
-function BriefBody({ b, compact }: { b: ParsedBrief; compact?: boolean }) {
+export function BriefBody({ b, compact }: { b: ParsedBrief; compact?: boolean }) {
   const byName = new Map(b.sections.map((s) => [s.heading.toLowerCase(), s]))
   const used = new Set<string>()
   const blocks: ReactNode[] = []
@@ -1165,6 +1185,7 @@ function AskAgainDialog({ open, onClose, s, onStarted }: { open: boolean; onClos
 /* aside */
 
 function Aside({ s }: { s: CouncilSession }) {
+  const { open } = useApp()
   const now = useNow(5000)
   const t = totals(s.usage)
   const byProvider = new Map<string, { calls: number; input: number; output: number; cost: number }>()
@@ -1213,6 +1234,13 @@ function Aside({ s }: { s: CouncilSession }) {
           <Row k="Started">
             <span title={absoluteTime(s.created)}>{relativeTime(s.created, now)}</span>
           </Row>
+          {s.brief_path && (
+            <Row k="Idea">
+              <button onClick={() => open("ideas", [s.id])} className="inline-flex items-center gap-1 text-brand-fg hover:underline" title="The brief, its card, the agent sessions and the PRs in one place">
+                <Lightbulb className="size-3.5" /> Follow it
+              </button>
+            </Row>
+          )}
         </dl>
       </Card>
 

@@ -276,7 +276,8 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
   const running = session.status === "running"
   const [showPrompt, setShowPrompt] = useState(false)
   const name = providerInfo(session.provider)?.label ?? session.provider
-  const brief = session.prompt.split(/\n# Task[^\n]*\n/)[1] ?? session.prompt
+  // The task only: after the "# Task" heading, before Work's verify and report sections.
+  const brief = (session.prompt.split(/\n# Task[^\n]*\n/)[1] ?? session.prompt).split(/\n## Verify\n/)[0]
   return (
     <ol className="relative space-y-1">
       <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />

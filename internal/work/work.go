@@ -26,9 +26,11 @@ import (
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
+	"github.com/ChinmayGit8765/lucidbench/internal/assess"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
+	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
 )
 
 // Session statuses.
@@ -76,11 +78,26 @@ func plural(n int, word string) string {
 	return fmt.Sprintf("%d %ss", n, word)
 }
 
-// Preamble opens every prompt.
-const Preamble = `You are working in a git worktree that Lucidbench created for this task, on its own branch.
-- Work only inside this worktree (your current directory). Do not read or change files outside it.
-- Commit your changes with clear, conventional commit messages as you go.
-- Do not push, and do not open pull requests: the user reviews the diff and opens the PR.`
+// builder is the template every Work prompt is built from (see
+// internal/prompts/templates/builder.yaml). Always the built-in one: a user's
+// override changes what Studio shows, never Work's safety rules.
+var builder = mustBuilder()
+
+func mustBuilder() prompts.Template {
+	t, ok := prompts.Builtin("builder")
+	if !ok {
+		panic("work: no builder template")
+	}
+	return t
+}
+
+// Preamble opens every prompt: the builder template's role and constraints,
+// the rules every session gets (work only in the worktree, commit, never
+// push). The session's allowed commands follow as the last constraint.
+var Preamble = strings.TrimSpace(prompts.Render([]prompts.Section{
+	{ID: prompts.Role, Body: builder.Body(prompts.Role)},
+	{ID: prompts.Constraints, Body: builder.Body(prompts.Constraints)},
+}, nil, nil).Text)
 
 // Session is one agent run in one worktree.
 type Session struct {
@@ -394,7 +411,7 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 		return nil, errf(ErrBadRequest, "%s has no local_path; add `local_path: <its checkout>` to the project in projects.yaml", t.project.Name)
 	}
 	if t.title == "" {
-		t.title = firstLine(req.Prompt, 80)
+		t.title = firstLine(taskPart(req.Prompt), 80)
 	}
 	return t, nil
 }
@@ -450,20 +467,96 @@ func (s *Service) resolveCard(req *StartRequest, t *task) error {
 	return nil
 }
 
-// prompt joins the preamble, the brief and the user's own words.
-func prompt(t *task, extra string) string {
-	var sb strings.Builder
-	sb.WriteString(Preamble + "\n\n")
+// prompt renders the builder template: its role and constraints (with the
+// session's allowed commands), the task (the brief and the user's own words),
+// then the verify and report sections. A prompt composed in Prompt Studio
+// that brings its own Verify or Report section keeps it instead.
+func prompt(t *task, extra string, allowed []string) string {
+	extra = strings.TrimSpace(extra)
+	var task string
 	if t.card != nil {
-		sb.WriteString("# Task: " + t.title + "\n\n")
-		sb.WriteString(strings.TrimSpace(t.body) + "\n")
-		if strings.TrimSpace(extra) != "" {
-			sb.WriteString("\n## Notes from the user\n\n" + strings.TrimSpace(extra) + "\n")
+		task = "# Task: " + t.title + "\n\n" + strings.TrimSpace(t.body)
+		if extra != "" {
+			task += "\n\n## Notes from the user\n\n" + extra
 		}
 	} else {
-		sb.WriteString("# Task\n\n" + strings.TrimSpace(extra) + "\n")
+		task = extra
 	}
-	return sb.String()
+	constraints := builder.Body(prompts.Constraints)
+	// A composed prompt's own constraints join Work's, after the safety rules.
+	if own, rest, ok := cutSection(task, "Constraints"); ok {
+		task = rest
+		if own != "" {
+			constraints += "\n" + own
+		}
+	}
+	if len(allowed) > 0 {
+		constraints += "\n- You may run only these commands without asking: `" + strings.Join(allowed, "`, `") +
+			"`. Anything else is refused; do not try to get around the list."
+	}
+	secs := []prompts.Section{
+		{ID: prompts.Role, Body: builder.Body(prompts.Role)},
+		{ID: prompts.Constraints, Body: constraints},
+		{ID: prompts.Task, Body: task},
+	}
+	if !hasHeading(task, "Verify") {
+		verify := builder.Body(prompts.Verify)
+		if t.project.Assessment != nil {
+			if checks := assess.Suggest(*t.project.Assessment).CheckCommands; len(checks) > 0 {
+				verify += "\n- The checks this project needs: `" + strings.Join(checks, "`, `") + "`."
+			}
+		}
+		secs = append(secs, prompts.Section{ID: prompts.Verify, Body: verify})
+	}
+	if !hasHeading(task, "Report") {
+		secs = append(secs, prompts.Section{ID: prompts.Report, Body: builder.Body(prompts.Report)})
+	}
+	return prompts.Render(secs, nil, nil).Text
+}
+
+// cutSection takes the "## name" section out of text: its body (up to the
+// next heading) and the text without it.
+func cutSection(text, name string) (body, rest string, ok bool) {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		h, isH := strings.CutPrefix(strings.TrimSpace(l), "## ")
+		if !isH || !strings.EqualFold(strings.TrimSpace(h), name) {
+			continue
+		}
+		end := len(lines)
+		for j := i + 1; j < len(lines); j++ {
+			if strings.HasPrefix(strings.TrimSpace(lines[j]), "#") {
+				end = j
+				break
+			}
+		}
+		body = strings.TrimSpace(strings.Join(lines[i+1:end], "\n"))
+		rest = strings.TrimSpace(strings.Join(append(append([]string{}, lines[:i]...), lines[end:]...), "\n"))
+		return body, rest, true
+	}
+	return "", text, false
+}
+
+// taskPart is what follows a "# Task" heading, or all of text without one:
+// a prompt composed in Prompt Studio opens with its context, not its task.
+func taskPart(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "# Task") {
+			return strings.Join(lines[i+1:], "\n")
+		}
+	}
+	return text
+}
+
+// hasHeading reports whether text has a "## name" heading of its own.
+func hasHeading(text, name string) bool {
+	for _, l := range strings.Split(text, "\n") {
+		if h, ok := strings.CutPrefix(strings.TrimSpace(l), "## "); ok && strings.EqualFold(strings.TrimSpace(h), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // Start makes the worktree and starts the agent. It returns once the run has
@@ -497,7 +590,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	se := Session{
 		ID: id, Provider: req.Provider, Profile: req.Profile, Harness: req.Harness, Project: t.project.ID,
 		RepoPath: wt.repo, RepoHint: s.hint(wt.repo), Branch: wt.branch, BaseRef: wt.baseRef, BaseSHA: wt.baseSHA,
-		Worktree: wt.path, WorktreeHint: s.hint(wt.path), Title: t.title, Prompt: prompt(t, req.Prompt),
+		Worktree: wt.path, WorktreeHint: s.hint(wt.path), Title: t.title, Prompt: prompt(t, req.Prompt, allowed),
 		Board: t.board, Brief: t.brief, AllowedCommands: allowed, Status: StatusRunning, Started: time.Now().UTC(),
 	}
 	if t.card != nil {

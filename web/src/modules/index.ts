@@ -5,6 +5,7 @@ import { cloud } from "@/modules/cloud"
 import { containers } from "@/modules/containers"
 import { council } from "@/modules/council"
 import { databases } from "@/modules/databases"
+import { ideas } from "@/modules/ideas"
 import { kubernetes } from "@/modules/kubernetes"
 import { linear } from "@/modules/linear"
 import { mcp } from "@/modules/mcp"
@@ -15,6 +16,7 @@ import { picture } from "@/modules/picture"
 import { projects } from "@/modules/projects"
 import { runners } from "@/modules/runners"
 import { settings } from "@/modules/settings"
+import { studio } from "@/modules/studio"
 import { system } from "@/modules/system"
 import { trello } from "@/modules/trello"
 import type { ModuleDef } from "@/modules/types"
@@ -31,12 +33,14 @@ export const MODULES: ModuleDef[] = [
   // Core: always present, reorderable.
   overview,
   work,
+  ideas,
   projects,
   memory,
   boards,
   accounts,
   mcp,
   council,
+  studio,
   usage,
   system,
   settings,

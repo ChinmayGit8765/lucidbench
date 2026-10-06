@@ -1,0 +1,21 @@
+id: braindump
+name: Braindump → brief
+description: Shape a rough idea into a braindump the Council can turn into a brief.
+target: council
+order: 6
+version: 1
+sections:
+  - id: context
+    body: ""
+  - id: task
+    body: |-
+      The idea, as it is:
+
+  - id: constraints
+    body: |-
+      - What must not change:
+      - Out of scope:
+  - id: verify
+    body: |-
+      How I would know it works:
+      -

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -21,6 +22,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/databases"
 	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
+	"github.com/ChinmayGit8765/lucidbench/internal/ideas"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
@@ -29,6 +31,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
+	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -156,12 +159,26 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	boards.Register(mux, vault)
 	linear.Register(mux, linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") }))
 	trello.Register(mux, trello.New(cfg.Integrations.Trello, vault))
-	council.Register(mux, council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}))
-	work.Register(mux, work.New(filepath.Join(data, "work", "sessions"), &agentexec.Runner{
+	councilSvc := council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath})
+	council.Register(mux, councilSvc)
+	workSvc := work.New(filepath.Join(data, "work", "sessions"), &agentexec.Runner{
 		InContainer: cluster.InContainer,
 		LookPath:    exec.LookPath,
 		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
-	}, vault, projects.Load))
+	}, vault, projects.Load)
+	work.Register(mux, workSvc)
+	ideas.Register(mux, &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault})
+	home, _ := os.UserHomeDir()
+	resolver := &prompts.Resolver{Projects: projects.Load, Vault: vault, Council: councilSvc, Home: home}
+	prompts.Register(mux, &prompts.API{
+		Store:    &prompts.Store{Dir: filepath.Join(data, "prompts")},
+		Resolver: resolver,
+		Improver: &prompts.Improver{
+			Runner:   &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath},
+			Resolver: resolver,
+			RunsDir:  filepath.Join(data, "prompts", "runs"),
+		},
+	})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
