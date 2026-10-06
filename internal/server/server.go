@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
@@ -20,6 +21,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
+	"github.com/ChinmayGit8765/lucidbench/internal/linear"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
@@ -66,6 +68,17 @@ type Deps struct {
 	// Power serves /api/power when set. NewWith never builds one: the daemon
 	// does and runs it, so a handler built in a test starts nothing.
 	Power *power.Supervisor
+}
+
+// mcpHas reports whether any AI client has an MCP server whose name contains
+// name (the same test the extensions gallery uses).
+func mcpHas(cfg *config.Config, name string) bool {
+	for _, s := range mcp.Read(mcp.FromConfig(cfg)).Servers {
+		if strings.Contains(strings.ToLower(s.Name), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // DataDir is where prefs, themes, usage, council and work records live.
@@ -121,6 +134,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	vault := memory.LazyOpener(cfg)
 	memory.Register(mux, vault)
 	boards.Register(mux, vault)
+	linear.Register(mux, linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") }))
 	council.Register(mux, council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}))
 	work.Register(mux, work.New(filepath.Join(data, "work", "sessions"), &agentexec.Runner{
 		InContainer: cluster.InContainer,
