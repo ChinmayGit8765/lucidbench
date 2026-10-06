@@ -20,6 +20,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/council"
 	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
+	"github.com/ChinmayGit8765/lucidbench/internal/ideas"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
@@ -148,6 +149,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
 	}, vault, projects.Load)
 	work.Register(mux, workSvc)
+	ideas.Register(mux, &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault})
 	home, _ := os.UserHomeDir()
 	resolver := &prompts.Resolver{Projects: projects.Load, Vault: vault, Council: councilSvc, Home: home}
 	prompts.Register(mux, &prompts.API{
