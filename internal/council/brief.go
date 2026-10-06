@@ -34,8 +34,18 @@ func notesBlock(notes string) string {
 	return "\n\nNotes from the user (binding):\n" + notes
 }
 
-func proposePrompt(input, project string) string {
-	return "The braindump:\n" + input + projectBlock(project)
+// criteriaBlock offers the done criteria suggested by the project's
+// assessment. They are a starting point for the proposer, not binding.
+func criteriaBlock(criteria []string) string {
+	if len(criteria) == 0 {
+		return ""
+	}
+	return "\n\nDone criteria suggested for this kind of project (use the ones that fit the braindump, reword them to match it, and keep each one's proof; drop any that do not apply):\n- " +
+		strings.Join(criteria, "\n- ")
+}
+
+func proposePrompt(input, project string, criteria []string) string {
+	return "The braindump:\n" + input + projectBlock(project) + criteriaBlock(criteria)
 }
 
 func critiquePrompt(input, project, draft, notes string, self bool) string {

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
+	"github.com/ChinmayGit8765/lucidbench/internal/assess"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
@@ -580,7 +581,7 @@ func (s *Service) run(ctx context.Context, sess *Session, onUpdate func(Session)
 			sess.Proposer, sess.Critics = proposer, append([]string{}, critics...)
 			sess.Rounds[0].Proposal = step
 		})
-		err := s.call(ctx, sess, onUpdate, step, ProposePrompt, proposePrompt(sess.Input, project))
+		err := s.call(ctx, sess, onUpdate, step, ProposePrompt, proposePrompt(sess.Input, project, s.assessmentCriteria(sess.Project)))
 		if err == nil {
 			draft = cleanBrief(step.Text)
 			if draft != "" {
@@ -796,6 +797,23 @@ func (s *Service) projectContext(id string) string {
 		line += ": " + oneLine(p.Summary)
 	}
 	return line
+}
+
+// assessmentCriteria returns the done criteria the project's assessment
+// suggests, or nil when it has none.
+func (s *Service) assessmentCriteria(id string) []string {
+	if id == "" {
+		return nil
+	}
+	l, err := s.loadProjects()
+	if err != nil || l == nil {
+		return nil
+	}
+	p := l.Find(id)
+	if p == nil || p.Assessment == nil {
+		return nil
+	}
+	return assess.Suggest(*p.Assessment).DoneCriteria
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
