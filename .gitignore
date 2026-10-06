@@ -34,3 +34,8 @@ shots/
 desktop/src-tauri/binaries/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+
+# End-to-end tests
+e2e/.fakes/
+e2e/test-results/
+e2e/playwright-report/
