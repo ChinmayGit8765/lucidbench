@@ -5,6 +5,20 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Picture extension:** back-end schematics and front-end design canvases next to your code.
+  Diagrams are Mermaid (`.mmd`) with a side-by-side editor, a live preview and the parser's error
+  when the syntax is wrong; canvases are Excalidraw (`.excalidraw`, MIT) with PNG export. Both are
+  lazy chunks that load on first use, and Excalidraw's drawing fonts ship with the app so the canvas
+  makes no CDN request. They are saved in the project's `local_path` under `docs/picture`, or as
+  Memory pages under `Picture/<project>` when it has none; saving shows the exact path first.
+  "New from live state" builds a flowchart from the project's deploy entries, its compose
+  containers, the databases linked by compose project or port, its CI runner containers and its
+  `builds_into` links, with no AI and no network. "Draft from code" runs your own Claude, Codex or
+  Grok CLI with no tools on a three-level file listing and the first 200 lines of the README, shows
+  the result as a preview and never saves it; confidential projects are refused. Each project
+  card gets a Picture row. The web build grows by about 1.1 MB for Excalidraw and 0.65 MB for Mermaid
+  (plus 1.8 MB of Excalidraw's font-subsetting code, fetched only when a PNG is exported, and 0.5 MB
+  of fonts), none of it on the first page load.
 - **Databases extension:** finds Postgres, MySQL, MariaDB, Redis and Mongo containers, running or
   stopped, with their published ports and default database and user names (passwords are never
   read). Save one as a connection (`databases.yaml`, password as an `env:NAME` reference), then see

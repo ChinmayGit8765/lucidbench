@@ -31,10 +31,22 @@ Lucidbench is an independent project and is not affiliated with, sponsored by or
 | remark and unified (`remark-*`, `unified`, `micromark*`, `mdast-util-*`, `unist-util-*`, `vfile*`), bundled with the Memory editor | MIT |
 | `@floating-ui/dom`, `nanoid`, `lodash-es`, bundled with the Memory editor | MIT |
 | `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` (Boards drag and drop) | MIT |
+| `mermaid` (Picture diagrams), loaded only when a diagram previews | MIT |
+| Mermaid's notable bundled dependencies: `d3*` (ISC, BSD-3-Clause), `dagre-d3-es`, `cytoscape` and its layouts, `katex`, `langium`, `@mermaid-js/parser`, `khroma`, `marked`, `lodash-es` | MIT, ISC or BSD-3-Clause |
+| `robust-predicates` (Mermaid, via `delaunator`) | Unlicense |
+| `elkjs` (Mermaid's optional ELK layout, a separate chunk fetched only for a diagram that asks for the ELK renderer; shipped unmodified) | EPL-2.0 |
+| `dompurify` (Mermaid's sanitiser, used under Apache-2.0) | MPL-2.0 OR Apache-2.0 |
+| `@excalidraw/excalidraw` (Picture design canvases), loaded only when a canvas opens | MIT |
+| Excalidraw's notable bundled dependencies: `roughjs`, `perfect-freehand`, `jotai`, `nanoid`, `@radix-ui/*`, `immer`, `fuzzy` | MIT |
+| `pako` (Excalidraw) | MIT AND Zlib |
+| `fractional-indexing` (Excalidraw) | CC0-1.0 |
+| Excalidraw's drawing fonts (Excalifont, Virgil, Cascadia Code, Nunito, Lilita One, Assistant, Liberation Sans, Comic Shanns), copied into the web UI at `/excalidraw/fonts` by the build so the canvas makes no CDN request. The CJK set (Xiaolai) is not copied. | Published by the Excalidraw project under open font licences (mostly SIL OFL 1.1); the font files carry no licence text, see the Excalidraw repository |
 
 Build-time only (not shipped): Vite (MIT), TypeScript (Apache-2.0), lightningcss (MPL-2.0).
 
-The editor's optional sanitiser `dompurify` (MPL-2.0 or Apache-2.0, used under Apache-2.0) and its unused CodeMirror, Lezer and Vue dependencies (MIT) are not part of the built bundle.
+The Memory editor's optional sanitiser is not used; `dompurify` is bundled only through Mermaid (see above). The editor's unused CodeMirror, Lezer and Vue dependencies (MIT) are not part of the built bundle.
+
+Excalidraw's package also lists `sass`, `chokidar` and other build tools as dependencies; none of them is part of the built bundle. tldraw is not used (its licence requires a watermark or a commercial licence).
 
 ## Go modules
 

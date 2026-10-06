@@ -562,6 +562,47 @@ API (every request that changes something or reaches a database needs `X-Lucid-C
 `POST /api/databases/{id}/manager/start` or `stop`. Discovered containers (`docker:<name>`) have no
 password and cannot be read until they are saved.
 
+## Picture
+
+The Picture extension keeps a project's diagrams and design canvases next to its code. Add it from
+Settings › Extensions; it needs nothing else. A **diagram** is Mermaid text (`.mmd`) with a live
+preview, for back-end schematics. A **canvas** is an Excalidraw drawing (`.excalidraw`, JSON) for
+front-end layouts, with PNG export. The Mermaid and Excalidraw libraries load only when you first
+preview a diagram or open a canvas. Excalidraw's drawing fonts are served from the app itself
+(`/excalidraw/fonts`), except the large CJK set, which Excalidraw fetches from its CDN the first
+time CJK text is drawn. `npm run dev` does not serve the fonts, so a dev canvas uses that CDN.
+
+**Where pictures live.** If the project has a `local_path` that is a folder on this machine, in
+`<local_path>/docs/picture/<name>.mmd` or `.excalidraw`, where git will see them. Otherwise in
+Memory, as the page `Picture/<project>/<name>.mmd.md` (or `.excalidraw.md`) with the source in a
+fenced block, so the vault stays Markdown. A name is one lower-case segment of `a-z`, `0-9`, `-` and
+`_` (63 characters at most), so a name can never be a path, and a `docs` or `docs/picture` that is
+a link or junction is refused. Saving asks first and shows the exact path.
+
+**New from live state** builds a flowchart without AI or network from what Lucidbench knows: the
+project's `deploy:` entries, the containers of its compose project, the databases linked to it, the
+local CI runner containers of its `repo`, and its `builds_into` links. A compose project belongs to
+the project when its name is the project id or the name of the `local_path` folder; a database is
+linked when it is in such a compose project, or is published on a port one of those containers
+publishes. Docker being unreachable leaves those parts out and says so. The same inputs always
+give the same text, so you can commit it and read the diff.
+
+**Draft from code** runs your own Claude, Codex or Grok CLI once, with no tools, and shows the
+Mermaid it returns as a preview that is never saved on its own. The CLI sees exactly one prompt: the
+project's file and folder names three levels deep (without `.git`, `node_modules`, `dist` and similar
+folders and without credential-looking names such as `.env` or `*.pem`, at most 300 entries) and the
+first 200 lines of its README. Left on its default it tries Claude Haiku first, the cheapest, then
+Codex and Grok; you can pick a provider and model instead. Confidential projects
+(`visibility: confidential`) are refused. The cost is shown on the preview.
+
+API (a request that writes or calls a provider needs `X-Lucid-Confirm: yes`):
+`GET /api/picture` (every project with its store and count), `GET /api/picture/{project}`,
+`GET /api/picture/{project}/item?name=&kind=` (`kind` is `mermaid` or `excalidraw`),
+`GET /api/picture/{project}/target?name=&kind=` (the exact path a save would write),
+`PUT /api/picture/{project}/item?name=&kind=` with `{"content": "..."}`,
+`GET /api/picture/{project}/live` and `POST /api/picture/{project}/draft` with
+`{"provider": "", "model": ""}`.
+
 ## Containers
 
 `docker-compose.yml` mounts your Lucidbench config directory read-only at
