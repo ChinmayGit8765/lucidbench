@@ -64,6 +64,7 @@ Compiled into the `lucidd` and `lucid` binaries (direct dependencies; transitive
 | `github.com/redis/go-redis/v9` (Redis) | BSD-2-Clause |
 | `go.mongodb.org/mongo-driver/v2` (MongoDB) | Apache-2.0 |
 | `golang.org/x/sys` and other `golang.org/x/*` modules (Copyright The Go Authors) | BSD-3-Clause |
+| `rsc.io/qr` v0.2.0 (the Phone remote's pairing QR code; Copyright The Go Authors) | BSD-3-Clause |
 
 The Live browser extension speaks the Chrome DevTools Protocol with a small client of its own (no
 `cdproto` or `chromedp` module). `golang.org/x/net` is used only by its tests, as the stand-in server.

@@ -36,6 +36,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
+	"github.com/ChinmayGit8765/lucidbench/internal/remote"
 	"github.com/ChinmayGit8765/lucidbench/internal/sections"
 	"github.com/ChinmayGit8765/lucidbench/internal/setup"
 	"github.com/ChinmayGit8765/lucidbench/internal/stripe"
@@ -82,6 +83,10 @@ type Deps struct {
 	// Power serves /api/power when set. NewWith never builds one: the daemon
 	// does and runs it, so a handler built in a test starts nothing.
 	Power *power.Supervisor
+	// Remote serves /api/remote and gets the services the phone remote
+	// uses. Like Power, NewWith never builds one, and wiring it binds
+	// nothing: the daemon calls Start, which binds only when enabled.
+	Remote *remote.Manager
 }
 
 // mcpHas reports whether any AI client has an MCP server whose name contains
@@ -115,7 +120,8 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux.Handle("/api/config", config.Handler(cfg, nil))
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
-	ci.Register(mux, ci.New(cfg.CI))
+	ciSvc := ci.New(cfg.CI)
+	ci.Register(mux, ciSvc)
 	runners := ci.Filter{ComposeProject: cfg.CI.Runners.ComposeProject, ImageMatch: cfg.CI.Runners.ImageMatch}
 	allowed := append([]string{"lucidbench"}, cfg.Docker.AllowedProjects...)
 	for _, s := range cfg.Power.Stacks {
@@ -223,6 +229,18 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		Store:   sectionStore,
 		RunsDir: filepath.Join(data, "sections", "runs"),
 	})
+	if d.Remote != nil {
+		d.Remote.Assets = webui.RemoteAssets()
+		d.Remote.SetServices(remote.Services{
+			Work:     workSvc,
+			Council:  councilSvc,
+			CI:       ciSvc.Summary,
+			Usage:    func() *usage.Summary { return d.Usage.Summary(1) },
+			Projects: projects.Load,
+			Vault:    vault,
+		})
+		remote.Register(mux, d.Remote)
+	}
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())

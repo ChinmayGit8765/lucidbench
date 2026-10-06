@@ -923,4 +923,124 @@ it:
   port reaches it.
 
 Set `server.addr` to `:7420`, or publish the compose port on every
-interface, only on a network you trust.
+interface, only on a network you trust. To reach Lucidbench from your phone,
+use the [Phone remote](#phone-remote) instead: it exposes a small allowlist,
+not the whole API.
+
+## Phone remote
+
+The phone remote lets a paired phone see what needs you, follow running Work sessions and approve
+council briefs. It is **off by default**; turn it on in Settings › Phone remote (the mascot
+launcher's **Pair phone** opens it).
+
+**Model.** `lucidd` keeps listening on `server.addr` (127.0.0.1). When the remote is on, a
+**second listener** starts for the remote surface only:
+
+- **LAN interface** mode binds the one interface address you pick in the list. The list shows this
+  machine's up interfaces (LAN, Tailscale, and loopback for testing). `0.0.0.0` and `::` (every
+  interface) are refused always, also when written into the settings file by hand; so is an address
+  this machine does not have.
+- **Tailnet only** mode binds this machine's Tailscale address (100.64.0.0/10) when one is present,
+  so only devices on your tailnet can reach it. Without a Tailscale address nothing binds and the
+  page says why.
+- The port defaults to 7421. Changing a setting rebinds at once; turning the remote off closes the
+  listener and every open stream.
+
+**Pairing.** Show pairing code makes a one-time code (128 random bits) that expires after 5 minutes
+and works once; a new code replaces the old one. The QR code holds
+`http://<address>:<port>/r#pair=<code>` (the code is in the fragment, so it is not in any request
+line or log). The phone page exchanges it, after a confirm tap, for a **device token**: 32 random
+bytes, kept in the phone browser's local storage and sent as `Authorization: Bearer <token>`.
+Lucidbench stores only its SHA-256, with the device's name, `created` and `last_seen`. Settings
+lists the devices; **Revoke** stops a token at once and ends any live tail it has open.
+
+**What the phone can do** (and nothing else; every other path and method answers 404, including the
+whole desktop API and the desktop UI):
+
+| Route | Method | What |
+|---|---|---|
+| `/r`, `/r/*` | GET | the phone page and its files (no token needed; they hold no data) |
+| `/r/api/pair` | POST | `{code, name}` returns `{token, device}` |
+| `/r/api/overview` | GET | attention items, running sessions, briefs awaiting approval, CI (last 24 h), tokens used today |
+| `/r/api/work/sessions` | GET | sessions without prompt, answer, paths, branch or patches |
+| `/r/api/work/sessions/{id}/events` | GET | live tail (server-sent events): each event's kind, title and text |
+| `/r/api/work/sessions/{id}/stop` | POST | stop the agent's whole process tree |
+| `/r/api/work/sessions/{id}/followup` | POST | answers 409 for now: a Work session runs its CLI once and never waits for input, so there is nothing to send a follow-up to |
+| `/r/api/council/sessions/{id}` | GET | the brief, its open blockers and status |
+| `/r/api/council/sessions/{id}/approve` | POST | `{approved_with_blockers?}` approves it (a card goes to Ready) |
+| `/r/api/council/sessions/{id}/send-back` | POST | `{notes}` runs one more council round with your notes |
+
+Every write needs the token **and** `X-Lucid-Confirm: yes`; the phone page asks for a confirm tap on
+a sheet first. There are no settings, accounts, secrets, Memory pages, file contents (beyond the
+event text an agent streamed), Payments, Cloud, Databases or browser input on the remote.
+**Confidential** projects and pages show as "confidential" with their titles and project names
+redacted, their tails and briefs answer 403, and a brief cannot be approved from the phone; a CI repo
+of a confidential project is redacted too. When `projects.yaml` cannot be read, everything with a
+project counts as confidential.
+
+**Limits.** Five failed pairings per client address (and twenty from anyone) in 10 minutes, and ten
+failed tokens per client address in 10 minutes, then 429 until the window passes, for any token.
+Codes and token hashes are compared in constant time. Request bodies are capped at 8 KB.
+
+**Files** under `<data dir>/remote/`: `settings.json` (`enabled`, `mode`, `address`, `port`),
+`devices.json` (`id`, `name`, `hash`, `created`, `last_seen`) and `audit.jsonl`: one line per
+turn-on or off, pairing, refused pairing or token, revocation, and every remote write (time,
+action, device, target id, result, client address). It never holds a token, a code or content.
+Settings › Phone remote shows the recent lines. Delete `devices.json` to forget every phone.
+
+**The phone page** is plain TypeScript and DOM, built by `web/vite.remote.config.ts` into
+`web/dist/r` (about 12 KB of script, 5 KB gzipped). React was not used: the desktop app's entry chunk
+alone is about 370 KB, and the page should open at once over a phone link. It never sets HTML from
+the daemon's answers, and the remote sends a strict Content-Security-Policy (`default-src 'self'`,
+`frame-ancestors 'none'`), `nosniff`, `no-referrer` and no CORS headers. It has an installable
+manifest; browsers allow a full install (and service workers) only over HTTPS, so over plain LAN
+HTTP "Add to Home screen" gives a bookmark-style shortcut.
+
+### Reaching it from outside your LAN: Tailscale
+
+Do not forward the remote's port on your router or expose it to the internet. To use it away from
+home, install [Tailscale](https://tailscale.com) on this machine and on the phone, and choose
+**Tailnet only**. The phone then reaches `http://<this machine's 100.x address>:7421/r` over
+Tailscale's WireGuard tunnel, encrypted end to end, and nothing outside your tailnet can connect.
+
+For real HTTPS (and a full PWA install), put `tailscale serve` in front of it: bind the remote to
+the loopback address in LAN interface mode (127.0.0.1, port 7421) and run
+`tailscale serve --bg --https=443 http://127.0.0.1:7421` (the flags differ between Tailscale
+versions; see `tailscale serve --help`); the phone opens
+`https://<machine>.<tailnet>.ts.net/r`. Pair from that address. Behind `tailscale serve` every
+request comes from 127.0.0.1, so the per-client limits count all your devices together.
+
+### TLS: why there is no self-signed certificate
+
+A self-signed certificate was considered and left out. A phone browser shows a full-page warning for
+it, cannot pin a fingerprint, and still does not treat the page as a secure context for install and
+service workers; checking a fingerprint by eye on every new device is easy to skip. Tailscale gives
+an encrypted path with no warnings (and `tailscale serve` a real certificate) at no cost to this
+code. On a LAN without Tailscale the remote is plain HTTP.
+
+### Threat model
+
+- **Who can connect:** anyone who can reach the chosen address and port. That is your LAN in LAN
+  mode, your tailnet in tailnet mode, and this machine only on loopback. The page itself is public
+  to them; every API answer except pairing needs a device token.
+- **A device on the same LAN watching traffic** (plain HTTP, shared or untrusted Wi-Fi) can read
+  what the phone sees and **copy its token or a pairing code**, then act as the phone: stop sessions,
+  approve or send back briefs. Use the remote over plain HTTP only on a network you trust, or use
+  Tailnet only mode. Revoke a phone you think was exposed; pairing again issues a new token.
+- **A stolen or lost phone** holds a working token in its browser storage until you revoke it.
+- **Guessing:** codes are 128 bits and tokens 256 bits, with the failure limits above; guessing is
+  not a practical attack, but a flood of bad pairing attempts can lock pairing for 10 minutes.
+- **Other web pages** in the phone's or this computer's browser cannot use the remote: the token is
+  not a cookie, so a page on another origin has nothing to send, and writes need a custom header
+  that a cross-site request cannot carry without a CORS preflight the remote never grants. A
+  DNS-rebinding page lands on a different origin with no token.
+- **What a token can do at worst** is the table above: read summaries and the event text of
+  non-confidential sessions, stop a session, approve or send back a non-confidential brief. It cannot
+  start an agent, push, open a PR, change settings or read files, accounts or secrets.
+- **Everything is logged** in `remote/audit.jsonl` and shown in Settings.
+
+Routes on the desktop API (127.0.0.1 only; writes need `X-Lucid-Confirm: yes`): `GET /api/remote`
+(status: settings, listening, address, url, error, tailnet address), `PUT /api/remote/settings`
+`{enabled, mode, address, port}`, `GET /api/remote/interfaces`, `POST /api/remote/pair` (the code,
+its URL, expiry and the QR code as SVG; 409 while the remote is off), `DELETE /api/remote/pair`,
+`GET /api/remote/devices`, `DELETE /api/remote/devices/{id}` and `GET /api/remote/audit?limit=`.

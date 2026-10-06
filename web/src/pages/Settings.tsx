@@ -1,4 +1,4 @@
-import { Blocks, Info, LayoutDashboard, Palette, PanelLeft, Power, Settings as SettingsIcon, Sparkles } from "lucide-react"
+import { Blocks, Info, LayoutDashboard, Palette, PanelLeft, Power, Settings as SettingsIcon, Smartphone, Sparkles } from "lucide-react"
 
 import { PageHeader } from "@/components/Shell"
 import { Tabs } from "@/components/ui/tabs"
@@ -10,6 +10,7 @@ import { Extensions } from "@/pages/settings/Extensions"
 import { General } from "@/pages/settings/General"
 import { Infrastructure } from "@/pages/settings/Infrastructure"
 import { Sections } from "@/pages/settings/Sections"
+import { PhoneRemote } from "@/pages/settings/PhoneRemote"
 import { SidebarLayout } from "@/pages/settings/SidebarLayout"
 
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
   { id: "sidebar", label: "Sidebar", icon: PanelLeft },
   { id: "extensions", label: "Extensions", icon: Blocks },
   { id: "infrastructure", label: "Infrastructure", icon: Power },
+  { id: "remote", label: "Phone remote", icon: Smartphone },
   { id: "general", label: "General", icon: Info },
 ]
 
@@ -39,6 +41,7 @@ export default function Settings({ subpath }: ModulePageProps) {
       {tab === "sidebar" && <SidebarLayout />}
       {tab === "extensions" && <Extensions focus={subpath[1]} />}
       {tab === "infrastructure" && <Infrastructure />}
+      {tab === "remote" && <PhoneRemote />}
       {tab === "general" && <General focus={subpath[1]} />}
     </div>
   )

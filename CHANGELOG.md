@@ -5,6 +5,20 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Phone remote extension** (off by default): Settings › Phone remote (and **Pair phone** in the
+  mascot launcher) turns on a second listener bound to one chosen LAN interface address or, in
+  Tailnet only mode, this machine's Tailscale address; `0.0.0.0` and `::` are always refused, and
+  `lucidd` itself stays on 127.0.0.1. A one-time QR code (5 minutes, single use) pairs a phone,
+  which gets its own 32-byte token; only its SHA-256 is kept in `remote/devices.json`, and devices
+  can be revoked. The phone page at `/r` (plain TypeScript, about 5 KB gzipped, dark, installable
+  manifest) shows what needs you, running and recent Work sessions with a live tail and Stop, and
+  council briefs to approve or send back, each behind a confirm sheet. The remote is an allowlist of
+  nine routes; everything else is 404. Writes need the token and `X-Lucid-Confirm`, pair and token
+  failures are rate limited, confidential projects are redacted, and every pairing, revocation and
+  write is in `remote/audit.jsonl` and in Settings. Follow-up prompts answer 409 for now: Work
+  sessions run once and never wait for input. No self-signed TLS; the docs explain using Tailscale
+  instead, with a threat model (see [Phone remote](docs/CONFIG.md#phone-remote)). New Go module:
+  `rsc.io/qr` (BSD-3-Clause) for the QR code.
 - **Live browser extension:** a headless Chromium (`chromedp/headless-shell`, pulled at run time)
   in a container bound to 127.0.0.1, with its own throw-away profile and no host mounts, started
   on demand and stopped when idle through the power supervisor (every start and stop is in the

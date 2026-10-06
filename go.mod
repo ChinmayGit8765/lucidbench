@@ -14,6 +14,7 @@ require (
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
+	rsc.io/qr v0.2.0
 	sigs.k8s.io/kind v0.33.0
 )
 
