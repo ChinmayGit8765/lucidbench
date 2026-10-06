@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { copyText, CopyCommand } from "@/components/CopyCommand"
+import { PowerCard } from "@/components/Power"
 import { PageHeader } from "@/components/Shell"
 import { Badge, StatusPill, type Tone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,8 +25,10 @@ import { ApiError, request, usePoll, type Polled } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
+import { isAsleep, usePower } from "@/lib/power"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
+import type { ModulePageProps } from "@/modules/types"
 
 const JOB_TONE: Record<string, Tone> = {
   Completed: "success",
@@ -88,10 +91,12 @@ function Tiles({
   health,
   cluster,
   jobs,
+  asleep,
 }: {
   health: Health | null | undefined
   cluster: Polled<ClusterInfo>
   jobs: Polled<Job[]>
+  asleep: boolean
 }) {
   const c = cluster.data
   const list = jobs.data ?? []
@@ -112,11 +117,11 @@ function Tiles({
         icon={Server}
         label="Cluster"
         loading={clusterLoading}
-        value={c ? (c.running ? "Running" : "Stopped") : "Unavailable"}
+        value={c ? (asleep ? "Asleep" : c.running ? "Running" : "Stopped") : "Unavailable"}
         sub={c ? <span className="font-mono">kind · {c.name}</span> : cluster.error?.message}
         status={
           c ? (
-            <StatusPill tone={c.running ? "success" : "neutral"}>{c.running ? "up" : "down"}</StatusPill>
+            <StatusPill tone={c.running && !asleep ? "success" : "neutral"}>{asleep ? "stopped" : c.running ? "up" : "down"}</StatusPill>
           ) : (
             <StatusPill tone="danger">error</StatusPill>
           )
@@ -294,18 +299,26 @@ function JobsTable({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) => void }) 
   )
 }
 
-function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunning?: boolean }) {
+function Sleeping() {
+  return (
+    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+      The cluster is asleep. Running a job starts it first, which usually takes under a minute.
+    </div>
+  )
+}
+
+function JobsCard({ jobs, clusterRunning, asleep }: { jobs: Polled<Job[]>; clusterRunning?: boolean; asleep?: boolean }) {
   const { data, error, loading, refresh } = jobs
   const [selected, setSelected] = useState<Job | null>(null)
   const [busy, setBusy] = useState(false)
 
   const runHello = async () => {
     setBusy(true)
-    await runHelloJob()
+    await runHelloJob(asleep)
     setBusy(false)
   }
 
-  const unavailable = error?.status === 503 || clusterRunning === false
+  const unavailable = !asleep && (error?.status === 503 || clusterRunning === false)
   // Keep the open job's status fresh as polls come in.
   const open = selected ? (data?.find((j) => j.name === selected.name) ?? selected) : null
 
@@ -328,7 +341,7 @@ function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunnin
             <RefreshCw />
           </Button>
           <Button onClick={runHello} disabled={busy || unavailable}>
-            <Play /> {busy ? "Submitting" : "Run hello job"}
+            <Play /> {busy ? (asleep ? "Waking the cluster" : "Submitting") : "Run hello job"}
           </Button>
         </div>
       </div>
@@ -345,7 +358,12 @@ function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunnin
           <NoCluster />
         </div>
       )}
-      {!unavailable && error && !data && (
+      {asleep && (
+        <div className="border-t p-5">
+          <Sleeping />
+        </div>
+      )}
+      {!unavailable && !asleep && error && !data && (
         <div className="border-t p-5">
           <ErrorState title="Could not load jobs" message={error.message} onRetry={refresh} />
         </div>
@@ -366,14 +384,23 @@ function JobsCard({ jobs, clusterRunning }: { jobs: Polled<Job[]>; clusterRunnin
   )
 }
 
-export default function System() {
+export default function System({ subpath }: ModulePageProps) {
   const { health } = useApp()
   const cluster = usePoll<ClusterInfo>("/api/cluster")
   const jobs = usePoll<Job[]>("/api/jobs")
+  const power = usePower()
+  // A stopped node that a job may wake: on demand or always, not off.
+  const nodeDown = !!power.data && isAsleep(power.data.cluster)
+  const asleep = nodeDown && power.data?.modes.cluster !== "off"
+  const focusPower = subpath[0] === "power"
+  const powerLoaded = power.data !== null
+  useEffect(() => {
+    if (focusPower && powerLoaded) document.getElementById("power")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [focusPower, powerLoaded])
   return (
     <div className="space-y-6">
       <PageHeader icon={<Activity />} title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
-      <Tiles health={health} cluster={cluster} jobs={jobs} />
+      <Tiles health={health} cluster={cluster} jobs={jobs} asleep={nodeDown} />
       {cluster.error && !cluster.data && (
         <ErrorState
           title={cluster.error.status === 503 ? "Docker is not reachable" : "Could not load cluster status"}
@@ -381,7 +408,8 @@ export default function System() {
           onRetry={cluster.refresh}
         />
       )}
-      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} />
+      <PowerCard focus={focusPower} />
+      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} asleep={asleep} />
     </div>
   )
 }

@@ -83,6 +83,21 @@ const VERB: Record<DockerAction, [string, string]> = {
   restart: ["Restarting", "restarted"],
 }
 
+/** Starts or stops every container of a compose project, with toasts. */
+export async function projectAction(project: string, action: "start" | "stop"): Promise<boolean> {
+  const [verb, done] = VERB[action]
+  const id = toast.loading(`${verb} ${project}`)
+  try {
+    const res = await postAction<{ containers: string[] }>(`/api/docker/projects/${encodeURIComponent(project)}/${action}`)
+    const n = res.containers.length
+    toast.success(n ? `${n} container${n === 1 ? "" : "s"} ${done}` : `Nothing to ${action}`, { id, description: project })
+    return true
+  } catch (e) {
+    toast.error(`Could not ${action} ${project}`, { id, description: errorMessage(e) })
+    return false
+  }
+}
+
 /** Starts, stops or restarts a container, with toasts. */
 export async function dockerAction(name: string, action: DockerAction): Promise<boolean> {
   const [verb, done] = VERB[action]

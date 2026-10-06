@@ -1,4 +1,4 @@
-import { Blocks, Info, Palette, PanelLeft, Settings as SettingsIcon } from "lucide-react"
+import { Blocks, Info, Palette, PanelLeft, Power, Settings as SettingsIcon } from "lucide-react"
 
 import { PageHeader } from "@/components/Shell"
 import { Tabs } from "@/components/ui/tabs"
@@ -7,12 +7,14 @@ import type { ModulePageProps } from "@/modules/types"
 import { Appearance } from "@/pages/settings/Appearance"
 import { Extensions } from "@/pages/settings/Extensions"
 import { General } from "@/pages/settings/General"
+import { Infrastructure } from "@/pages/settings/Infrastructure"
 import { SidebarLayout } from "@/pages/settings/SidebarLayout"
 
 const TABS = [
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "sidebar", label: "Sidebar", icon: PanelLeft },
   { id: "extensions", label: "Extensions", icon: Blocks },
+  { id: "infrastructure", label: "Infrastructure", icon: Power },
   { id: "general", label: "General", icon: Info },
 ]
 
@@ -30,6 +32,7 @@ export default function Settings({ subpath }: ModulePageProps) {
       {tab === "appearance" && <Appearance focus={subpath[1]} />}
       {tab === "sidebar" && <SidebarLayout />}
       {tab === "extensions" && <Extensions focus={subpath[1]} />}
+      {tab === "infrastructure" && <Infrastructure />}
       {tab === "general" && <General focus={subpath[1]} />}
     </div>
   )

@@ -33,6 +33,7 @@ import {
   type CIRuns,
   type CISummary,
 } from "@/lib/ci"
+import { usePower } from "@/lib/power"
 import { relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
@@ -177,8 +178,11 @@ function useRunnerAttention(): AttentionItem[] | null {
   const summary = usePoll<CISummary>("/api/ci/summary", CI_POLL_MS)
   const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
   const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
+  const power = usePower()
   const answered = (p: { data: unknown; error: unknown }) => p.data !== null || p.error !== null
   if (!answered(summary) || !answered(runsPoll)) return null
+  // A runner asleep on demand is stopped on purpose: not something to fix.
+  const asleep = new Set((power.data?.runners ?? []).filter((p) => p.state === "sleeping").map((p) => p.name))
   const s = summary.data
   const out: AttentionItem[] = []
   const view = (
@@ -218,7 +222,7 @@ function useRunnerAttention(): AttentionItem[] | null {
       ),
     })
   }
-  for (const r of (runners.data?.runners ?? []).filter((x) => x.status !== "online")) {
+  for (const r of (runners.data?.runners ?? []).filter((x) => x.status !== "online" && !(x.container && asleep.has(x.container)))) {
     out.push({
       key: `runner-${r.repo}-${r.id}`,
       severity: "warning",
@@ -232,7 +236,7 @@ function useRunnerAttention(): AttentionItem[] | null {
       action: view,
     })
   }
-  for (const ct of (runners.data?.containers ?? []).filter((x) => x.state !== "running")) {
+  for (const ct of (runners.data?.containers ?? []).filter((x) => x.state !== "running" && !asleep.has(x.name))) {
     out.push({
       key: `ct-${ct.name}`,
       severity: "warning",
