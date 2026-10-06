@@ -35,9 +35,11 @@ type ContainersResponse struct {
 //	GET  /api/docker/volumes
 //	GET  /api/docker/containers/{name}/logs?tail=200[&follow=1]   follow streams SSE
 //	POST /api/docker/containers/{name}/{action}                    start, stop, restart
+//	POST /api/docker/projects/{project}/{action}                   start, stop: every container of a compose project
 //
 // Every route answers 503 when the docker engine is unreachable.
 func Register(mux *http.ServeMux, s *Service) {
+	registerProjects(mux, s)
 	read := func(path string, fn func(ctx context.Context) (any, error)) {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
@@ -120,6 +122,32 @@ func Register(mux *http.ServeMux, s *Service) {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 		default:
 			apiutil.WriteJSON(w, http.StatusOK, map[string]string{"name": name, "action": action, "status": "ok"})
+		}
+	})
+}
+
+func registerProjects(mux *http.ServeMux, s *Service) {
+	mux.HandleFunc("POST /api/docker/projects/{project}/{action}", func(w http.ResponseWriter, r *http.Request) {
+		if !apiutil.Confirmed(w, r) {
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+		defer cancel()
+		project, action := r.PathValue("project"), r.PathValue("action")
+		if action != "start" && action != "stop" {
+			http.Error(w, "action must be start or stop", http.StatusBadRequest)
+			return
+		}
+		done, err := ActProject(ctx, s.Docker, s.Policy, project, action)
+		switch {
+		case errors.Is(err, ErrRefused):
+			http.Error(w, "refused: "+err.Error(), http.StatusForbidden)
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "no containers in compose project "+project, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		default:
+			apiutil.WriteJSON(w, http.StatusOK, map[string]any{"project": project, "action": action, "containers": done})
 		}
 	})
 }
