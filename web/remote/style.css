@@ -161,7 +161,8 @@ a {
   color: var(--error);
   border-color: var(--error);
 }
-.status.draft {
+.status.draft,
+.status.waiting {
   color: var(--warning);
   border-color: var(--warning);
 }
@@ -286,8 +287,25 @@ textarea {
 .ev.tool_result {
   border-color: var(--info);
 }
+.ev.turn {
+  border-left: 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding: 8px 0 0;
+}
+.ev.turn .ev-kind {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ev.note {
+  border-color: var(--warning);
+}
 .ev-kind {
   color: var(--muted);
+}
+.waiting-note {
+  margin-top: 10px;
+  color: var(--warning);
 }
 .ev-body {
   white-space: pre-wrap;

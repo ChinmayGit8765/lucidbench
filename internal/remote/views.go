@@ -26,6 +26,7 @@ type Work interface {
 	Get(id string) (work.Session, error)
 	Events(id string, from int) ([]agentexec.Event, bool, <-chan struct{}, error)
 	Stop(id string) (work.Session, error)
+	FollowUp(id, prompt string) (work.Session, error)
 }
 
 // Council is the part of the council service the remote uses.
@@ -135,6 +136,7 @@ type WorkView struct {
 	Started      time.Time  `json:"started"`
 	Ended        *time.Time `json:"ended,omitempty"`
 	Events       int        `json:"events"`
+	Turns        int        `json:"turns"`
 	Files        int        `json:"files"`
 	Added        int        `json:"added"`
 	Deleted      int        `json:"deleted"`
@@ -146,7 +148,7 @@ type WorkView struct {
 func workView(se work.Session, conf bool) WorkView {
 	v := WorkView{
 		ID: se.ID, Title: se.Title, Project: se.Project, Provider: se.Provider, Status: se.Status,
-		Started: se.Started, Ended: se.Ended, Events: se.Events, PRState: se.PRState, Error: se.Error,
+		Started: se.Started, Ended: se.Ended, Events: se.Events, Turns: len(se.Turns), PRState: se.PRState, Error: se.Error,
 	}
 	if se.PR != "" && v.PRState == "" {
 		v.PRState = "open"
@@ -247,7 +249,7 @@ type Overview struct {
 	Awaiting  []CouncilItem `json:"awaiting"`
 	CI        *CIView       `json:"ci"`
 	Usage     *UsageView    `json:"usage"`
-	FollowUp  bool          `json:"follow_up"` // whether a waiting session can take a follow-up prompt
+	FollowUp  bool          `json:"follow_up"` // a waiting session takes a follow-up prompt (always true now)
 	Generated time.Time     `json:"generated_at"`
 }
 
@@ -255,7 +257,7 @@ var severityRank = map[string]int{"error": 0, "warning": 1, "info": 2}
 
 func (s Services) overview(ctx context.Context) Overview {
 	pv := s.privacy()
-	out := Overview{Attention: []Attention{}, Running: []WorkView{}, Awaiting: []CouncilItem{}, Generated: time.Now().UTC()}
+	out := Overview{Attention: []Attention{}, Running: []WorkView{}, Awaiting: []CouncilItem{}, FollowUp: true, Generated: time.Now().UTC()}
 	if s.Work != nil {
 		for _, se := range s.Work.List() {
 			conf := pv.work(se)
@@ -263,6 +265,8 @@ func (s Services) overview(ctx context.Context) Overview {
 			switch {
 			case se.Status == work.StatusRunning:
 				out.Running = append(out.Running, v)
+			case se.Status == work.StatusWaiting && !se.Removed:
+				out.Attention = append(out.Attention, Attention{Severity: "warning", Kind: "session", Title: v.Title, Detail: "The agent is waiting for your follow-up", Target: se.ID})
 			case se.Status == work.StatusFailed && !se.Removed:
 				out.Attention = append(out.Attention, Attention{Severity: "error", Kind: "session", Title: v.Title, Detail: "The session failed", Target: se.ID})
 			case se.Status == work.StatusDone && !se.Removed && se.PR == "" && se.Diff != nil && len(se.Diff.Files) > 0:
