@@ -160,7 +160,7 @@ func scrub(s string) string {
 	var keep []string
 	for _, l := range strings.Split(s, "\n") {
 		l = strings.TrimSpace(strings.Trim(l, "✘▲⛅️🪵 \t\r"))
-		if l == "" || strings.HasPrefix(l, "Logs were written") || strings.HasPrefix(l, "If you think this is a bug") {
+		if l == "" || strings.HasPrefix(l, "<claude-code-hint") || strings.HasPrefix(l, "> Update available") || strings.HasPrefix(l, "Fetching ") || strings.HasPrefix(l, "Logs were written") || strings.HasPrefix(l, "If you think this is a bug") {
 			continue
 		}
 		keep = append(keep, l)
@@ -196,7 +196,7 @@ func (c *caller) raw(ctx context.Context, args ...string) ([]byte, error) {
 	}
 	// A CLI may explain on either stream.
 	text := stderr
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(scrub(text)) == "" && !bytes.ContainsAny(bytes.TrimSpace(out)[:min(1, len(bytes.TrimSpace(out)))], "{[") {
 		text = string(out)
 	}
 	msg := scrub(text)
@@ -352,7 +352,9 @@ func (s *Service) Get(ctx context.Context, id string, force bool) (Summary, bool
 	if !force && e.sum != nil && e.sig == sig.String() && s.Now().Sub(e.at) < ttl {
 		return *e.sum, true
 	}
-	sum := s.fetch(ctx, p, targets)
+	// A browser that closes the page must not poison the cache with a
+	// cancelled run: the fetch outlives the request.
+	sum := s.fetch(context.WithoutCancel(ctx), p, targets)
 	e.sum, e.at, e.sig = &sum, s.Now(), sig.String()
 	return sum, true
 }

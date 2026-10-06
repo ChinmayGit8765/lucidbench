@@ -70,7 +70,8 @@ func fetchWrangler(ctx context.Context, c *caller, targets []projects.Deploy) Su
 		return sum
 	}
 	acct := who.Accounts[0]
-	sum.State, sum.Account = StateConnected, acct.Name
+	// Cloudflare names a personal account after its email.
+	sum.State, sum.Account = StateConnected, emailRE.ReplaceAllString(acct.Name, "<email>")
 	if len(who.Accounts) > 1 {
 		sum.Scope = "account 1 of " + itoa(len(who.Accounts))
 	}
