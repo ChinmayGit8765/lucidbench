@@ -6,12 +6,14 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
+	"github.com/ChinmayGit8765/lucidbench/internal/remote"
 	"github.com/ChinmayGit8765/lucidbench/internal/runner"
 	"github.com/ChinmayGit8765/lucidbench/internal/server"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -44,10 +46,16 @@ func main() {
 	pwr := power.New(cfg, server.DataDir())
 	jobs.EnsureCluster = pwr.EnsureCluster
 	go pwr.Run(context.Background())
+	// The phone remote: off unless the operator turned it on in Settings.
+	// Start binds its own listener only then; lucidd stays on addr.
+	rem := remote.NewManager(filepath.Join(server.DataDir(), "remote"))
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.NewWith(cfg, server.Deps{Usage: use, Power: pwr}),
+		Handler:           server.NewWith(cfg, server.Deps{Usage: use, Power: pwr, Remote: rem}),
 		ReadHeaderTimeout: 10 * time.Second,
+	}
+	if err := rem.Start(); err != nil {
+		log.Print("remote: not listening: ", err)
 	}
 	if cluster.InContainer() {
 		go cluster.KeepJoined(30 * time.Second)

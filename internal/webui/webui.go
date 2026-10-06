@@ -52,3 +52,17 @@ func fallback() http.Handler {
 		_, _ = w.Write([]byte(fallbackMessage))
 	})
 }
+
+// RemoteAssets is the phone remote's page (web/dist/r), built by the second
+// Vite config. It is nil when the page is not built. The remote listener
+// serves only this folder, never the desktop UI.
+func RemoteAssets() fs.FS {
+	sub, err := fs.Sub(web.Dist, "dist/r")
+	if err != nil {
+		return nil
+	}
+	if _, err := fs.Stat(sub, "index.html"); err != nil {
+		return nil
+	}
+	return sub
+}
