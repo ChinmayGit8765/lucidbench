@@ -43,6 +43,7 @@ const (
 const (
 	ColumnInProgress = "In progress"
 	ColumnReview     = "Review"
+	ColumnDone       = "Done"
 )
 
 // Errors, each mapped to an HTTP status by the routes.
@@ -115,8 +116,15 @@ type Session struct {
 	Events          int      `json:"events"`
 	Diff            *Diff    `json:"diff,omitempty"`
 	PR              string   `json:"pr_url,omitempty"`
-	Pushed          bool     `json:"pushed,omitempty"`
-	Removed         bool     `json:"removed,omitempty"`
+	// PRState is draft, open, merged or closed as GitHub last said, "" when
+	// it is not known (no gh, or not asked yet); PRChecks counts the PR's
+	// status checks and PRChecked is when both were read.
+	PRState   string    `json:"pr_state,omitempty"`
+	PRChecks  *PRChecks `json:"pr_checks,omitempty"`
+	PRChecked time.Time `json:"pr_checked,omitzero"`
+	CardDone  bool      `json:"card_done,omitempty"` // the card was moved to Done after the merge
+	Pushed    bool      `json:"pushed,omitempty"`
+	Removed   bool      `json:"removed,omitempty"`
 }
 
 // StartRequest is the body of POST /api/work/sessions.
@@ -148,6 +156,8 @@ type Service struct {
 	Projects func() (*projects.List, error)
 	// Home is shown as "~" in path hints.
 	Home string
+	// PRView reads a PR's state and checks; nil asks gh.
+	PRView func(dir, url string) (PRInfo, error)
 
 	mu       sync.Mutex
 	loaded   bool
@@ -162,6 +172,7 @@ type entry struct {
 	changed  chan struct{}     // closed and replaced on every change
 	cancel   context.CancelFunc
 	stopping bool
+	polling  bool          // a PR state refresh is in flight
 	done     chan struct{} // closed when the run has ended; nil when not running here
 	eventsF  *os.File
 	rawF     *os.File
@@ -509,7 +520,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	s.mu.Unlock()
 
 	if t.card != nil {
-		s.moveCard(t.board, t.card.ID, ColumnInProgress, id)
+		s.moveCard(t.board, t.card.ID, ColumnInProgress, id, false)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
@@ -629,13 +640,13 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	e.mu.Unlock()
 
 	if card != "" && status == StatusDone {
-		s.moveCard(board, card, ColumnReview, id)
+		s.moveCard(board, card, ColumnReview, id, false)
 	}
 }
 
 // moveCard puts a card in column and links the session (or a PR URL) on its
 // work:: line. A board without that column only gets the link.
-func (s *Service) moveCard(board, cardID, column, work string) {
+func (s *Service) moveCard(board, cardID, column, work string, done bool) {
 	if s.Vault == nil {
 		return
 	}
@@ -653,6 +664,7 @@ func (s *Service) moveCard(board, cardID, column, work string) {
 		}
 		c.Work = work
 		c.Column = column
+		c.Done = c.Done || done
 		if column == "" || boards.UpdateCard(v, board, c) != nil {
 			c.Column = ""
 			_ = boards.UpdateCard(v, board, c)

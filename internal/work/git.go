@@ -287,7 +287,7 @@ func (s *Service) OpenPR(id string) (Session, error) {
 	}
 	s.update(e, func(x *Session) { x.PR = url })
 	if se.Card != "" {
-		s.moveCard(se.Board, se.Card, "", url)
+		s.moveCard(se.Board, se.Card, "", url, false)
 	}
 	return s.Get(id)
 }
