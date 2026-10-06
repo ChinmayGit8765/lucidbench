@@ -1,0 +1,12 @@
+{
+  "name": "Lucidbench remote",
+  "short_name": "Lucidbench",
+  "description": "What needs you on your Lucidbench: attention items, running agents and briefs to approve.",
+  "start_url": "/r",
+  "scope": "/r",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1017",
+  "theme_color": "#0d1017",
+  "icons": [{ "src": "/r/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

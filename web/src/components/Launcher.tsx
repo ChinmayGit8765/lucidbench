@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowLeft, Check, Moon, Palette, PenLine, Plus, ScrollText, SquareTerminal, type LucideIcon } from "lucide-react"
+import { ArrowLeft, Check, Moon, Palette, PenLine, Plus, ScrollText, Smartphone, SquareTerminal, type LucideIcon } from "lucide-react"
 
 import { spriteLabel, StateSprite, useThemeSprite, type SpriteState } from "@/components/StateSprite"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
@@ -104,6 +104,7 @@ export function Launcher({
         }),
     },
     { id: "theme", label: "Switch theme", icon: Palette, run: () => setView("themes") },
+    { id: "pair-phone", label: "Pair phone", icon: Smartphone, run: () => open("settings", ["remote"]) },
   ]
 
   const onKey = (e: React.KeyboardEvent) => {
