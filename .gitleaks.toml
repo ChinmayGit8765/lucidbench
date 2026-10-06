@@ -4,5 +4,9 @@
 useDefault = true
 
 [allowlist]
-description = "Fake key-shaped fixtures used by the secret-reference tests"
-paths = ['''internal/config/secret_test\.go''']
+description = "Fake key-shaped fixtures (sentinels) used by tests that prove secrets never leak"
+paths = [
+  '''internal/config/secret_test\.go''',
+  '''internal/linear/linear_test\.go''',
+  '''internal/trello/trello_test\.go''',
+]
