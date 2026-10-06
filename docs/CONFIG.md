@@ -64,6 +64,12 @@ is an error that names the file and the key, for example
 | `ci.runners.compose_project` | (empty) | `LUCID_CI_RUNNERS_COMPOSE_PROJECT` | Docker compose project whose containers are runners. Empty disables this match. |
 | `ci.runners.image_match` | `github-runner` | `LUCID_CI_RUNNERS_IMAGE_MATCH` | Containers whose image name contains this text are runners too. Empty disables this match. |
 | `docker.allowed_projects` | `[]` | `LUCID_DOCKER_ALLOWED_PROJECTS` | Compose projects whose containers the Containers page may start, stop and restart, besides the `lucidbench` project and the runner containers. Every other container is read-only. The variable is a comma-separated list. See [Docker and Kubernetes](#docker-and-kubernetes). |
+| `power.cluster` | `on-demand` | `LUCID_POWER_CLUSTER` | `always`, `on-demand` or `off`. On demand, the kind cluster is started when a job is submitted and stopped when idle. See [On-demand infrastructure](#on-demand-infrastructure). |
+| `power.cluster_idle_minutes` | `15` | | Minutes with no running pod in the `lucidbench` namespace, no active job and no job submitted before an on-demand cluster is stopped (1-1440). |
+| `power.runners` | `always` | `LUCID_POWER_RUNNERS` | `always`, `on-demand` or `off` for the runner containers (`ci.runners`). On demand, a stopped runner is started when its repository has a queued run and stopped when idle. |
+| `power.runner_idle_minutes` | `10` | | Minutes a runner has had no job and its repository no queued or running run before an on-demand runner is stopped (1-1440). |
+| `power.stacks` | `[]` | | Compose projects to start and stop as a group: a list of `{project, mode}` (mode defaults to `on-demand`). Listed projects may also be started and stopped on the Containers page. |
+| `power.poll_seconds` | `60` | | How often the cluster and runners are checked (10-3600). |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the

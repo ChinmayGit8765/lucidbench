@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -36,7 +37,30 @@ const (
 	DefaultCIToken          SecretRef = "env:GITHUB_TOKEN"
 	DefaultCIComposeProject           = ""
 	DefaultCIImageMatch               = "github-runner"
+
+	DefaultPowerCluster     = PowerOnDemand
+	DefaultPowerClusterIdle = 15
+	DefaultPowerRunners     = PowerAlways
+	DefaultPowerRunnerIdle  = 10
+	DefaultPowerPollSeconds = 60
+	DefaultPowerStackMode   = PowerOnDemand
+	MinPowerPollSeconds     = 10
+	MaxPowerPollSeconds     = 3600
+	MaxPowerIdleMinutes     = 24 * 60
 )
+
+// Power modes for the cluster, the runner containers and stacks.
+const (
+	// PowerAlways: Lucidbench never stops it.
+	PowerAlways = "always"
+	// PowerOnDemand: started when something needs it, stopped when idle.
+	PowerOnDemand = "on-demand"
+	// PowerOff: Lucidbench never starts or stops it on its own.
+	PowerOff = "off"
+)
+
+// PowerModes are the accepted power modes, in display order.
+var PowerModes = []string{PowerAlways, PowerOnDemand, PowerOff}
 
 // ServerConfig configures the daemon listener.
 type ServerConfig struct {
@@ -97,6 +121,25 @@ type DockerConfig struct {
 	AllowedProjects []string `json:"allowed_projects"`
 }
 
+// PowerStack is a compose project whose containers Lucidbench may start and
+// stop as a group.
+type PowerStack struct {
+	Project string `json:"project"`
+	Mode    string `json:"mode"`
+}
+
+// PowerConfig configures on-demand infrastructure: whether the kind cluster,
+// the runner containers and listed compose stacks are started when needed
+// and stopped when idle.
+type PowerConfig struct {
+	Cluster            string       `json:"cluster"`
+	ClusterIdleMinutes int          `json:"cluster_idle_minutes"`
+	Runners            string       `json:"runners"`
+	RunnerIdleMinutes  int          `json:"runner_idle_minutes"`
+	Stacks             []PowerStack `json:"stacks"`
+	PollSeconds        int          `json:"poll_seconds"`
+}
+
 // Config is the effective configuration. It holds no secret values.
 type Config struct {
 	Server    ServerConfig              `json:"server"`
@@ -107,6 +150,7 @@ type Config struct {
 	UI        UIConfig                  `json:"ui"`
 	CI        CIConfig                  `json:"ci"`
 	Docker    DockerConfig              `json:"docker"`
+	Power     PowerConfig               `json:"power"`
 
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
@@ -128,7 +172,12 @@ func Default() *Config {
 			GitHub:  CIGitHubConfig{Repos: []string{}, Token: DefaultCIToken},
 			Runners: CIRunnersConfig{ComposeProject: DefaultCIComposeProject, ImageMatch: DefaultCIImageMatch},
 		},
-		Docker:  DockerConfig{AllowedProjects: []string{}},
+		Docker: DockerConfig{AllowedProjects: []string{}},
+		Power: PowerConfig{
+			Cluster: DefaultPowerCluster, ClusterIdleMinutes: DefaultPowerClusterIdle,
+			Runners: DefaultPowerRunners, RunnerIdleMinutes: DefaultPowerRunnerIdle,
+			Stacks: []PowerStack{}, PollSeconds: DefaultPowerPollSeconds,
+		},
 		sources: map[string]string{},
 	}
 	for _, p := range Providers {
@@ -147,7 +196,8 @@ func Keys() []string {
 		ks = append(ks, "providers."+p+".enabled", "providers."+p+".extra_dirs")
 	}
 	return append(ks, "cluster.name", "agent.image", "vault.path", "ui.theme",
-		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match", "docker.allowed_projects")
+		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match", "docker.allowed_projects",
+		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -356,6 +406,8 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 				c.sources["docker.allowed_projects"] = "file"
 				return true, err
 			})
+		case "power":
+			err = d.power(e)
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -475,6 +527,74 @@ func (d *fileDecoder) ci(e entry) error {
 	})
 }
 
+func (d *fileDecoder) integer(n *yaml.Node, key string) (int, error) {
+	var i int
+	if n.Kind != yaml.ScalarNode || n.Tag != "!!int" || n.Decode(&i) != nil {
+		return 0, d.errAt(n, key, "must be a whole number")
+	}
+	return i, nil
+}
+
+func (d *fileDecoder) power(e entry) error {
+	p := &d.c.Power
+	return d.section(e, func(k string, v *yaml.Node) (bool, error) {
+		key := "power." + k
+		var err error
+		switch k {
+		case "cluster":
+			p.Cluster, err = d.str(v, key)
+		case "runners":
+			p.Runners, err = d.str(v, key)
+		case "cluster_idle_minutes":
+			p.ClusterIdleMinutes, err = d.integer(v, key)
+		case "runner_idle_minutes":
+			p.RunnerIdleMinutes, err = d.integer(v, key)
+		case "poll_seconds":
+			p.PollSeconds, err = d.integer(v, key)
+		case "stacks":
+			p.Stacks, err = d.stacks(v, key)
+		default:
+			return false, nil
+		}
+		d.c.sources[key] = "file"
+		return true, err
+	})
+}
+
+// stacks reads power.stacks, a list of {project, mode} mappings. A missing
+// mode is on-demand.
+func (d *fileDecoder) stacks(n *yaml.Node, key string) ([]PowerStack, error) {
+	out := []PowerStack{}
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!null" {
+		return out, nil
+	}
+	if n.Kind != yaml.SequenceNode {
+		return nil, d.errAt(n, key, "must be a list of {project, mode}")
+	}
+	for _, it := range n.Content {
+		es, err := d.entries(it, key)
+		if err != nil {
+			return nil, err
+		}
+		s := PowerStack{Mode: DefaultPowerStackMode}
+		for _, f := range es {
+			switch f.key {
+			case "project":
+				s.Project, err = d.str(f.node, key+".project")
+			case "mode":
+				s.Mode, err = d.str(f.node, key+".mode")
+			default:
+				d.warnUnknown(f.node, key+"."+f.key)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
 // ---- env layer ----
 
 // envSpec maps a key to its environment variables, lowest precedence first.
@@ -487,6 +607,9 @@ var envSpecs = map[string][]string{
 
 	"ci.runners.compose_project": {"LUCID_CI_RUNNERS_COMPOSE_PROJECT"},
 	"ci.runners.image_match":     {"LUCID_CI_RUNNERS_IMAGE_MATCH"},
+
+	"power.cluster": {"LUCID_POWER_CLUSTER"},
+	"power.runners": {"LUCID_POWER_RUNNERS"},
 }
 
 func providerEnv(p, field string) string {
@@ -503,6 +626,9 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 
 		"ci.runners.compose_project": &c.CI.Runners.ComposeProject,
 		"ci.runners.image_match":     &c.CI.Runners.ImageMatch,
+
+		"power.cluster": &c.Power.Cluster,
+		"power.runners": &c.Power.Runners,
 	}
 	for key, names := range envSpecs {
 		for _, n := range names {
@@ -667,7 +793,54 @@ func (c *Config) validate() error {
 			return c.bad("docker.allowed_projects", fmt.Sprintf("%q must be a compose project name (lowercase letters, digits, dashes, underscores)", p))
 		}
 	}
+	return c.validatePower()
+}
+
+func validMode(m string) bool { return slices.Contains(PowerModes, m) }
+
+func (c *Config) validatePower() error {
+	p := c.Power
+	modes := strings.Join(PowerModes, ", ")
+	if !validMode(p.Cluster) {
+		return c.bad("power.cluster", "must be one of "+modes)
+	}
+	if !validMode(p.Runners) {
+		return c.bad("power.runners", "must be one of "+modes)
+	}
+	if p.ClusterIdleMinutes < 1 || p.ClusterIdleMinutes > MaxPowerIdleMinutes {
+		return c.bad("power.cluster_idle_minutes", fmt.Sprintf("must be between 1 and %d minutes", MaxPowerIdleMinutes))
+	}
+	if p.RunnerIdleMinutes < 1 || p.RunnerIdleMinutes > MaxPowerIdleMinutes {
+		return c.bad("power.runner_idle_minutes", fmt.Sprintf("must be between 1 and %d minutes", MaxPowerIdleMinutes))
+	}
+	if p.PollSeconds < MinPowerPollSeconds || p.PollSeconds > MaxPowerPollSeconds {
+		return c.bad("power.poll_seconds", fmt.Sprintf("must be between %d and %d seconds", MinPowerPollSeconds, MaxPowerPollSeconds))
+	}
+	seen := map[string]bool{}
+	for _, s := range p.Stacks {
+		if !composeProjectRE.MatchString(s.Project) {
+			return c.bad("power.stacks", fmt.Sprintf("project %q must be a compose project name (lowercase letters, digits, dashes, underscores)", s.Project))
+		}
+		if seen[s.Project] {
+			return c.bad("power.stacks", fmt.Sprintf("project %q is listed twice", s.Project))
+		}
+		seen[s.Project] = true
+		if !validMode(s.Mode) {
+			return c.bad("power.stacks", fmt.Sprintf("mode of %q must be one of %s", s.Project, modes))
+		}
+	}
 	return nil
+}
+
+// StackMode returns the power mode of a compose project and whether it is
+// listed in power.stacks.
+func (c *Config) StackMode(project string) (string, bool) {
+	for _, s := range c.Power.Stacks {
+		if s.Project == project {
+			return s.Mode, true
+		}
+	}
+	return "", false
 }
 
 var composeProjectRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -707,6 +880,22 @@ func (c *Config) value(key string) string {
 		return c.CI.Runners.ImageMatch
 	case "docker.allowed_projects":
 		return "[" + strings.Join(c.Docker.AllowedProjects, ", ") + "]"
+	case "power.cluster":
+		return c.Power.Cluster
+	case "power.cluster_idle_minutes":
+		return fmt.Sprint(c.Power.ClusterIdleMinutes)
+	case "power.runners":
+		return c.Power.Runners
+	case "power.runner_idle_minutes":
+		return fmt.Sprint(c.Power.RunnerIdleMinutes)
+	case "power.poll_seconds":
+		return fmt.Sprint(c.Power.PollSeconds)
+	case "power.stacks":
+		ss := []string{}
+		for _, s := range c.Power.Stacks {
+			ss = append(ss, s.Project+" ("+s.Mode+")")
+		}
+		return "[" + strings.Join(ss, ", ") + "]"
 	}
 	parts := strings.Split(key, ".")
 	if len(parts) == 3 && parts[0] == "providers" {

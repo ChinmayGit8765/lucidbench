@@ -65,3 +65,28 @@ docker:
   # stopped and restarted from the UI, besides the lucidbench project and the
   # runner containers above. Every other container is read-only.
   allowed_projects: []
+
+power:
+  # On-demand infrastructure. Each mode is one of:
+  #   always     Lucidbench never stops it.
+  #   on-demand  started when something needs it, stopped when idle.
+  #   off        Lucidbench never starts or stops it on its own.
+  # The Start and Stop buttons work in every mode.
+  #
+  # The kind cluster: on-demand starts it when a job is submitted or you
+  # press Start, and stops it after this many minutes with no running pod,
+  # no active job and no job submitted.
+  cluster: "on-demand"
+  cluster_idle_minutes: 15
+  # The runner containers (ci.runners): on-demand starts a stopped runner
+  # when its repository has a queued workflow run, and stops it after this
+  # many minutes with no job on it and no queued or running run. A busy
+  # runner is never stopped. on-demand asks GitHub every poll_seconds.
+  runners: "always"
+  runner_idle_minutes: 10
+  # Compose projects to start and stop as a group from the UI, for example
+  # [{project: "my-db", mode: "on-demand"}]. "Sleep everything idle" stops
+  # the on-demand ones.
+  stacks: []
+  # How often the cluster and runners are checked, in seconds (10-3600).
+  poll_seconds: 60
