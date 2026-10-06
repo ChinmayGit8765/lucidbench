@@ -171,7 +171,8 @@ without asking are fixed when it starts. By default that is read-only git
 `commit` and `restore`, plus `ls`, `cat`, `grep` and `find`, and the build tools
 of the stack found at the checkout's root: `go` and `gofmt` for `go.mod`,
 `npm`, `node` and `npx` for `package.json`, `cargo` for `Cargo.toml`. A project's
-`work.allowed_commands` replaces the stack part, and the New Session form lets
+`work.allowed_commands` replaces the stack part (the check commands from its
+[assessment](#project-assessments) are added either way), and the New Session form lets
 you edit the whole list for one session. An entry is a command prefix (`go`
 allows every `go ...`; `git status` only that). `git push`, `git remote`,
 `rm`, `sudo`, `curl`, `wget`, `gh` and shells are never allowed, and the CLI is
@@ -188,6 +189,37 @@ A missing file is not an error: the page shows how to create one. Duplicate
 ids, unknown values and references to unknown ids are reported with the
 project id and the field, and the rest of the file still loads. The file is
 re-read on every request, so edits show up on the next refresh.
+
+### Project assessments
+
+A few preliminary questions judge what kind of project something is (game, web
+app, desktop app, CLI or library, service or API, ML or research, site, video or
+media, coursework) and help manage how it is built. Choose **Assess** on a
+project's card. Each kind has five to seven questions; the answers give:
+
+- **done criteria**, each with a proof hint, that Council offers the proposer when
+  you brief that project;
+- **check commands** (such as `go test` or `npm test`) that Work adds to the
+  project's allowed commands, whether or not `work.allowed_commands` is set;
+- a **risk level** (low, medium or high) with the reasons.
+
+The cards show the kind and the risk. "Suggest answers from the repo" asks your
+own CLI to guess from the project's file names (not their contents), with no
+tools; it needs `local_path`, is never offered for a confidential project, and
+every answer is still yours to confirm.
+
+An assessment you confirm in the app is saved in
+`<data dir>/assessments/<id>.yaml`, so your `projects.yaml`, with its comments
+and layout, is never rewritten. You can also write one by hand under a project:
+
+```yaml
+    assessment:
+      kind: game          # see GET /api/assess/kinds for the kinds and their questions
+      answers: { engine: godot, stage: prototype, audience: just-me, multiplayer: "false", saves: "false" }
+```
+
+When a project has both, the one confirmed in the app wins. The kinds and
+their rules live in `internal/assess/kinds/`.
 
 ## MCP servers
 
