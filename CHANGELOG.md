@@ -13,6 +13,20 @@ marked `-beta.N`.
   first), and link a native card to a Trello card. Needs `TRELLO_API_KEY` and `TRELLO_TOKEN`.
 - Cards store `linear::` and `trello::` links. The remote owns the item; nothing is synced back.
   Credentials are `env:NAME` references under the new `integrations` config section.
+- **Prompt Studio:** compose big prompts in sections (role, context, contract, task, constraints,
+  verify, report) from built-in templates: builder, critic, scout, researcher, reviewer and
+  braindump → brief. Add context with token sizes: a project with its assessment, a Memory page,
+  the project's rules files, a repo map, a card, or recent council decisions. A live preview
+  estimates tokens and lints: missing verify or report, no done criteria, secret-looking strings,
+  and a confidential page or project, which blocks sending to Work or the Council. Send to Work or
+  the Council, copy, or save your own templates and snippets. "Improve this prompt" asks the
+  cheapest model to restructure a rough prompt and shows a preview first. The council's prompts
+  are listed read-only.
+- **Work** builds its prompt from the builder template: the same safety rules, now with the
+  session's allowed commands, then the task, and verify and report sections.
+- **Ideas:** follow each idea from braindump to merged PR: its stage, the council session, the
+  brief, the card and how it moved, the agent sessions, the PRs and their checks, a timeline and
+  the cost by provider. Council sessions, cards, Work sessions and briefs link to it.
 
 ## 0.3.0-beta.1 (2026-10-06)
 
