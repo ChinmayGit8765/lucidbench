@@ -77,7 +77,7 @@ func createWorktree(localPath, id, name string) (*worktree, error) {
 	if err != nil {
 		return nil, errf(ErrBadRequest, "local_path %s is not a git repository", localPath)
 	}
-	top = filepath.Clean(filepath.FromSlash(top))
+	top = longPath(filepath.Clean(filepath.FromSlash(top)))
 	base, err := defaultBase(top)
 	if err != nil {
 		return nil, err
