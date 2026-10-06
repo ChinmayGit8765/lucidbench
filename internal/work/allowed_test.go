@@ -132,10 +132,10 @@ func TestAllowedCommandsReachTheCLI(t *testing.T) {
 	if !errors.Is(err, ErrBadRequest) || !strings.Contains(err.Error(), "git push") {
 		t.Errorf("git push: %v", err)
 	}
-	if got, err := f.svc.Defaults("demo"); err != nil || !slices.Contains(got, "go") {
+	if got, _, err := f.svc.Defaults("demo"); err != nil || !slices.Contains(got, "go") {
 		t.Errorf("defaults: %v %v", got, err)
 	}
-	if _, err := f.svc.Defaults("nope"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := f.svc.Defaults("nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown project: %v", err)
 	}
 }

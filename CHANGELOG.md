@@ -16,6 +16,24 @@ marked `-beta.N`.
   browser stays up while the session runs, and screenshots taken for the session show in its
   timeline. The CDP client is a small hand-rolled WebSocket with no new module; the daemon grows by
   about 0.2 MB. API: `/api/browser` (see [Live browser](docs/CONFIG.md#live-browser)).
+- **Customise, three tiers:** Settings › Customise explains reskin (themes), sections and
+  features. **Sections** are widgets on the Overview and on each project's page: JSON in
+  `<data dir>/sections/` that reads one route from an allowlist of read-only Lucidbench routes and
+  shows a number, a list, a table, bars or text, with no URLs, scripts or code. Six templates ship
+  (PRs waiting for me, This week's spend, Cards due soon, Failing deploys, Agents working, Sessions
+  on this project), and **Describe a section** has your own CLI (no tools, claude on haiku) write
+  one, previewed with live data before you save it. **Describe a feature** (also in the palette)
+  never touches the running app: it opens a Council braindump marked as a feature request for
+  Lucidbench, and the normal loop takes over.
+- **AI team (`lucid-team.yaml` v1):** a project's team, in its checkout at `.lucid/team.yaml`, in
+  the data folder, or as the `team:` default in `config.yaml`, names the provider, model, profile,
+  MCP servers, allowed commands and budget of each role (proposer, critics, builder, reviewer,
+  scout). Approving a brief, opening a PR and merging stay human. The Council seats the team's
+  proposer and critics with their models, and Work starts with the builder's. The Team tab on each
+  project checks it against this machine (sign-ins, MCP servers, model names, recent cost against
+  budget), saves it to the repository or the data folder, and imports YAML. Schema in
+  `docs/schemas/lucid-team.schema.json`, spec in `docs/TEAM-SPEC.md`. Confidential projects are
+  still refused, whatever the team says.
 - **First-run setup:** a fresh install opens a calm six-step setup (also in Settings › General ›
   Run setup again): which accounts are signed in and how to sign in to the rest; a new Memory
   vault or the snippet for a folder you already have; your git repositories, found in a folder you

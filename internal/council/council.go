@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -121,6 +122,7 @@ type Point struct {
 // Step is one model call: the proposal, a critique or a synthesis.
 type Step struct {
 	Provider string           `json:"provider"`
+	Model    string           `json:"model,omitempty"` // the model the project's team chose, "" for the CLI's default
 	Role     string           `json:"role"`
 	Running  bool             `json:"running"`
 	Text     string           `json:"text,omitempty"`    // the draft, or a critique's raw answer when it could not be read
@@ -164,6 +166,11 @@ type Session struct {
 	MaxRounds    int      `json:"max_rounds"`
 	Rounds       []Round  `json:"rounds"`
 	StoppedEarly bool     `json:"stopped_early"`
+	// Models and Profiles are the model and account profile per provider,
+	// from the project's team; Team says where that team came from.
+	Models   map[string]string `json:"models,omitempty"`
+	Profiles map[string]string `json:"profiles,omitempty"`
+	Team     string            `json:"team,omitempty"`
 	// ApprovedWithBlockers is set when the brief was approved while the
 	// latest critiques still held a blocker, and the user said so.
 	ApprovedWithBlockers bool              `json:"approved_with_blockers,omitempty"`
@@ -192,6 +199,20 @@ type StartRequest struct {
 	Rounds   int      `json:"rounds,omitempty"`  // 1 or 2; 0 = 2
 }
 
+// Seat is who fills a council role: a provider, and optionally its model and
+// host account profile.
+type Seat struct {
+	Provider, Model, Profile string
+}
+
+// TeamRoles is a project's AI team as the council reads it (see
+// internal/team): its proposer and critics, and where the team came from.
+type TeamRoles struct {
+	Proposer *Seat
+	Critics  []Seat
+	Source   string
+}
+
 // Service runs and stores council sessions.
 type Service struct {
 	Dir      string                         // where session records live
@@ -200,6 +221,10 @@ type Service struct {
 	Runner   *agentexec.Runner              // nil = the default runner
 	Timeout  time.Duration                  // per model call; 0 = DefaultTimeout
 	Now      func() time.Time
+	// Team returns a project's team, or nil when it has none of its own; nil
+	// means no teams. A request that names no proposer or critics takes the
+	// team's, and a provider the team seats runs with the team's model.
+	Team func(project string) (*TeamRoles, error)
 
 	mu      sync.Mutex
 	live    map[string]*Session // sessions with a run in flight
@@ -282,6 +307,19 @@ func (s *Service) prepare(in StartRequest) (*Session, error) {
 	if len(in.Input) > MaxInput {
 		return nil, fmt.Errorf("%w: the braindump is longer than %d characters", ErrBadRequest, MaxInput)
 	}
+	in.Project = strings.TrimSpace(in.Project)
+	team := s.team(in.Project)
+	if team != nil {
+		if in.Proposer == "" && team.Proposer != nil {
+			in.Proposer = team.Proposer.Provider
+		}
+		if in.Critics == nil && len(team.Critics) > 0 {
+			in.Critics = []string{}
+			for _, c := range team.Critics {
+				in.Critics = append(in.Critics, c.Provider)
+			}
+		}
+	}
 	if in.Proposer == "" {
 		in.Proposer = DefaultProposer
 	}
@@ -310,7 +348,6 @@ func (s *Service) prepare(in StartRequest) (*Session, error) {
 	if rounds < 1 || rounds > MaxRounds {
 		return nil, fmt.Errorf("%w: rounds must be 1 or 2", ErrBadRequest)
 	}
-	in.Project = strings.TrimSpace(in.Project)
 	if err := s.checkConfidential(in.Project, in.Input); err != nil {
 		return nil, err
 	}
@@ -329,7 +366,52 @@ func (s *Service) prepare(in StartRequest) (*Session, error) {
 	if len(cs) == 0 {
 		sess.Mode = ModeSelfCritique
 	}
+	if team != nil {
+		seat(sess, team.Proposer, in.Proposer)
+		for i := range team.Critics {
+			seat(sess, &team.Critics[i], cs...)
+		}
+		sess.Team = team.Source
+	}
 	return sess, nil
+}
+
+// team returns the project's team, or nil. A team that cannot be read is
+// the same as none: the request's own choices and the defaults apply.
+func (s *Service) team(project string) *TeamRoles {
+	if project == "" || s.Team == nil {
+		return nil
+	}
+	t, err := s.Team(project)
+	if err != nil {
+		return nil
+	}
+	return t
+}
+
+// seat records a team seat's model and profile when its provider takes part
+// in one of the given places. The first seat for a provider wins, so the
+// proposer's model beats a critic seat of the same provider.
+func seat(sess *Session, st *Seat, in ...string) {
+	if st == nil || !slices.Contains(in, st.Provider) {
+		return
+	}
+	if st.Model != "" {
+		if sess.Models == nil {
+			sess.Models = map[string]string{}
+		}
+		if _, ok := sess.Models[st.Provider]; !ok {
+			sess.Models[st.Provider] = st.Model
+		}
+	}
+	if st.Profile != "" {
+		if sess.Profiles == nil {
+			sess.Profiles = map[string]string{}
+		}
+		if _, ok := sess.Profiles[st.Provider]; !ok {
+			sess.Profiles[st.Provider] = st.Profile
+		}
+	}
 }
 
 // Start runs a whole council and returns the finished session. onUpdate, when
@@ -480,6 +562,7 @@ func skipNote(provider string, err error) string {
 func (s *Service) call(ctx context.Context, sess *Session, onUpdate func(Session), step *Step, system, prompt string) error {
 	s.change(sess, onUpdate, func() {
 		step.Running, step.Started = true, s.now()
+		step.Model = sess.Models[step.Provider]
 		sess.Thinking = append(sess.Thinking, step.Provider)
 		s.logLocked(sess, "thinking", 0, step.Provider, step.Provider+" is thinking ("+step.Role+")")
 	})
@@ -487,8 +570,11 @@ func (s *Service) call(ctx context.Context, sess *Session, onUpdate func(Session
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+	s.mu.Lock()
+	model, profile := sess.Models[step.Provider], sess.Profiles[step.Provider]
+	s.mu.Unlock()
 	res, err := s.runner().Run(ctx, agentexec.Request{
-		Provider: step.Provider, SystemPrompt: systemPrompt(system), Prompt: prompt,
+		Provider: step.Provider, Profile: profile, Model: model, SystemPrompt: systemPrompt(system), Prompt: prompt,
 		Tools: agentexec.ToolsNone, Timeout: timeout,
 	})
 	s.change(sess, onUpdate, func() {

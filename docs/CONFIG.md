@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`, `sections/`, `teams/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -77,6 +77,7 @@ is an error that names the file and the key, for example
 | `integrations.trello.api_url` | `https://api.trello.com/1` | `LUCID_INTEGRATIONS_TRELLO_API_URL` | Trello REST base URL. Change it only to go through a proxy. |
 | `integrations.stripe.key` | `env:STRIPE_API_KEY` | `LUCID_INTEGRATIONS_STRIPE_KEY` | Secret reference for a Stripe restricted or secret key. See [Payments (Stripe)](#payments-stripe). |
 | `integrations.stripe.api_url` | `https://api.stripe.com` | `LUCID_INTEGRATIONS_STRIPE_API_URL` | Stripe API base URL. Change it only to go through a proxy or a local fake. |
+| `team` | empty (Lucidbench's defaults) | | Your default AI team: a whole `lucid-team.yaml` version 1 document under this key, used by a project with no team of its own. It is checked when a project reads it, not at startup; a team that does not validate is skipped and the Team tab says why. See [AI team](#ai-team) and [TEAM-SPEC.md](TEAM-SPEC.md). |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -499,6 +500,98 @@ seconds and one at a time. A missing or signed-out CLI answers `424` with
 what to run; a daemon running in Docker answers `501`, because the CLIs and
 your sign-ins live on the host: use the desktop app or a lucidd started on
 the host.
+
+## Sections
+
+Settings › Sections and the **Add section** button on the Overview (and on a
+project's Sections tab) manage widgets that show part of what Lucidbench
+already knows. Each section is one JSON file in `<data dir>/sections/<id>.json`:
+
+```json
+{
+  "id": "prs-waiting",
+  "title": "PRs waiting for me",
+  "placement": "overview",
+  "source": {"api": "/api/work/sessions"},
+  "view": "list",
+  "filter": [{"field": "pr_state", "op": "in", "value": ["draft", "open"]}],
+  "sort": {"field": "started", "desc": true},
+  "limit": 10,
+  "fields": [{"path": "title"}, {"path": "pr_state", "format": "badge"}, {"path": "pr_url", "label": "PR", "format": "link"}],
+  "refresh_s": 60
+}
+```
+
+- `source.api` must be one of the allowlisted read-only routes:
+  `/api/work/sessions`, `/api/council/sessions`, `/api/ideas`, `/api/boards`,
+  `/api/boards/{board}` (`board`), `/api/projects`, `/api/usage/summary`
+  (`days`, 1-90), `/api/ci/runs`, `/api/ci/runners`, `/api/cloud/deploys`,
+  `/api/accounts`, `/api/mcp` and `/api/memory/search` (`q`, `limit`). Each
+  takes only its listed params. The browser reads the route itself, so a
+  section reaches nothing a page of Lucidbench could not.
+- `view` is `stat`, `list`, `table`, `bars` (two fields: label, number) or
+  `markdown` (a text value, shown as plain text). `placement` is `overview`
+  (the default) or `project`, which shows it on every project's page; there
+  the filter value `{project}` stands for that project's id.
+- `rows` is the path to the list in the answer (empty when the answer is a
+  list); a `*` segment takes every value of a mapping, so `projects.*`
+  flattens `GET /api/cloud/deploys`, and each row gets `_key`. Fields,
+  filters and sorts use plain dotted paths only.
+- Filter ops: `eq`, `ne`, `contains`, `in`, `nin`, `exists`, `missing`, `gt`,
+  `lt`, `within_days` (a date up to N days ahead, overdue included) and
+  `since_days`. Formats: `text`, `number`, `usd`, `percent`, `date`,
+  `relative`, `link` (only an `http(s)` value becomes a link) and `badge`.
+- Refused: any other route, unknown keys, any string with `://`, `<`, `>`,
+  a backslash, a backtick or a `javascript:`/`data:` scheme, more than 8
+  fields, 6 filters or 4 params, a title over 80 characters, `refresh_s`
+  outside 15-3600, `limit` over 50, a file over 16 KB, more than 50 sections.
+  A hand-edited file that breaks a rule is listed as broken and never shown.
+
+Six templates ship built in: PRs waiting for me, This week's spend, Cards due
+soon, Failing deploys, Agents working, and Sessions on this project.
+
+**Describe a section** (`POST /api/sections/generate`, `{description,
+provider?, profile?, model?, placement?}`, needs `X-Lucid-Confirm`) runs your
+own CLI with no tools, the same way as Describe a theme, with the versioned
+prompt in `internal/sections/prompts/section.md`, which lists the allowed
+routes and their answers. Claude runs on `haiku` unless you name a model. The
+answer is validated like a saved section and returned as a preview; the
+Settings page fetches its route once to show it with live data, and nothing
+is saved until you choose Save. Each call's cost is recorded in
+`<data dir>/sections/runs/` and counts on the Usage page as source
+`sections`.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/sections` | GET | `{sections, broken}` |
+| `/api/sections/catalog` | GET | the allowed routes with their params, the templates, views, formats and ops |
+| `/api/sections/check` | POST | validate a section without saving it |
+| `/api/sections/{id}` | PUT / DELETE | save (the body's id must match) / remove |
+| `/api/sections/templates/{id}` | POST | add a copy of a template |
+| `/api/sections/generate` | POST | a validated preview, not saved |
+
+## AI team
+
+A project's team (`lucid-team.yaml` version 1) says which provider and model
+fill each role: proposer, critics, builder, reviewer and scout. It is read
+from `<local_path>/.lucid/team.yaml`, else `<data dir>/teams/<project>.yaml`,
+else the `team:` key of `config.yaml`:
+
+```yaml
+team:
+  version: 1
+  roles:
+    proposer: {provider: claude, model: sonnet}
+    critic: [{provider: codex}, {provider: grok}]
+    builder: {provider: claude, model: sonnet, budget_usd: 2}
+```
+
+The Council takes its proposer, critics and their models from the team of
+the project a braindump names, and Work takes the builder's provider, model
+and allowed commands as a new session's defaults. Approving a brief, opening
+a PR and merging always stay with you, and a confidential project is refused
+whatever its team says. The format, the checks and the routes are in
+[TEAM-SPEC.md](TEAM-SPEC.md).
 
 ## Docker and Kubernetes
 

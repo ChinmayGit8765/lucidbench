@@ -32,7 +32,13 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   payments/<project>.yaml       Stripe object ids created for a project, ids only (internal/payments)
   payments/audit.jsonl          every Stripe write: time, mode, action, object ids; no secrets (internal/payments)
   browser/shots/<id>.png        screenshots taken for a running Work session (internal/browser)
+  sections/<id>.json            Overview and project-page sections (internal/sections)
+  sections/runs/*.json          what each "Describe a section" call cost (internal/sections)
+  teams/<project>.yaml          a project's AI team when it is not kept in its checkout (internal/team)
 ```
+
+A project's checkout may hold `.lucid/team.yaml`, its AI team (docs/TEAM-SPEC.md); Lucidbench
+writes it only when the user saves the team there and confirms.
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault
   by itself; the user chooses one in Settings → General.
@@ -295,6 +301,17 @@ func Approve(id string, project string) (*boards.Card, error)
 |---|---|---|
 | `/api/ideas` | GET | `[{id, title, stage, status, project, created, updated, cost_usd, council, card, sessions, pr_url, pr_state}]`, newest first; `cost_usd` sums what the council and Work runs reported |
 | `/api/ideas/{id...}` | GET | the summary plus `council_session`, `brief {path, title, status, body, exists, confidential}`, `card_view {…card, board, history, history_note}`, `work` (session summaries with diff stat, cost, `pr_url`, `pr_state`, `pr_checks`), `links` (pages that link the brief), `timeline`, `costs` (by provider and part) and `missing` (pieces that could not be read) |
+
+**Sections** (`internal/sections`, Settings › Sections, Overview and the project detail)
+- A section is JSON naming one route from `sections.APIs`, an allowlist of read-only GET routes, plus rows, filters, a sort, a limit, fields and a view. `Validate` refuses any other route or param, unknown keys, URLs, markup, scripts and anything but dotted field paths. Routes and the format are in docs/CONFIG.md, Sections.
+- `POST /api/sections/generate` runs the user's CLI with `agentexec.ToolsNone` (claude on `haiku` by default) and the versioned prompt `internal/sections/prompts/section.md`; the answer is validated like a saved section and is a preview. Usage is recorded under `sections/runs/` and the Usage page counts it as source `sections`.
+
+**AI team** (`internal/team`, the project detail's Team tab; docs/TEAM-SPEC.md)
+- `lucid-team.yaml` v1: `version: 1`, `roles` (proposer, critic as one role or up to two, builder, reviewer, scout: `{provider, profile?, model?, mcp_allow?, allowed_commands?, budget_usd?}`) and `gates` (approve_brief, open_pr, merge: `human` only). Schema: `docs/schemas/lucid-team.schema.json`.
+- Resolution: `<local_path>/.lucid/team.yaml`, then `teams/<project>.yaml`, then config `team:`, then the built-in defaults (which change nothing). Schema errors are hard; sign-in, MCP, model and budget findings are warnings.
+- Council: `council.Service.Team` gives a project's proposer, critics and their models; a start request that leaves `proposer` or `critics` out takes the team's. Sessions record `models`, `profiles` and `team`; steps record `model`.
+- Work: `work.Service.Team` gives the builder. `StartRequest.provider` may be empty when the project has one; the request's own provider, model, profile and `allowed_commands` win. Builder commands replace the stack part of the defaults, like `work.allowed_commands`. `GET /api/work/defaults` adds `team` (the builder, its budget and recent average cost). Sessions record `model` and `team`.
+- The confidential rule wins: Council and Work refuse a confidential project before any provider runs, whatever its team.
 
 **First-run setup** (`internal/setup`, the `/setup` view; not a module)
 - Opens by itself on `/` when the data dir has neither `ui.json` nor `projects.yaml`, and from Settings › General › Run setup again. Six steps, each skippable: accounts, Memory vault, projects, theme, power modes, a sample braindump. Finishing or skipping writes `ui.json`.

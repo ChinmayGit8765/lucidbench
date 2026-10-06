@@ -97,13 +97,17 @@ func deniedCommand(c string) bool {
 	return false
 }
 
-// projectAllowed is the default list for a project, honouring its work block.
-// The check commands its assessment suggests are added either way, so the
-// agent can run the checks the project was judged to need.
-func projectAllowed(p projects.Project) []string {
+// projectAllowed is the default list for a project, honouring its work block,
+// or its team builder's allowed_commands (team), which win over the work
+// block. The check commands its assessment suggests are added either way, so
+// the agent can run the checks the project was judged to need.
+func projectAllowed(p projects.Project, team []string) []string {
 	var cfg []string
 	if p.Work != nil {
 		cfg = p.Work.AllowedCommands
+	}
+	if team != nil {
+		cfg = team
 	}
 	out := DefaultAllowed(p.LocalPath, cfg)
 	if p.Assessment != nil {
@@ -116,9 +120,12 @@ func projectAllowed(p projects.Project) []string {
 // sessionAllowed picks the list a session runs with: the request's own when
 // it sent one, else the project's. A refused entry fails the start rather
 // than being dropped, so the user sees why a command is not available.
-func sessionAllowed(req *StartRequest, p projects.Project) ([]string, error) {
+func sessionAllowed(req *StartRequest, p projects.Project, team []string) ([]string, error) {
 	if req.AllowedCommands == nil {
-		return projectAllowed(p), nil
+		if _, refused := CleanAllowed(team); len(refused) > 0 {
+			return nil, errf(ErrBadRequest, "the project's team allows commands that cannot be allowed: %s", strings.Join(refused, ", "))
+		}
+		return projectAllowed(p, team), nil
 	}
 	clean, refused := CleanAllowed(req.AllowedCommands)
 	if len(refused) > 0 {
@@ -127,22 +134,36 @@ func sessionAllowed(req *StartRequest, p projects.Project) ([]string, error) {
 	return clean, nil
 }
 
+// teamCommands is the builder's command list, nil without one.
+func teamCommands(b *Builder) []string {
+	if b == nil {
+		return nil
+	}
+	return b.AllowedCommands
+}
+
 // Defaults returns the allowed commands a new session on the project would
-// start with, for the New Session form.
-func (s *Service) Defaults(project string) ([]string, error) {
+// start with, and the project's team builder (nil without a team), for the
+// New Session form.
+func (s *Service) Defaults(project string) ([]string, *Builder, error) {
 	if s.Projects == nil {
-		return nil, errf(ErrBadRequest, "no projects file")
+		return nil, nil, errf(ErrBadRequest, "no projects file")
 	}
 	list, err := s.Projects()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, p := range list.Projects {
 		if p.ID == project {
-			return projectAllowed(p), nil
+			b := s.builder(p.ID)
+			cmds := teamCommands(b)
+			if _, refused := CleanAllowed(cmds); len(refused) > 0 {
+				cmds = nil
+			}
+			return projectAllowed(p, cmds), b, nil
 		}
 	}
-	return nil, errf(ErrNotFound, "no project %q in projects.yaml", project)
+	return nil, nil, errf(ErrNotFound, "no project %q in projects.yaml", project)
 }
 
 // denyRules is what the CLI is told never to run, whatever else it is

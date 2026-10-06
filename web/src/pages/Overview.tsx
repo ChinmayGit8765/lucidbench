@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { RunIcon, RunnerDot } from "@/components/ci"
+import { SectionGrid } from "@/components/SectionGrid"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { SpriteBoard } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
@@ -322,6 +323,8 @@ export default function Overview() {
           )
         })}
       </div>
+
+      <SectionGrid placement="overview" />
 
       <SpriteBoard />
 
