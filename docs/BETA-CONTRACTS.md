@@ -31,6 +31,7 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   databases.yaml                saved database connections, passwords as env:NAME (internal/databases)
   payments/<project>.yaml       Stripe object ids created for a project, ids only (internal/payments)
   payments/audit.jsonl          every Stripe write: time, mode, action, object ids; no secrets (internal/payments)
+  browser/shots/<id>.png        screenshots taken for a running Work session (internal/browser)
 ```
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault

@@ -5,6 +5,17 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Live browser extension:** a headless Chromium (`chromedp/headless-shell`, pulled at run time)
+  in a container bound to 127.0.0.1, with its own throw-away profile and no host mounts, started
+  on demand and stopped when idle through the power supervisor (every start and stop is in the
+  activity log). The page shows it live as a JPEG screencast with an address bar, back, forward,
+  reload, tabs, a PNG screenshot and fullscreen; **Take over** sends your mouse, wheel, keyboard and
+  paste to it under a banner that says you are controlling it; "Preview a dev server" opens
+  `localhost:<port>` in it through `host.docker.internal`. Only http and https URLs open. New
+  Session gets **Attach a browser**: the agent gets `LUCID_BROWSER_CDP` and a short note, the
+  browser stays up while the session runs, and screenshots taken for the session show in its
+  timeline. The CDP client is a small hand-rolled WebSocket with no new module; the daemon grows by
+  about 0.2 MB. API: `/api/browser` (see [Live browser](docs/CONFIG.md#live-browser)).
 - **First-run setup:** a fresh install opens a calm six-step setup (also in Settings › General ›
   Run setup again): which accounts are signed in and how to sign in to the rest; a new Memory
   vault or the snippet for a folder you already have; your git repositories, found in a folder you

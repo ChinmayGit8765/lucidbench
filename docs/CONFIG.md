@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -692,6 +692,72 @@ API (every request that changes something or reaches a database needs `X-Lucid-C
 `POST /api/databases/{id}/query` with `{"query": "..."}`, `GET /api/databases/{id}/manager` and
 `POST /api/databases/{id}/manager/start` or `stop`. Discovered containers (`docker:<name>`) have no
 password and cannot be read until they are saved.
+
+## Live browser
+
+The Live browser extension is a browser your agents use that you can watch and, when you need to,
+take over. Add it from Settings › Extensions; it needs Docker (category: DevOps).
+
+**The container.** `chromedp/headless-shell` (a headless Chromium; its build scripts are MIT, Chromium is
+BSD-3-Clause with the licences of its bundled components), pinned to a Chromium version, runs as the container
+`lucidbench-browser`. It is pulled from Docker Hub the first time you start it (about 0.5 GB
+unpacked) and is not redistributed with Lucidbench. It runs with:
+
+- its DevTools port published on `127.0.0.1` and a free port only, never on another interface;
+- **no volume and no bind mount**, and a throw-away profile inside the container
+  (`--user-data-dir=/tmp/...`, removed with the container), so it never sees your own browser, its
+  profile, cookies, logins or any folder of yours;
+- `--cap-drop ALL`, `no-new-privileges`, 1 GB of memory, 2 CPUs and a 256 MB shared memory limit;
+- `host.docker.internal` mapped to this machine, so it can reach a dev server of yours.
+
+Idle it uses about 110 MB. It is an on-demand thing like those in
+[On-demand infrastructure](#on-demand-infrastructure): it stops by itself 10 minutes after the last
+navigation, input, screenshot or open live view (the page closes the stream while its tab is
+hidden), "Sleep everything idle" stops it, and every start and stop shows in the power activity log
+(kind `browser`). A running Work session that attached it keeps it up until the session ends.
+Reading its state never wakes it or keeps it awake.
+
+**The live view.** The page streams the browser as JPEG frames over server-sent events, at most
+about 15 a second, with a back-pressure loop: each frame is acknowledged to Chrome after it was
+forwarded, so a slow page slows Chrome down, and when frames come faster than the cap only the
+newest one is sent. The page has an address bar, back, forward, reload, a PNG screenshot, fullscreen
+and a tabs list. **Take over** sends your mouse, wheel, keyboard and paste to the page; it is off by
+default, a banner says "You are controlling the browser" while it is on, and the daemon refuses
+input that does not say it came from take-over.
+
+**What opens.** Only `http` and `https` URLs. `file:`, `chrome:`, `devtools:`, `javascript:`,
+`data:`, `about:` and a string with no scheme are refused before anything reaches the browser. This
+guards the address bar and the API; an agent that drives the browser over CDP itself is not limited
+by it, so give a session a browser only when you would let it browse. A `localhost`, `127.0.0.1` or
+`[::1]` URL is opened as `host.docker.internal`, which is how "Preview a dev server" shows your own
+`http://localhost:5173` in the agent browser (never in yours). A dev server that listens on
+`127.0.0.1` only is reached on Docker Desktop; on Linux Docker it must listen on `0.0.0.0`.
+
+**With Work.** New Session has an **Attach a browser** checkbox (shown once the extension is
+added). A session started with it gets the browser started, `LUCID_BROWSER_CDP=ws://127.0.0.1:<port>/devtools/browser/<id>`
+in its environment and a short `## Browser` note at the end of its prompt: it may drive the browser
+over CDP (for example with `connectOverCDP`), the browser has an empty profile, and
+`localhost` means `host.docker.internal` inside it. A screenshot taken for a running session
+(`POST /api/browser/screenshot` with `{"session": "<id>"}`) is saved under
+`<data dir>/browser/shots/` and appears in the session timeline as an image. The address is a
+local port with no token, so any program on this machine can use it while the browser is up.
+
+**Protocol.** The CDP client is hand-rolled (about 500 lines with its WebSocket): it reads
+`/json/version` and `/json/list`, dials each tab's own socket and uses `Page.navigate`,
+`Page.startScreencast` with `Page.screencastFrameAck`, `Page.captureScreenshot`,
+`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent` and `Input.insertText`. It sends no `Origin`
+header, so Chrome keeps its default origin check; that check is what stops a web page in your own
+browser from opening a WebSocket to the port and driving the agent browser, and a library that
+always sends an `Origin` would need `--remote-allow-origins=*` to get past it. `cdproto` and
+`chromedp` were not used: they add megabytes of generated code for about ten methods.
+
+API (every POST needs `X-Lucid-Confirm: yes`): `GET /api/browser` (state `sleeping`, `starting` or
+`running`, the tabs, the DevTools address), `POST /api/browser/start`, `POST /api/browser/stop`,
+`POST /api/browser/navigate` with `{"url": "...", "target": "<tab>", "action": "go|back|forward|reload|close", "new_tab": false}`,
+`GET /api/browser/stream[?target=<tab>]` (server-sent events: `frame` with `{jpeg, width, height}`),
+`POST /api/browser/input` with `{"takeover": true, "type": "move|down|up|click|scroll|key|text", ...}`,
+`POST /api/browser/screenshot` with `{"target": "...", "session": "..."}` and
+`GET /api/browser/shots/{name}`.
 
 ## Picture
 
