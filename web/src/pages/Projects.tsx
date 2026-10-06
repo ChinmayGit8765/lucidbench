@@ -570,9 +570,11 @@ export default function Projects({ subpath }: ModulePageProps) {
   const [assessing, setAssessing] = useState<Project | null>(null)
   // /projects/<id>/team or /projects/<id>/sections opens that project's detail.
   const [detail, setDetail] = useState<{ id: string; tab: ProjectTab } | null>(null)
+  const route = subpath.join("/")
   useEffect(() => {
-    if (subpath[0]) setDetail({ id: subpath[0], tab: subpath[1] === "sections" ? "sections" : "team" })
-  }, [subpath])
+    const [id, t] = route.split("/")
+    if (id) setDetail({ id, tab: t === "sections" ? "sections" : "team" })
+  }, [route])
   const kinds = useKinds()
   // Deploy status runs the user's CLIs, so it waits for the Cloud extension to be added.
   const cloudAdded = useCloudAdded()
@@ -865,7 +867,10 @@ export default function Projects({ subpath }: ModulePageProps) {
         project={detail ? (byId.get(detail.id) ?? null) : null}
         tab={detail?.tab ?? "team"}
         onTab={(t) => setDetail((d) => (d ? { ...d, tab: t } : d))}
-        onClose={() => setDetail(null)}
+        onClose={() => {
+          setDetail(null)
+          if (route) navigate("/projects")
+        }}
       />
       <AssessSheet project={assessing} kinds={kinds} onClose={() => setAssessing(null)} onSaved={poll.refresh} />
     </div>

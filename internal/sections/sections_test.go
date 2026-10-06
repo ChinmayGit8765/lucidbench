@@ -117,6 +117,14 @@ func TestValidateRefuses(t *testing.T) {
 			t.Errorf("%s: accepted (%v)", name, err)
 		}
 	}
+	// Words such as "Data:" or "File:" in a label are fine; only a scheme is not.
+	for _, label := range []string{"Data: last 7 days", "File: notes", "Cost (USD)"} {
+		s := valid()
+		s.Fields = []Field{{Path: "title", Label: label}}
+		if err := Validate(s); err != nil {
+			t.Errorf("label %q refused: %v", label, err)
+		}
+	}
 	// The project token is fine on a project section.
 	s := valid()
 	s.Placement = PlaceProject

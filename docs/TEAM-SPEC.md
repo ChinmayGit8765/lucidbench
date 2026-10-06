@@ -73,6 +73,13 @@ applies. The Team tab saves to the repository (after you confirm, because it wri
 checkout) or to the data folder, and shows the path either way. **Import YAML** checks a pasted
 file before you save it.
 
+**A team file is a suggestion from whoever wrote the repository.** A `.lucid/team.yaml` in a
+repository you cloned chooses models (and so what a run costs) and can widen the builder's allowed
+commands with any command that is not on the always-refused list. Lucidbench never runs anything
+from it on its own: New Session shows the provider, model and the full command list before you
+start, and the Council composer shows the seats and models before you convene. Read a team you did
+not write the way you would read its build scripts.
+
 ## How Lucidbench uses it
 
 - **Council:** when a braindump names a project, the composer seats the team's proposer and

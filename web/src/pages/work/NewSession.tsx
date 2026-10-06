@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   Bot,
@@ -110,6 +110,7 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   // The project's team builder: its provider and model are the defaults.
   const [builder, setBuilder] = useState<WorkBuilder | null>(null)
   const [model, setModel] = useState("")
+  const modelFromTeam = useRef(false)
 
   const all = (projects.data?.projects ?? []) as WorkProject[]
   const usable = all.filter((p) => p.local_path && p.visibility !== "confidential")
@@ -159,9 +160,16 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   }
   // The team's builder sets the agent and its model, until the user picks one.
   useEffect(() => {
-    if (!builder || providerTouched || !WORK_PROVIDERS.includes(builder.provider as WorkProvider)) return
+    if (!builder) {
+      // Another project: a model the last team chose goes with it.
+      if (modelFromTeam.current) setModel("")
+      modelFromTeam.current = false
+      return
+    }
+    if (providerTouched || !WORK_PROVIDERS.includes(builder.provider as WorkProvider)) return
     pickProvider(builder.provider as WorkProvider)
     setModel(builder.model ?? "")
+    modelFromTeam.current = true
     if (builder.profile) setProfile(builder.profile)
   }, [builder]) // only when the builder changes, so a pick sticks
   // Until the user picks one, the agent is the first CLI that is installed and signed in.
@@ -447,7 +455,10 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
               <input
                 id="work-model"
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={(e) => {
+                  setModel(e.target.value)
+                  modelFromTeam.current = false
+                }}
                 list="work-models"
                 placeholder="the CLI's default"
                 className="h-7 w-40 rounded-md border bg-background/60 px-2 font-mono text-xs outline-none focus-visible:border-ring"

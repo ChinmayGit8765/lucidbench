@@ -204,7 +204,7 @@ var (
 	paramID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	// unsafe finds what a section never needs: a URL, markup, a script
 	// scheme or a path separator that could reach outside a route.
-	unsafe = regexp.MustCompile(`(?i)(://|^//|[<>\\` + "`" + `]|\b(javascript|data|vbscript|file):)`)
+	unsafe = regexp.MustCompile(`(?i)(://|^//|[<>\\` + "`" + `]|\b(javascript|data|vbscript|file):\S)`)
 )
 
 // Problem is one reason a section is refused.

@@ -154,6 +154,7 @@ function Composer() {
   const [rounds, setRounds] = useState(2)
   const [busy, setBusy] = useState(false)
   const [team, setTeam] = useState<TeamView | null>(null)
+  const teamSeated = useRef(false)
   const [err, setErr] = useState<ApiError | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
 
@@ -173,17 +174,31 @@ function Composer() {
   // A project with a team of its own seats the team's proposer and critics.
   useEffect(() => {
     setTeam(null)
-    if (!project) return
+    // Leaving a project whose team set the seats puts the defaults back.
+    const reset = () => {
+      if (!teamSeated.current) return
+      teamSeated.current = false
+      setProposer("claude")
+      setCritics(["codex", "grok"])
+    }
+    if (!project) {
+      reset()
+      return
+    }
     let alive = true
     getJSON<TeamView>(teamPath(project)).then(
       (v) => {
         if (!alive) return
         setTeam(v)
-        if (v.source === "builtin") return
+        if (v.source === "builtin") {
+          reset()
+          return
+        }
         const isP = (x: string): x is CouncilProvider => (COUNCIL_PROVIDERS as string[]).includes(x)
         const p = v.team.roles.proposer?.provider
         if (p && isP(p)) setProposer(p)
         if (v.team.roles.critic) setCritics(v.team.roles.critic.map((c) => c.provider).filter(isP).filter((c) => c !== p))
+        teamSeated.current = true
       },
       () => {},
     )

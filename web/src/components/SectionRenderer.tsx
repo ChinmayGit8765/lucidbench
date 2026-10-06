@@ -178,7 +178,7 @@ export function SectionRenderer({
   const now = useNow(30_000)
   const refused = catalog.data && !url
   return (
-    <Card className={cn("flex flex-col overflow-hidden", className)} data-testid="section" aria-label={`Section: ${s.title}`}>
+    <Card role="region" className={cn("flex flex-col overflow-hidden", className)} data-testid="section" aria-label={`Section: ${s.title}`}>
       <div className="flex items-start gap-2 px-4 pb-2 pt-3.5">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold">{s.title}</h3>

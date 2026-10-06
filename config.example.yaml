@@ -105,3 +105,13 @@ integrations:
   # Payments page; live-mode keys are read-only.
   stripe:
     key: "env:STRIPE_API_KEY"
+
+# Your default AI team (lucid-team.yaml version 1, see docs/TEAM-SPEC.md),
+# used by a project with no team of its own. Left out, Lucidbench's defaults
+# apply. For example:
+# team:
+#   version: 1
+#   roles:
+#     proposer: {provider: claude, model: sonnet}
+#     critic: [{provider: codex}, {provider: grok}]
+#     builder: {provider: claude, budget_usd: 2}
