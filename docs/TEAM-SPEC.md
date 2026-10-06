@@ -127,7 +127,7 @@ The Team tab and `POST /api/team/validate` report three kinds of finding:
 ## Writing it from other tools
 
 The format is plain YAML with a published JSON Schema so that other tools can produce it. A visual
-agent builder (PrompterJack's, for example) can export a team as `lucid-team.yaml`: map its agent
+agent builder can export a team as `lucid-team.yaml`: map its agent
 nodes onto the five roles, its model choices onto `provider` and `model`, its tool or connector
 grants onto `mcp_allow`, and its cost caps onto `budget_usd`, and leave every gate `human`.
 Validate the export against the schema, then drop it at `.lucid/team.yaml` in the repository or
