@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,11 @@ import (
 
 // connect is swapped in tests.
 var connect = Connect
+
+// EnsureCluster, when set, runs before a job is submitted through the API.
+// The daemon sets it to the power supervisor's EnsureCluster, which starts a
+// sleeping cluster and waits until it is ready. Nil does nothing.
+var EnsureCluster func(ctx context.Context) error
 
 // Handler serves GET /api/jobs (JSON list), GET /api/jobs/{name}/logs (plain
 // text) and POST /api/jobs/hello (submit the hello job). It answers 503 when
@@ -50,6 +56,12 @@ func Handler(w http.ResponseWriter, req *http.Request) {
 }
 
 func submitHello(w http.ResponseWriter, req *http.Request) {
+	if EnsureCluster != nil {
+		if err := EnsureCluster(req.Context()); err != nil {
+			unavailable(w, err)
+			return
+		}
+	}
 	r, err := connect()
 	if err != nil {
 		unavailable(w, err)

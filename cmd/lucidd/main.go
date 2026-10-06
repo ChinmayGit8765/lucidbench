@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
+	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
+	"github.com/ChinmayGit8765/lucidbench/internal/power"
 	"github.com/ChinmayGit8765/lucidbench/internal/runner"
 	"github.com/ChinmayGit8765/lucidbench/internal/server"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -36,9 +39,14 @@ func main() {
 		use.Summary(7)
 		log.Printf("usage: warmed the cache in %s", time.Since(start).Round(time.Millisecond))
 	}()
+	// On-demand infrastructure: a job wakes a sleeping cluster, and idle
+	// on-demand things are stopped on every check.
+	pwr := power.New(cfg, server.DataDir())
+	jobs.EnsureCluster = pwr.EnsureCluster
+	go pwr.Run(context.Background())
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.NewWith(cfg, server.Deps{Usage: use}),
+		Handler:           server.NewWith(cfg, server.Deps{Usage: use, Power: pwr}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	if cluster.InContainer() {

@@ -22,6 +22,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/k8s"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
+	"github.com/ChinmayGit8765/lucidbench/internal/power"
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
@@ -62,6 +63,9 @@ func New(cfgs ...*config.Config) http.Handler {
 // at startup. A nil field is built by NewWith.
 type Deps struct {
 	Usage *usage.Service
+	// Power serves /api/power when set. NewWith never builds one: the daemon
+	// does and runs it, so a handler built in a test starts nothing.
+	Power *power.Supervisor
 }
 
 // DataDir is where prefs, themes, usage, council and work records live.
@@ -86,10 +90,17 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	ci.Register(mux, ci.New(cfg.CI))
 	runners := ci.Filter{ComposeProject: cfg.CI.Runners.ComposeProject, ImageMatch: cfg.CI.Runners.ImageMatch}
+	allowed := append([]string{"lucidbench"}, cfg.Docker.AllowedProjects...)
+	for _, s := range cfg.Power.Stacks {
+		allowed = append(allowed, s.Project)
+	}
 	docker.Register(mux, &docker.Service{Docker: docker.Exec, Policy: docker.Policy{
-		Projects: append([]string{"lucidbench"}, cfg.Docker.AllowedProjects...),
+		Projects: allowed,
 		IsRunner: runners.Matches,
 	}})
+	if d.Power != nil {
+		power.Register(mux, d.Power)
+	}
 	k8s.Register(mux, &k8s.Service{Connect: k8s.Clientset})
 	mux.Handle("/api/projects", projects.Handler())
 	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
