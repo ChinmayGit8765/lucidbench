@@ -1,0 +1,68 @@
+id: web-app
+name: Web app (product)
+blurb: A product people use in the browser, with accounts or data behind it.
+order: 2
+types: [web-app]
+questions:
+  - id: users
+    text: Who uses it today?
+    type: choice
+    options: [nobody-yet, me-and-friends, paying-customers]
+  - id: accounts
+    text: Do people sign in?
+    type: bool
+  - id: payments
+    text: Does it take payments?
+    type: bool
+  - id: data
+    text: Does it store personal data?
+    type: bool
+  - id: tests
+    text: What automated tests exist?
+    type: choice
+    options: [none, some, thorough]
+  - id: deploy
+    text: How does it get deployed?
+    type: choice
+    options: [by-hand, ci-pipeline, not-deployed]
+  - id: stack
+    text: What is it built with?
+    type: text
+rules:
+  - commands: [npm test]
+    criteria:
+      - "The build and the tests pass from a clean checkout — proof: the build and npm test output"
+  - when: {tests: none}
+    criteria:
+      - "The main user journey has an automated test — proof: the test name and a passing run"
+    risk:
+      level: medium
+      reason: No automated tests, so a change can break things unnoticed
+  - when: {accounts: "true"}
+    criteria:
+      - "Signing up, signing in and signing out work, and a signed-out visitor cannot see signed-in pages — proof: a test or a recorded run"
+    risk:
+      level: medium
+      reason: Sign-in is a security boundary
+  - when: {payments: "true"}
+    criteria:
+      - "A test-mode payment succeeds, fails and is refunded correctly — proof: the provider's test-mode dashboard and the app's records"
+    risk:
+      level: high
+      reason: Money is involved, and mistakes cost real people
+  - when: {data: "true"}
+    criteria:
+      - "Personal data can be exported and deleted — proof: a run of both with a test account"
+    risk:
+      level: high
+      reason: Personal data brings privacy duties and leak risk
+  - when: {users: paying-customers}
+    criteria:
+      - "A release can be rolled back — proof: a rollback rehearsed on a staging copy"
+    risk:
+      level: high
+      reason: Paying customers notice every outage
+  - when: {deploy: by-hand}
+    risk:
+      level: medium
+      reason: A hand deploy is easy to get wrong and hard to repeat

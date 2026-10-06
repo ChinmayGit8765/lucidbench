@@ -18,6 +18,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/assess"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 )
 
@@ -65,6 +66,10 @@ type Project struct {
 	Needs      []Need   `json:"needs" yaml:"needs"`
 	// Work tunes Work sessions on this project; omitted means the defaults.
 	Work *WorkConfig `json:"work,omitempty" yaml:"work"`
+	// Assessment is the project's confirmed answers to its kind's questions.
+	// It may be written in projects.yaml, or confirmed in the app, which keeps
+	// it beside projects.yaml (see assessment.go); the app's copy wins.
+	Assessment *assess.Assessment `json:"assessment,omitempty" yaml:"assessment"`
 
 	// Derived: projects that list this one in builds_into, projects whose
 	// needs name this one in from, and how many of this project's needs are
@@ -72,6 +77,10 @@ type Project struct {
 	BuiltBy  []string `json:"built_by" yaml:"-"`
 	NeededBy []string `json:"needed_by" yaml:"-"`
 	Progress Progress `json:"progress" yaml:"-"`
+	// Risk is the level the assessment computes, for the card chip.
+	Risk string `json:"risk,omitempty" yaml:"-"`
+	// AssessmentFrom is where the assessment came from: "projects.yaml" or "app".
+	AssessmentFrom string `json:"assessment_from,omitempty" yaml:"-"`
 }
 
 // WorkConfig is a project's optional `work:` block.
@@ -104,14 +113,19 @@ func Path() (string, error) {
 	return filepath.Join(d, FileName), nil
 }
 
-// Load reads the projects file from Path.
+// Load reads the projects file from Path and the assessments confirmed in
+// the app from AssessDir.
 func Load() (*List, error) {
 	p, err := Path()
 	if err != nil {
 		return nil, err
 	}
 	home, _ := os.UserHomeDir()
-	return LoadFrom(p, home), nil
+	l := LoadFrom(p, home)
+	if dir, err := AssessDir(); err == nil {
+		l.MergeAssessments(dir)
+	}
+	return l, nil
 }
 
 // HomeHint replaces a leading home directory in path with "~", so a path can
@@ -230,6 +244,15 @@ func Parse(data []byte) ([]Project, []string) {
 			if !slices.Contains(NeedStatuses, n.Status) {
 				bad(p.ID, fmt.Sprintf("needs[%d].status", j),
 					fmt.Sprintf("unknown value %q (want one of %s)", n.Status, strings.Join(NeedStatuses, ", ")))
+			}
+		}
+		if p.Assessment != nil {
+			if err := assess.Validate(*p.Assessment); err != nil {
+				bad(p.ID, "assessment", err.Error())
+				p.Assessment = nil
+			} else {
+				p.AssessmentFrom = "projects.yaml"
+				p.Risk = assess.Suggest(*p.Assessment).Risk.Level
 			}
 		}
 		p.BuiltBy, p.NeededBy = []string{}, []string{}

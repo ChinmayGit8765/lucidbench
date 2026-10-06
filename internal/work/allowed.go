@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/assess"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 )
 
@@ -97,12 +98,19 @@ func deniedCommand(c string) bool {
 }
 
 // projectAllowed is the default list for a project, honouring its work block.
+// The check commands its assessment suggests are added either way, so the
+// agent can run the checks the project was judged to need.
 func projectAllowed(p projects.Project) []string {
 	var cfg []string
 	if p.Work != nil {
 		cfg = p.Work.AllowedCommands
 	}
-	return DefaultAllowed(p.LocalPath, cfg)
+	out := DefaultAllowed(p.LocalPath, cfg)
+	if p.Assessment != nil {
+		out = append(out, assess.Suggest(*p.Assessment).CheckCommands...)
+		out, _ = CleanAllowed(out)
+	}
+	return out
 }
 
 // sessionAllowed picks the list a session runs with: the request's own when

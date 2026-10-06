@@ -1,0 +1,66 @@
+id: game
+name: Game
+blurb: Something people play, on a screen or a table.
+order: 1
+types: [game]
+questions:
+  - id: engine
+    text: Which engine or toolkit is it built with?
+    type: choice
+    options: [godot, unity, unreal, web, other]
+  - id: stage
+    text: How far along is it?
+    type: choice
+    options: [prototype, vertical-slice, content-complete, live]
+  - id: audience
+    text: Who will play it?
+    type: choice
+    options: [just-me, friends, public-release]
+  - id: multiplayer
+    text: Does it have multiplayer or online features?
+    type: bool
+  - id: saves
+    text: Does it save the player's progress?
+    type: bool
+  - id: platforms
+    text: Which platforms does it target?
+    type: text
+rules:
+  - criteria:
+      - "The game starts, reaches the main loop and quits cleanly — proof: a recorded run or screenshot of the main loop on the target platform"
+  - when: {engine: godot}
+    commands: [godot]
+    criteria:
+      - "The automated tests pass headless — proof: the Godot headless test command and its exit code"
+  - when: {engine: web}
+    commands: [npm test]
+    criteria:
+      - "The tests pass — proof: npm test output"
+  - when: {engine: [unity, unreal, other]}
+    criteria:
+      - "The engine's test command passes — proof: <engine test command> and its exit code (fill in the command for your engine)"
+  - when: {stage: [vertical-slice, content-complete, live]}
+    criteria:
+      - "One full play session from start to finish has no crash — proof: a playtest note with the build and date"
+  - when: {saves: "true"}
+    criteria:
+      - "Saving, quitting and loading restores the same state — proof: a test or a recorded before and after"
+    risk:
+      level: medium
+      reason: Save data written by one version must keep loading in the next
+  - when: {multiplayer: "true"}
+    criteria:
+      - "Two clients play one session without desync — proof: a two-client test run"
+    risk:
+      level: high
+      reason: Multiplayer adds networking, cheating and desync problems that are hard to reproduce
+  - when: {audience: public-release}
+    criteria:
+      - "A clean install runs on each target platform — proof: a checklist with one line per platform"
+    risk:
+      level: medium
+      reason: Strangers will play it, so crashes and missing assets are public
+  - when: {stage: prototype, audience: just-me}
+    risk:
+      level: low
+      reason: A private prototype is cheap to change or throw away

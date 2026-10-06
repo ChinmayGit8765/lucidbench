@@ -1,0 +1,70 @@
+id: cli-library
+name: CLI or library
+blurb: A command-line tool or a package other code depends on.
+order: 4
+types: [cli, library]
+questions:
+  - id: shape
+    text: Is it a command, a library, or both?
+    type: choice
+    options: [command, library, both]
+  - id: language
+    text: What is it written in?
+    type: choice
+    options: [go, node, python, rust, other]
+  - id: consumers
+    text: Who depends on it?
+    type: choice
+    options: [just-me, my-other-projects, the-public]
+  - id: stable-api
+    text: Do you promise to keep its interface stable?
+    type: bool
+  - id: published
+    text: Is it published to a package registry?
+    type: bool
+  - id: docs
+    text: Does it have usage documentation?
+    type: choice
+    options: [none, readme, full]
+rules:
+  - when: {language: go}
+    commands: [go test, go vet, gofmt]
+    criteria:
+      - "The tests, go vet and gofmt are clean — proof: go test, go vet and gofmt output"
+  - when: {language: node}
+    commands: [npm test]
+    criteria:
+      - "The tests pass — proof: npm test output"
+  - when: {language: python}
+    commands: [pytest]
+    criteria:
+      - "The tests pass — proof: pytest output"
+  - when: {language: rust}
+    commands: [cargo test, cargo clippy]
+    criteria:
+      - "The tests and clippy are clean — proof: cargo test and cargo clippy output"
+  - when: {language: other}
+    criteria:
+      - "The tests pass — proof: <the project's test command> and its exit code (fill in the command)"
+  - when: {shape: [command, both]}
+    criteria:
+      - "Every command has --help, and a wrong argument gives a clear message and a non-zero exit code — proof: a run of each"
+  - when: {stable-api: "true"}
+    criteria:
+      - "A change that breaks the public interface fails a check — proof: an API or golden-output test"
+    risk:
+      level: medium
+      reason: Other code depends on the interface, so a careless change breaks them
+  - when: {published: "true"}
+    criteria:
+      - "A release can be installed from the registry on a clean machine — proof: the install and a run of the example"
+    risk:
+      level: medium
+      reason: A published version cannot be taken back
+  - when: {consumers: the-public}
+    risk:
+      level: medium
+      reason: Strangers depend on it, so bugs and breaking changes have a wide reach
+  - when: {docs: none}
+    criteria:
+      - "The README shows install and one working example — proof: a fresh reader follows it without help"

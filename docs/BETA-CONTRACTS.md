@@ -229,5 +229,13 @@ func Approve(id string, project string) (*boards.Card, error)
 - "Review" counts the cards in the work board's Review column.
 - "PRs open" counts draft and open PRs only. Merged and closed PRs are not counted; a PR whose state is not yet known still is.
 
+**Project assessments**
+- `GET /api/assess/kinds` lists the kinds with their questions (`id`, `text`, `type` choice|text|bool, `options`).
+- `GET /api/projects/{id}/assessment` returns `{assessment, source, suggestion, suggested_kind, can_suggest}`; `assessment` is null until the project is assessed.
+- `PUT /api/projects/{id}/assessment` with `{kind, answers}` confirms it. Every choice and bool question must be answered; `assessed_at` is set by the daemon. It is saved in `<data dir>/assessments/<id>.yaml`; `projects.yaml` is never written.
+- `POST /api/projects/{id}/assessment/preview` computes the suggestion for answers without saving. `POST .../suggest` asks the user's CLI (no tools, file names only) to guess answers; confidential projects get 403 and nothing is saved.
+- `suggestion` is `{done_criteria, check_commands, risk{level, reasons}}`. `GET /api/projects` carries `assessment`, `risk` and `assessment_from` per project.
+- Council adds the done criteria to the propose prompt. Work adds the check commands to a project's default allowed commands, also when `work.allowed_commands` is set.
+
 **Power**
 - `GET /api/power`, `POST /api/power/{kind}/{name}/{start|stop}`, `POST /api/power/sleep` and `POST /api/docker/projects/{project}/{start|stop}`. See docs/CONFIG.md `power`.

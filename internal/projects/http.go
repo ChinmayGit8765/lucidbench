@@ -3,19 +3,17 @@ package projects
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 )
 
 // Handler serves GET /api/projects. The file is read on every request, so
 // edits show up without restarting the daemon.
 func Handler() http.Handler {
 	return HandlerFor(func() *List {
-		p, err := Path()
+		l, err := Load()
 		if err != nil {
 			return &List{Projects: []Project{}, Errors: []string{err.Error()}}
 		}
-		home, _ := os.UserHomeDir()
-		return LoadFrom(p, home)
+		return l
 	})
 }
 

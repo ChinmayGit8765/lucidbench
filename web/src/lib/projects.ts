@@ -50,6 +50,10 @@ export interface Project {
   built_by: string[]
   needed_by: string[]
   progress: { done: number; total: number }
+  /** Confirmed answers to the kind's questions; see lib/assess. */
+  assessment?: { kind: string; answers: Record<string, string>; assessed_at: string }
+  risk?: "low" | "medium" | "high"
+  assessment_from?: "app" | "projects.yaml"
 }
 
 export interface ProjectList {

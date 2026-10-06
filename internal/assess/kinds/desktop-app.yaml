@@ -1,0 +1,59 @@
+id: desktop-app
+name: Desktop app
+blurb: An app installed and run on someone's computer.
+order: 3
+types: [desktop-app]
+questions:
+  - id: toolkit
+    text: What is the shell built with?
+    type: choice
+    options: [tauri, electron, native, other]
+  - id: os
+    text: Which operating systems must it run on?
+    type: choice
+    options: [one, two, all-three]
+  - id: updates
+    text: Does it update itself?
+    type: bool
+  - id: local-data
+    text: Does it keep the user's data on their machine?
+    type: bool
+  - id: system-access
+    text: Does it run commands or touch files outside its own folder?
+    type: bool
+  - id: distribution
+    text: Who installs it?
+    type: choice
+    options: [just-me, a-few-people, public-download]
+rules:
+  - criteria:
+      - "The app installs, starts and quits cleanly on each target system — proof: a checklist with one line per system"
+  - when: {toolkit: [tauri, electron, other]}
+    commands: [npm test]
+    criteria:
+      - "The UI tests pass — proof: npm test output"
+  - when: {os: [two, all-three]}
+    risk:
+      level: medium
+      reason: Each extra operating system needs its own testing
+  - when: {updates: "true"}
+    criteria:
+      - "An update from the previous release keeps the user's data — proof: install the old build, update, compare the data"
+    risk:
+      level: medium
+      reason: A bad update reaches every user at once
+  - when: {local-data: "true"}
+    criteria:
+      - "Data from the previous version still loads — proof: a test with a saved sample from that version"
+  - when: {system-access: "true"}
+    criteria:
+      - "Anything destructive asks first and is limited to the folders the user chose — proof: a test that refuses a path outside them"
+    risk:
+      level: high
+      reason: It acts on the user's machine, so a bug can damage their files
+  - when: {distribution: public-download}
+    criteria:
+      - "The installer is signed and the download page lists its checksum — proof: the signature check output"
+    risk:
+      level: medium
+      reason: Strangers run the installer, so unsigned builds are blocked or distrusted

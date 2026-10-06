@@ -1,0 +1,54 @@
+id: video-media
+name: Video or media
+blurb: A system that makes, edits, streams or publishes video, audio or images.
+order: 8
+types: [video-system]
+questions:
+  - id: role
+    text: What does it do with media?
+    type: choice
+    options: [render-or-edit, encode-or-convert, stream-or-play, publish]
+  - id: input
+    text: Where does the source material come from?
+    type: choice
+    options: [my-own, licensed, user-uploads]
+  - id: size
+    text: How big is a typical job?
+    type: choice
+    options: [seconds-of-clip, minutes, hours-or-gigabytes]
+  - id: pipeline
+    text: Does it run unattended in a pipeline?
+    type: bool
+  - id: output
+    text: What must the output be?
+    type: text
+rules:
+  - criteria:
+      - "A sample input produces the expected output — proof: the output file and a frame, listening or play-through check"
+  - when: {role: [render-or-edit, encode-or-convert]}
+    criteria:
+      - "The same input and settings give the same output — proof: a comparison of two runs, such as by checksum or frame diff"
+  - when: {role: [stream-or-play, publish]}
+    criteria:
+      - "Playback works in each target player or platform — proof: a checklist with one line per target"
+  - when: {input: licensed}
+    criteria:
+      - "The licence for each source is recorded — proof: a list of sources and their terms"
+    risk:
+      level: medium
+      reason: Using material outside its licence can lead to takedowns
+  - when: {input: user-uploads}
+    criteria:
+      - "Uploads are size-limited and checked for type before processing — proof: a test with an oversized and a wrong-type file"
+    risk:
+      level: high
+      reason: Untrusted files go through complex decoders and can abuse them
+  - when: {size: hours-or-gigabytes}
+    criteria:
+      - "A long job can be resumed after a failure without starting over — proof: kill a run midway and resume it"
+    risk:
+      level: medium
+      reason: Large jobs are slow and costly to repeat
+  - when: {pipeline: "true"}
+    criteria:
+      - "A failed job is reported, not silently skipped — proof: feed it a corrupt file and read the report"

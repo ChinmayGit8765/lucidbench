@@ -18,6 +18,10 @@ The first beta: the core loop works end to end.
   logins. Its steps read like a conversation and the raw log is one click away. It can open a
   draft PR on request.
 - **Usage:** local token use and Codex rate-limit windows, plus what Lucidbench's own runs cost.
+- **Project assessments:** a few questions judge what kind of project something is (game, web app,
+  service, coursework and more). The answers suggest done criteria for Council briefs, check
+  commands for Work, and a risk level. Choose Assess on a project's card; your projects file is
+  never rewritten.
 - **On-demand infrastructure:** the local cluster starts when a job needs it and sleeps after it has been idle. Self-hosted runners can wake for queued CI runs and sleep when idle. A Power tile shows what is awake and offers "Sleep everything idle".
 - **Agent runs:** each run gets a clean, minimal config; refreshed logins are copied back safely.
   Runner containers can do the same on queued runs (opt in with `power.runners: on-demand`), and
