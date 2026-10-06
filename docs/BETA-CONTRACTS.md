@@ -210,3 +210,24 @@ func Approve(id string, project string) (*boards.Card, error)
 - Confirm before anything that writes outside Lucidbench's data dir, pushes or spends.
 - Confidential pages and projects never reach a provider.
 - Every agent run records its usage.
+
+## Additions after the beta review
+
+**Work**
+- `GET /api/work/defaults?project=` returns the default allowed commands for a project. These are detected from its stack (go.mod, package.json, Cargo.toml), plus read-only git and `git add`/`commit`/`restore`. `git push`, `git remote`, `rm`, `sudo`, `curl`, `wget`, `gh` and shells are never allowed.
+- `projects.yaml` `work.allowed_commands` replaces the stack part for one project. `StartRequest.allowed_commands` replaces the whole list for one session. A refused entry is a 400.
+- `GET /api/work/sessions` returns summaries without prompt, answer or patches. `GET /api/work/sessions/{id}` returns everything.
+- New session fields: `allowed_commands`, `pr_state` (draft|open|merged|closed), `pr_checks` (passing/failing/pending), `pr_checked` and `card_done`.
+  - The PR state is read with `gh pr view`, at most once a minute per session.
+  - The first time a PR is seen merged, its card moves to Done.
+
+**Council**
+- Approving returns 409 while the latest round still has a blocker, unless the body carries `approved_with_blockers: true`. That flag is recorded on the session.
+- The automatic loop is capped at 2 rounds. Ask again adds rounds beyond the cap.
+
+**Overview**
+- "Review" counts the cards in the work board's Review column.
+- "PRs open" counts draft and open PRs only. Merged and closed PRs are not counted; a PR whose state is not yet known still is.
+
+**Power**
+- `GET /api/power`, `POST /api/power/{kind}/{name}/{start|stop}`, `POST /api/power/sleep` and `POST /api/docker/projects/{project}/{start|stop}`. See docs/CONFIG.md `power`.
