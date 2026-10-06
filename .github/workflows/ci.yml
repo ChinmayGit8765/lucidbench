@@ -34,6 +34,42 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # The UI end to end in headless Chromium, against a lucidd with a temporary
+  # data dir and fake claude, codex, grok, gh and docker on its PATH.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+      - name: Build the web UI
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Install Playwright Chromium
+        working-directory: e2e
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Run the suite
+        working-directory: e2e
+        run: npm run e2e
+      - name: Upload traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+          retention-days: 7
+
   docker:
     runs-on: ubuntu-latest
     steps:
