@@ -31,6 +31,7 @@ interface WorkView {
   started: string
   ended?: string
   events: number
+  turns: number
   files: number
   added: number
   deleted: number
@@ -237,7 +238,7 @@ function pairScreen(code: string) {
   go.addEventListener("click", () =>
     sheet({
       title: "Pair this phone?",
-      body: "It will see what needs you, follow running agents, stop them and approve briefs. You can revoke it any time in Settings › Phone remote.",
+      body: "It will see what needs you, follow running agents, stop them, send them follow-ups and approve briefs. You can revoke it any time in Settings › Phone remote.",
       confirm: "Pair",
       run: async () => {
         const out = await api<{ token: string }>("/pair", { method: "POST", write: true, body: JSON.stringify({ code, name: name.value }) })
@@ -256,11 +257,16 @@ function attentionRow(a: Attention): HTMLElement {
   return href ? h("a", { class: "item", href, "data-testid": "attention-item" }, ...body) : h("div", { class: "item", "data-testid": "attention-item" }, ...body)
 }
 
+/** A session's status in words; a waiting session waits for you. */
+function statusLabel(status: string): string {
+  return status === "waiting" ? "waiting for you" : status
+}
+
 function sessionRow(s: WorkView): HTMLElement {
   return h(
     "a",
     { class: "item", href: `#/session/${s.id}`, "data-testid": "session-row" },
-    h("span", { class: `status ${s.status}` }, s.status),
+    h("span", { class: `status ${s.status}` }, statusLabel(s.status)),
     h(
       "div",
       { class: "grow" },
@@ -288,6 +294,12 @@ async function home() {
     pollTimer = window.setTimeout(load, POLL_MS)
   }
   await load()
+}
+
+/** " · 2 waiting", or "" when no session waits for you. */
+function waitingCount(sessions: WorkView[]): string {
+  const n = sessions.filter((s) => s.status === "waiting").length
+  return n ? ` · ${n} waiting` : ""
 }
 
 function renderHome(ov: Overview, sessions: WorkView[]): Node[] {
@@ -319,7 +331,7 @@ function renderHome(ov: Overview, sessions: WorkView[]): Node[] {
     h(
       "section",
       { class: "card", "aria-label": "Work sessions" },
-      h("h2", {}, `Work · ${ov.running.length} running`),
+      h("h2", {}, `Work · ${ov.running.length} running${waitingCount(sessions)}`),
       sessions.length ? h("div", { class: "list" }, ...sessions.slice(0, 20).map(sessionRow)) : h("p", { class: "muted" }, "No sessions yet."),
     ),
   )
@@ -346,7 +358,9 @@ function bar(pct: number): HTMLElement {
 }
 
 function eventNode(ev: EventView): HTMLElement {
-  return h("div", { class: `ev ${ev.kind}` }, h("div", { class: "ev-kind" }, ev.title ? `${ev.kind} · ${ev.title}` : ev.kind), ev.body ? h("div", { class: "ev-body" }, ev.body) : null)
+  // A follow-up opens with its own line: "Turn 2 · resumed with …" and what you asked.
+  const head = ev.kind === "turn" ? ev.title || "Next turn" : ev.title ? `${ev.kind} · ${ev.title}` : ev.kind
+  return h("div", { class: `ev ${ev.kind}`, "data-testid": ev.kind === "turn" ? "turn" : false }, h("div", { class: "ev-kind" }, head), ev.body ? h("div", { class: "ev-body" }, ev.body) : null)
 }
 
 /** Reads server-sent events from a fetch body, so the Bearer header can be sent (EventSource cannot). */
@@ -397,32 +411,42 @@ async function sessionScreen(id: string) {
   const note = h("p", { class: "muted small" })
   mount(header("Session", true), h("section", { class: "card" }, h("div", { class: "row between" }, title, status), meta, actions, note), h("section", { class: "card" }, h("h2", {}, "Live tail"), log))
 
-  let follow = false
-  try {
-    follow = (await api<Overview>("/overview")).follow_up
-  } catch {
-    /* the tail still works */
-  }
   const show = (s: WorkView) => {
     title.textContent = s.title
     title.className = s.confidential ? "redacted" : ""
-    status.textContent = s.status
+    status.textContent = statusLabel(s.status)
     status.className = `status ${s.status}`
-    meta.textContent = `${s.provider} · ${s.project} · started ${ago(s.started)}${s.files ? ` · ${s.files} files +${s.added} −${s.deleted}` : ""}${s.pr_state ? ` · PR ${s.pr_state}` : ""}`
+    meta.textContent = `${s.provider} · ${s.project}${s.turns > 1 ? ` · turn ${s.turns}` : ""} · started ${ago(s.started)}${s.files ? ` · ${s.files} files +${s.added} −${s.deleted}` : ""}${s.pr_state ? ` · PR ${s.pr_state}` : ""}`
     actions.replaceChildren()
     if (s.status === "running")
       actions.append(
         h("button", { class: "btn danger", type: "button", "data-testid": "stop", onclick: () =>
           sheet({
-            title: "Stop this agent?",
-            body: "The CLI and everything it started are ended at once. The worktree and what it committed stay.",
+            title: "Stop this turn?",
+            body: "The CLI and everything it started are ended at once. The worktree and what it committed stay, and the agent waits for your next message.",
             confirm: "Stop agent",
             danger: true,
             run: async () => show(await api<WorkView>(`/work/sessions/${encodeURIComponent(id)}/stop`, { method: "POST", write: true })),
           }),
         }, "Stop"),
       )
-    note.textContent = s.status !== "running" && !follow ? "Follow-up prompts are not available yet: a session runs once. Start a new one on the desktop." : ""
+    if (s.status === "waiting" && !s.confidential)
+      actions.append(
+        h("button", { class: "btn primary", type: "button", "data-testid": "follow-up", onclick: () =>
+          sheet({
+            title: "Send a follow-up",
+            body: "The agent carries on in the same worktree, with what it did so far.",
+            confirm: "Send",
+            input: { label: "Follow-up", placeholder: "What should the agent do next?" },
+            run: async (text) => {
+              if (!text.trim()) throw new Error("Write a follow-up first.")
+              show(await api<WorkView>(`/work/sessions/${encodeURIComponent(id)}/followup`, { method: "POST", write: true, body: JSON.stringify({ prompt: text }) }))
+            },
+          }),
+        }, "Send follow-up"),
+      )
+    note.className = s.status === "waiting" ? "muted small waiting-note" : "muted small"
+    note.textContent = s.status === "waiting" ? "The agent finished its turn and is waiting for you. End the session or open a PR on the desktop." : ""
   }
   const ctl = new AbortController()
   streamAbort = ctl

@@ -361,6 +361,19 @@ func (s *Service) Remove(id string, discard bool) (Session, error) {
 	} else {
 		_, _ = git(se.RepoPath, "worktree", "prune")
 	}
-	s.update(e, func(x *Session) { x.Removed = true })
+	// Without its worktree a waiting session cannot take a follow-up: it ends.
+	e.mu.Lock()
+	e.s.Removed = true
+	var release func()
+	if e.s.Status == StatusWaiting {
+		e.s.Status = StatusDone
+		release = e.takeRelease()
+	}
+	_ = s.save(&e.s)
+	e.notify()
+	e.mu.Unlock()
+	if release != nil {
+		release()
+	}
 	return s.Get(id)
 }

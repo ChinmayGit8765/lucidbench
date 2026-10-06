@@ -1,9 +1,11 @@
 // Package work runs a coding agent on a task in its own git worktree. A
-// session is one run: Lucidbench makes a worktree on a new branch next to the
-// project's checkout, runs the provider's CLI there with the user's own
-// account, streams what the agent does, and shows the diff when it is done.
-// Pushing the branch and opening a draft PR happen only when the user asks;
-// merging is always the user's click on GitHub.
+// session is a conversation of turns: Lucidbench makes a worktree on a new
+// branch next to the project's checkout, runs the provider's CLI there with
+// the user's own account, streams what the agent does, and shows the diff.
+// When a turn ends the session waits for the user's follow-up, which runs a
+// new turn in the same worktree, until the user ends it. Pushing the branch
+// and opening a draft PR happen only when the user asks; merging is always
+// the user's click on GitHub.
 //
 // Each session lives in <DataDir>/work/sessions/<id>/: session.json (the
 // record), events.jsonl (normalised events) and raw.log (the CLI's own JSON
@@ -33,9 +35,13 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
 )
 
-// Session statuses.
+// Session statuses. A session runs a turn (running), then waits for the
+// user's follow-up (waiting) until the user ends it (done). A first turn that
+// fails ends the session as failed. Stopped is only found on sessions made
+// before follow-ups: Stop now ends the turn, not the session.
 const (
 	StatusRunning = "running"
+	StatusWaiting = "waiting"
 	StatusDone    = "done"
 	StatusFailed  = "failed"
 	StatusStopped = "stopped"
@@ -123,15 +129,22 @@ type Session struct {
 	Prompt       string `json:"prompt"`
 	// Card is the board card the session works on ("" for a free prompt),
 	// Brief the vault page it was given.
-	Card    string           `json:"card,omitempty"`
-	Board   string           `json:"board,omitempty"`
-	Brief   string           `json:"brief,omitempty"`
-	Status  string           `json:"status"`
-	Error   string           `json:"error,omitempty"`
-	Started time.Time        `json:"started"`
-	Ended   *time.Time       `json:"ended,omitempty"`
-	Usage   *agentexec.Usage `json:"usage,omitempty"`
-	Answer  string           `json:"answer,omitempty"`
+	Card    string    `json:"card,omitempty"`
+	Board   string    `json:"board,omitempty"`
+	Brief   string    `json:"brief,omitempty"`
+	Status  string    `json:"status"`
+	Error   string    `json:"error,omitempty"`
+	Started time.Time `json:"started"`
+	// Ended is when the last turn ended; nil while a turn runs.
+	Ended *time.Time `json:"ended,omitempty"`
+	// Usage is the total of every turn; Answer the last turn's final message.
+	Usage  *agentexec.Usage `json:"usage,omitempty"`
+	Answer string           `json:"answer,omitempty"`
+	// Turns are the runs of the CLI, the first one and each follow-up.
+	Turns []Turn `json:"turns,omitempty"`
+	// ResumeID is the CLI's own session id, which a follow-up resumes; ""
+	// when the CLI did not tell it, and a follow-up starts afresh instead.
+	ResumeID string `json:"resume_id,omitempty"`
 	// AllowedCommands are the shell commands the agent may run without asking.
 	AllowedCommands []string `json:"allowed_commands,omitempty"`
 	// Browser says the agent browser was attached to this session.
@@ -187,8 +200,13 @@ type Service struct {
 	PRView func(dir, url string) (PRInfo, error)
 	// Browser starts the agent browser for a session that asks for one and
 	// returns its DevTools address and a release func, called when the
-	// session ends. nil means the extension is not available.
+	// session ends or has waited HoldIdle. nil means the extension is not
+	// available.
 	Browser func(ctx context.Context, session string) (cdp string, release func(), err error)
+	// HoldIdle is how long a waiting session keeps the agent browser held
+	// before letting go of it; 0 means DefaultHoldIdle. A follow-up after
+	// that attaches the browser again.
+	HoldIdle time.Duration
 	// Team returns a project's builder (see internal/team), or nil when the
 	// project has no team of its own; nil means no teams.
 	Team func(project string) (*Builder, error)
@@ -207,10 +225,11 @@ type entry struct {
 	cancel   context.CancelFunc
 	stopping bool
 	polling  bool          // a PR state refresh is in flight
-	done     chan struct{} // closed when the run has ended; nil when not running here
+	done     chan struct{} // closed when the turn has ended; nil when no turn ran here
 	eventsF  *os.File
 	rawF     *os.File
-	release  func() // lets go of the agent browser when the run ends
+	release  func() // lets go of the agent browser; nil when not held
+	holdGen  int    // bumped whenever a pending hold release is cancelled
 }
 
 // New returns a Service keeping its sessions in dir.
@@ -224,8 +243,10 @@ func New(dir string, runner *agentexec.Runner, vault memory.Opener, list func() 
 
 func (s *Service) hint(p string) string { return projects.HomeHint(p, s.Home) }
 
-// load reads the saved sessions once. A session that was running when the
-// daemon stopped is marked failed.
+// load reads the saved sessions once. A session whose turn was running when
+// the daemon stopped waits for the user again, its turn marked interrupted:
+// the CLI's process tree ended with the daemon (see agentexec), and the
+// worktree keeps whatever it had done.
 func (s *Service) load() {
 	if s.loaded {
 		return
@@ -246,10 +267,9 @@ func (s *Service) load() {
 			continue
 		}
 		e := &entry{s: se, changed: make(chan struct{})}
+		legacyTurn(&e.s)
 		if se.Status == StatusRunning {
-			now := time.Now().UTC()
-			e.s.Status, e.s.Error, e.s.Ended = StatusFailed, "Lucidbench stopped while this session was running", &now
-			_ = s.save(&e.s)
+			s.interrupted(e)
 		}
 		s.sessions[se.ID] = e
 	}
@@ -688,15 +708,17 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	if t.team != nil {
 		se.Team = t.team.Source
 	}
+	se.Turns = []Turn{{N: 1, Mode: TurnFirst, Status: StatusRunning, Started: se.Started}}
 	e := &entry{s: se, changed: make(chan struct{}), events: []agentexec.Event{}, done: make(chan struct{}), release: release}
+	// Load the saved sessions first: a first load after this save would take
+	// the new session for one a restart interrupted.
+	s.mu.Lock()
+	s.load()
+	s.mu.Unlock()
 	if err := s.save(&e.s); err != nil {
 		return Session{}, err
 	}
-	if e.eventsF, err = os.OpenFile(filepath.Join(s.dir(id), "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err != nil {
-		return Session{}, err
-	}
-	if e.rawF, err = os.OpenFile(filepath.Join(s.dir(id), "raw.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err != nil {
-		e.eventsF.Close()
+	if err := s.openLogs(e); err != nil {
 		return Session{}, err
 	}
 	s.mu.Lock()
@@ -709,19 +731,48 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
+	areq := s.turnRequest(e, &se, se.Prompt, cdp)
+	started = true
+	go s.run(ctx, e, areq, e.done)
+	return se, nil
+}
+
+// openLogs opens events.jsonl and raw.log for a turn to append to.
+func (s *Service) openLogs(e *entry) error {
+	id := e.s.ID
+	var err error
+	if e.eventsF, err = os.OpenFile(filepath.Join(s.dir(id), "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err != nil {
+		return err
+	}
+	if e.rawF, err = os.OpenFile(filepath.Join(s.dir(id), "raw.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err != nil {
+		e.eventsF.Close()
+		e.eventsF = nil
+		return err
+	}
+	return nil
+}
+
+// turnRequest is the CLI run for one turn of se: the same provider, harness,
+// model, allowed commands and worktree every turn, with the given prompt.
+func (s *Service) turnRequest(e *entry, se *Session, prompt, cdp string) agentexec.Request {
 	areq := agentexec.Request{
-		Provider: req.Provider, Profile: req.Profile, Prompt: se.Prompt, Dir: wt.path,
-		Tools: agentexec.ToolsEdit, Model: req.Model, Harness: req.Harness,
-		Allow: allowed, Deny: denyRules(),
-		Env:     agentTempEnv(wt.path),
+		Provider: se.Provider, Profile: se.Profile, Prompt: prompt, Dir: se.Worktree,
+		Tools: agentexec.ToolsEdit, Model: se.Model, Harness: se.Harness,
+		Allow: se.AllowedCommands, Deny: denyRules(),
+		Env:     agentTempEnv(se.Worktree),
 		OnEvent: func(ev agentexec.Event) { s.record(e, ev) },
+		// Kept as soon as the CLI says it, so a turn cut short by a restart
+		// can still be resumed.
+		OnSession: func(sid string) { s.update(e, func(x *Session) { x.ResumeID = sid }) },
+	}
+	if se.Provider == "grok" {
+		// Grok takes the id of a new session from the caller.
+		areq.NewSession = newUUID()
 	}
 	if cdp != "" {
 		areq.Env = append(areq.Env, BrowserEnv+"="+cdp)
 	}
-	started = true
-	go s.run(ctx, e, areq)
-	return se, nil
+	return areq
 }
 
 // BrowserEnv is the environment variable that holds the attached agent
@@ -776,13 +827,28 @@ func excludes(body, name string) bool {
 func (s *Service) record(e *entry, ev agentexec.Event) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	s.recordLocked(e, ev)
+}
+
+// recordLocked is record for a caller that holds e.mu.
+func (s *Service) recordLocked(e *entry, ev agentexec.Event) {
+	if ev.Time.IsZero() {
+		ev.Time = time.Now().UTC()
+	}
+	if e.events == nil {
+		e.events = readEvents(filepath.Join(s.dir(e.s.ID), "events.jsonl"))
+	}
 	if len(ev.Raw) > 0 && e.rawF != nil {
 		_, _ = e.rawF.Write(append(append([]byte(nil), ev.Raw...), '\n'))
 	}
 	ev.Raw = nil
-	if e.eventsF != nil {
-		if line, err := json.Marshal(ev); err == nil {
+	if line, err := json.Marshal(ev); err == nil {
+		if e.eventsF != nil {
 			_, _ = e.eventsF.Write(append(line, '\n'))
+		} else if f, err := os.OpenFile(filepath.Join(s.dir(e.s.ID), "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			// A note between turns, when no turn has the file open.
+			_, _ = f.Write(append(line, '\n'))
+			f.Close()
 		}
 	}
 	e.events = append(e.events, ev)
@@ -790,12 +856,12 @@ func (s *Service) record(e *entry, ev agentexec.Event) {
 	e.notify()
 }
 
-// run runs the agent and settles the session.
-func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
-	defer close(e.done)
-	if e.release != nil {
-		defer e.release()
-	}
+// run runs one turn of the agent and settles it. A turn that ends cleanly,
+// or that the user stopped, leaves the session waiting for a follow-up; a
+// first turn that fails ends the session as failed. done is the turn's own
+// channel, closed when it has settled.
+func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request, done chan struct{}) {
+	defer close(done)
 	res, err := s.Runner.Run(ctx, req)
 	_ = os.RemoveAll(filepath.Join(req.Dir, tmpDirName))
 	diff, derr := summarise(req.Dir, e.s.BaseSHA)
@@ -804,29 +870,48 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	now := time.Now().UTC()
 	se := &e.s
 	se.Ended = &now
-	// A run that ended cleanly is done, even when Stop came in while the
+	t := &se.Turns[len(se.Turns)-1]
+	t.Ended = &now
+	// A turn that ended cleanly is done, even when Stop came in while the
 	// diff was being read.
 	switch {
 	case err == nil:
-		se.Status = StatusDone
+		t.Status = StatusDone
 	case e.stopping:
-		se.Status = StatusStopped
+		t.Status = StatusStopped
 	default:
-		se.Status, se.Error = StatusFailed, err.Error()
+		t.Status, t.Error = StatusFailed, err.Error()
 	}
 	if res != nil {
 		u := res.Usage
-		if se.Status == StatusStopped {
+		if t.Status == StatusStopped {
 			u.Note = "stopped before the CLI reported its final cost"
 		}
-		se.Usage, se.Answer = &u, res.Text
+		t.Usage, t.Answer = &u, res.Text
+		if res.SessionID != "" && t.Status != StatusFailed {
+			se.ResumeID = res.SessionID
+		}
+	}
+	if t.Status == StatusFailed && t.Mode == TurnResume {
+		// The CLI could not resume: the next follow-up starts afresh with a
+		// summary instead of failing the same way.
+		se.ResumeID = ""
+	}
+	se.Usage = totalUsage(se.Turns)
+	if t.Answer != "" {
+		se.Answer = t.Answer
+	}
+	if t.Status == StatusFailed && t.N == 1 {
+		se.Status, se.Error = StatusFailed, t.Error
+	} else {
+		se.Status, se.Error = StatusWaiting, ""
 	}
 	if derr == nil {
 		se.Diff = diff
 	}
 	if e.rawF != nil {
 		if err != nil {
-			fmt.Fprintf(e.rawF, "# lucidbench: the run ended: %v\n", err)
+			fmt.Fprintf(e.rawF, "# lucidbench: turn %d ended: %v\n", t.N, err)
 		}
 		e.rawF.Close()
 		e.rawF = nil
@@ -835,12 +920,26 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 		e.eventsF.Close()
 		e.eventsF = nil
 	}
+	if t.Status == StatusStopped {
+		s.recordLocked(e, agentexec.Event{Kind: agentexec.KindNote, Title: "stopped", Body: fmt.Sprintf("You stopped turn %d. The agent waits for your next message.", t.N)})
+	}
+	var release func()
+	if se.Status == StatusWaiting {
+		s.holdLocked(e)
+	} else {
+		release = e.takeRelease()
+	}
 	_ = s.save(se)
-	board, card, status, id := se.Board, se.Card, se.Status, se.ID
+	// The card goes to Review once there is work to review; after a PR, the
+	// card links the PR and stays where the PR put it.
+	board, card, clean, id := se.Board, se.Card, t.Status == StatusDone && se.PR == "", se.ID
 	e.notify()
 	e.mu.Unlock()
+	if release != nil {
+		release()
+	}
 
-	if card != "" && status == StatusDone {
+	if card != "" && clean {
 		s.moveCard(board, card, ColumnReview, id, false)
 	}
 }
@@ -891,7 +990,8 @@ func (s *Service) AddEvent(id string, ev agentexec.Event) error {
 	return nil
 }
 
-// Stop cancels a running session.
+// Stop ends the running turn: the CLI's whole process tree is killed and the
+// session waits for the user again, with a stopped turn. End is separate.
 func (s *Service) Stop(id string) (Session, error) {
 	e, err := s.get(id)
 	if err != nil {
@@ -914,7 +1014,7 @@ func (s *Service) Stop(id string) (Session, error) {
 	return s.Get(id)
 }
 
-// Wait blocks until a session started here has ended, or ctx is done.
+// Wait blocks until the turn started here last has settled, or ctx is done.
 func (s *Service) Wait(ctx context.Context, id string) (Session, error) {
 	e, err := s.get(id)
 	if err != nil {
@@ -934,7 +1034,8 @@ func (s *Service) Wait(ctx context.Context, id string) (Session, error) {
 }
 
 // Events returns the events from index from on, whether the session is still
-// running, and a channel closed on the next change.
+// open (a turn runs, or it waits for a follow-up, so more events may come),
+// and a channel closed on the next change.
 func (s *Service) Events(id string, from int) ([]agentexec.Event, bool, <-chan struct{}, error) {
 	e, err := s.get(id)
 	if err != nil {
@@ -952,7 +1053,7 @@ func (s *Service) Events(id string, from int) ([]agentexec.Event, bool, <-chan s
 	if from < len(e.events) {
 		out = append(out, e.events[from:]...)
 	}
-	return out, e.s.Status == StatusRunning, e.changed, nil
+	return out, e.s.Status == StatusRunning || e.s.Status == StatusWaiting, e.changed, nil
 }
 
 func readEvents(path string) []agentexec.Event {
@@ -982,8 +1083,8 @@ func (s *Service) RawLog(id string) ([]byte, error) {
 	return data, err
 }
 
-// settled returns a session that is not running, for the actions that need
-// the agent to be finished.
+// settled returns a session that is not running a turn, for the actions that
+// need the agent to be idle: a waiting session qualifies.
 func (s *Service) settled(id string) (*entry, Session, error) {
 	e, err := s.get(id)
 	if err != nil {

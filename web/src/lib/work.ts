@@ -3,7 +3,8 @@ import type { Project } from "@/lib/projects"
 
 /* Mirrors internal/work and internal/agentexec: keep these in step with the Go structs. */
 
-export type WorkStatus = "running" | "done" | "failed" | "stopped"
+/** A session runs a turn, then waits for your follow-up until you end it. "stopped" is only on sessions from before follow-ups. */
+export type WorkStatus = "running" | "waiting" | "done" | "failed" | "stopped"
 export type Harness = "mine" | "clean"
 export type WorkProvider = "claude" | "codex" | "grok"
 
@@ -51,9 +52,29 @@ export interface PRChecks {
   pending: number
 }
 
+/** How a turn reached the CLI: the first run, the CLI's own resume, or a fresh run with a summary. */
+export type TurnMode = "first" | "resume" | "summary"
+
+/** One run of the CLI in a session. */
+export interface WorkTurn {
+  n: number
+  /** Your follow-up; empty for the first turn, whose prompt is the session's. */
+  prompt?: string
+  mode: TurnMode
+  status: "running" | "done" | "failed" | "stopped" | "interrupted"
+  started: string
+  ended?: string
+  usage?: WorkUsage
+  answer?: string
+  error?: string
+  /** Index of the turn's first event. */
+  event: number
+}
+
 export interface WorkSession {
   id: string
   provider: WorkProvider
+  model?: string
   profile?: string
   harness: Harness
   project: string
@@ -73,8 +94,12 @@ export interface WorkSession {
   error?: string
   started: string
   ended?: string
+  /** The total of every turn. */
   usage?: WorkUsage
   answer?: string
+  turns?: WorkTurn[]
+  /** The CLI's own session id, which a follow-up resumes. */
+  resume_id?: string
   events: number
   diff?: Diff
   pr_url?: string
@@ -91,7 +116,8 @@ export interface WorkSession {
 
 export interface WorkEvent {
   time: string
-  kind: "text" | "tool" | "tool_result" | "diff" | "approval" | "error" | "done" | "image"
+  /** "turn" opens a follow-up and "note" is a line from Lucidbench itself; the CLIs emit the rest. */
+  kind: "text" | "tool" | "tool_result" | "diff" | "approval" | "error" | "done" | "image" | "turn" | "note"
   title?: string
   body?: string
 }
@@ -120,6 +146,10 @@ export const sessionPath = (id: string) => `${sessionsPath}/${encodeURIComponent
 
 export const startSession = (req: StartRequest) => sendJSON<WorkSession>(sessionsPath, "POST", req)
 export const stopSession = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/stop`, "POST")
+/** Runs a new turn of a waiting session in the same worktree. */
+export const followUp = (id: string, prompt: string) => sendJSON<WorkSession>(`${sessionPath(id)}/followup`, "POST", { prompt })
+/** Ends a waiting session: no more follow-ups. */
+export const endSession = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/end`, "POST")
 export const openPR = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/pr`, "POST")
 /** Asks gh for the PR's state now instead of waiting for the next minute. */
 export const refreshPR = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/pr/refresh`, "POST")
@@ -129,8 +159,9 @@ export const removeWorktree = (id: string, discard: boolean) =>
 /** The harness a provider starts with: your own for Claude, clean for the rest. */
 export const defaultHarness = (p: WorkProvider): Harness => (p === "claude" ? "mine" : "clean")
 
-export const STATUS_INFO: Record<WorkStatus, { label: string; tone: "info" | "success" | "danger" | "neutral" }> = {
+export const STATUS_INFO: Record<WorkStatus, { label: string; tone: "info" | "success" | "warning" | "danger" | "neutral" }> = {
   running: { label: "Running", tone: "info" },
+  waiting: { label: "Waiting for you", tone: "warning" },
   done: { label: "Done", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
   stopped: { label: "Stopped", tone: "neutral" },
@@ -178,9 +209,25 @@ export function formatElapsed(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`
 }
 
+/** How long the agent has worked: the turns added up, without the time it waited for you. */
 export function elapsedOf(s: WorkSession, now: number): number {
+  if (s.turns?.length) return s.turns.reduce((n, t) => n + turnElapsed(t, now), 0)
   const end = s.ended ? Date.parse(s.ended) : now
   return end - Date.parse(s.started)
+}
+
+export function turnElapsed(t: WorkTurn, now: number): number {
+  return (t.ended ? Date.parse(t.ended) : t.status === "running" ? now : Date.parse(t.started)) - Date.parse(t.started)
+}
+
+/** Sessions that wait for your follow-up. */
+export const isWaiting = (s: WorkSession) => s.status === "waiting" && !s.removed
+
+/** "resumed with claude --resume" or "fresh run with a summary", for a turn's chip. */
+export function turnModeLabel(mode: TurnMode, provider: string): string {
+  if (mode === "summary") return "fresh run with a summary of the earlier turns"
+  if (mode === "resume") return provider === "codex" ? "resumed with codex exec resume" : `resumed with ${provider} --resume`
+  return "first run"
 }
 
 /** Replaces a home folder at the start of a path with "~". */
@@ -223,8 +270,10 @@ export type Step =
   | { type: "message"; key: string; text: string; time: string }
   | { type: "tools"; key: string; kind: ToolKind; items: ToolItem[] }
   | { type: "error"; key: string; title?: string; text: string; time: string }
-  | { type: "done"; key: string; ok: boolean; time: string }
+  | { type: "done"; key: string; ok: boolean; time: string; index: number }
   | { type: "image"; key: string; title: string; src: string; time: string }
+  | { type: "turn"; key: string; n: number; title: string; prompt: string; time: string; index: number }
+  | { type: "note"; key: string; title: string; text: string; time: string }
 
 function kindOf(name: string): ToolKind {
   const n = name.toLowerCase()
@@ -351,7 +400,17 @@ export function buildSteps(events: WorkEvent[], worktree: string): Step[] {
         steps.push({ type: "error", key, title: e.title, text: e.body ?? "", time: e.time })
         break
       case "done":
-        steps.push({ type: "done", key, ok: e.title === "ok", time: e.time })
+        steps.push({ type: "done", key, ok: e.title === "ok", time: e.time, index: i })
+        break
+      case "turn": {
+        // "Turn 2 · resumed with claude --resume": a new turn starts, so no call is still open.
+        open.length = 0
+        const n = Number(/^Turn (\d+)/.exec(e.title ?? "")?.[1] ?? 0)
+        steps.push({ type: "turn", key, n, title: e.title ?? "", prompt: e.body ?? "", time: e.time, index: i })
+        break
+      }
+      case "note":
+        steps.push({ type: "note", key, title: e.title ?? "", text: e.body ?? "", time: e.time })
         break
       case "image":
         // Only the screenshots the daemon saved are shown.

@@ -9,6 +9,8 @@ import {
   FilePlus2,
   FileText,
   Globe,
+  Hourglass,
+  Info,
   ListTodo,
   OctagonX,
   Search,
@@ -23,14 +25,18 @@ import { ProviderTile, providerInfo } from "@/components/ProviderMark"
 import { cn } from "@/lib/utils"
 import {
   diffCounts,
+  elapsedOf,
   formatCost,
   formatElapsed,
   stepLabel,
   todosOf,
+  turnElapsed,
+  turnModeLabel,
   type Step,
   type ToolItem,
   type ToolKind,
   type WorkSession,
+  type WorkTurn,
 } from "@/lib/work"
 
 /* ---------- small renderers ---------- */
@@ -269,14 +275,46 @@ function Avatar({ provider }: { provider: string }) {
   return <ProviderTile provider={provider} size="sm" className="absolute left-0 top-0 z-[1]" />
 }
 
+function YouAvatar() {
+  return (
+    <span title="You" className="absolute left-0 top-0 z-[1] flex size-6 items-center justify-center rounded-md border border-brand/40 bg-brand-soft text-brand-fg">
+      <User className="size-3.5" />
+    </span>
+  )
+}
+
+/** The turn an event index belongs to: the last one that starts at or before it. */
+function turnAt(turns: WorkTurn[] | undefined, index: number): WorkTurn | undefined {
+  let found: WorkTurn | undefined
+  for (const t of turns ?? []) if (t.event <= index) found = t
+  return found
+}
+
+/** "after 12s · $0.04 · 70 output tokens" for a turn or a whole session. */
+function costLine(ms: number, usage?: { cost_usd?: number; output_tokens?: number }): string {
+  return `after ${formatElapsed(ms)}${usage?.cost_usd ? ` · ${formatCost(usage.cost_usd)}` : ""}${usage?.output_tokens ? ` · ${usage.output_tokens.toLocaleString()} output tokens` : ""}`
+}
+
+const TURN_END: Record<WorkTurn["status"], string> = {
+  running: "running",
+  done: "finished",
+  failed: "failed",
+  stopped: "stopped",
+  interrupted: "interrupted",
+}
+
 /**
  * The run as a conversation: your prompt, the agent's messages, and between
  * them compact rows for what it did.
  */
 export function Timeline({ session, steps, now }: { session: WorkSession; steps: Step[]; now: number }) {
   const running = session.status === "running"
+  const waiting = session.status === "waiting"
   const [showPrompt, setShowPrompt] = useState(false)
   const name = providerInfo(session.provider)?.label ?? session.provider
+  const turns = session.turns ?? []
+  const multi = turns.length > 1
+  const current = turns[turns.length - 1]
   // The task only: after the "# Task" heading, before Work's verify and report sections.
   const brief = (session.prompt.split(/\n# Task[^\n]*\n/)[1] ?? session.prompt).split(/\n## Verify\n/)[0]
   return (
@@ -284,9 +322,7 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
       <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />
 
       <li className="relative pb-3 pl-9">
-        <span title="You" className="absolute left-0 top-0 z-[1] flex size-6 items-center justify-center rounded-md border border-brand/40 bg-brand-soft text-brand-fg">
-          <User className="size-3.5" />
-        </span>
+        <YouAvatar />
         <div className="rounded-xl border bg-brand-soft/40 px-4 py-3">
           <div className="mb-1 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
             {session.card ? "Card brief" : "Prompt"}
@@ -330,8 +366,60 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
                 </div>
               </li>
             )
-          case "done":
-            return null
+          case "done": {
+            // With one turn the footer says it all; with several, each turn ends with its own line.
+            const t = multi ? turnAt(turns, s.index) : undefined
+            if (!t || t.status === "running") return null
+            return (
+              <li key={s.key} className="relative py-1 pl-9" data-testid="turn-end">
+                <span
+                  className={cn(
+                    "absolute left-[7px] top-1.5 z-[1] flex size-[22px] items-center justify-center rounded-full border bg-card",
+                    t.status === "done" ? "border-success/50 text-success" : t.status === "failed" ? "border-danger/50 text-danger" : "text-subtle-foreground",
+                  )}
+                >
+                  {t.status === "done" ? <CircleCheck className="size-3" /> : <CircleX className="size-3" />}
+                </span>
+                <div className="pt-1 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Turn {t.n} {TURN_END[t.status]}
+                  </span>{" "}
+                  {costLine(turnElapsed(t, now), t.usage)}
+                </div>
+              </li>
+            )
+          }
+          case "turn": {
+            const t = turns.find((x) => x.n === s.n)
+            return [
+              <li key={`${s.key}-sep`} className="relative z-[1] bg-background pb-2 pt-4" data-testid="turn-separator">
+                <div className="flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="text-foreground">Turn {s.n}</span>
+                  <span className="rounded-full border bg-card px-2 py-0.5 normal-case tracking-normal" title={s.title}>
+                    {t ? turnModeLabel(t.mode, session.provider) : s.title.replace(/^Turn \d+ · /, "")}
+                  </span>
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                </div>
+              </li>,
+              <li key={s.key} className="relative pb-3 pl-9">
+                <YouAvatar />
+                <div className="rounded-xl border bg-brand-soft/40 px-4 py-3">
+                  <div className="mb-1 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">Follow-up</div>
+                  <Prose text={s.prompt} />
+                </div>
+              </li>,
+            ]
+          }
+          case "note":
+            return (
+              <li key={s.key} className="relative py-1.5 pl-9">
+                <span className="absolute left-[7px] top-2.5 z-[1] flex size-[22px] items-center justify-center rounded-full border border-warning/50 bg-card text-warning">
+                  <Info className="size-3" />
+                </span>
+                <div className="rounded-lg border border-warning/30 bg-warning-soft/50 px-3 py-2 text-sm text-warning-fg">{s.text}</div>
+              </li>
+            )
           case "image":
             return (
               <li key={s.key} className="relative py-1.5 pl-9">
@@ -356,7 +444,21 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
                 <span key={i} className="size-1.5 animate-pulse rounded-full bg-brand" style={{ animationDelay: `${i * 180}ms` }} />
               ))}
             </span>
-            {name} is working · {formatElapsed(now - Date.parse(session.started))}
+            {name} is working{multi && current ? ` on turn ${current.n}` : ""} · {formatElapsed(current ? turnElapsed(current, now) : now - Date.parse(session.started))}
+          </div>
+        </li>
+      ) : waiting ? (
+        <li className="relative py-2 pl-9" data-testid="waiting-footer">
+          <span className="absolute left-[7px] top-2.5 z-[1] flex size-[22px] items-center justify-center rounded-full border border-warning/50 bg-card text-warning">
+            <Hourglass className="size-3" />
+          </span>
+          <div className="pt-1 text-sm">
+            <span className="font-medium">Waiting for you</span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {turns.length === 1 ? "1 turn" : `${turns.length} turns`}, {costLine(elapsedOf(session, now), session.usage).replace(/^after /, "")}
+              {multi ? " in total" : ""}
+            </span>
           </div>
         </li>
       ) : (
@@ -375,9 +477,8 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
             </span>
             <span className="text-muted-foreground">
               {" "}
-              after {formatElapsed((session.ended ? Date.parse(session.ended) : now) - Date.parse(session.started))}
-              {session.usage?.cost_usd ? ` · ${formatCost(session.usage.cost_usd)}` : ""}
-              {session.usage?.output_tokens ? ` · ${session.usage.output_tokens.toLocaleString()} output tokens` : ""}
+              {costLine(elapsedOf(session, now), session.usage)}
+              {multi ? ` over ${turns.length} turns` : ""}
             </span>
             {session.status === "failed" && session.error && <div className="mt-1 break-words text-xs text-danger-fg">{session.error}</div>}
           </div>

@@ -22,10 +22,12 @@ type streamParser interface {
 	// result fills usage and returns the answer, whether the run reported an
 	// error, and the error messages it printed.
 	result(u *Usage) (text string, isErr bool, errs []string)
+	// sessionID is the CLI's own session id, "" until it has said.
+	sessionID() string
 }
 
-func newStreamParser(provider string, emit func(Event)) streamParser {
-	b := base{emit: emit, names: map[string]string{}}
+func newStreamParser(provider string, emit func(Event), onSession func(string)) streamParser {
+	b := base{emit: emit, names: map[string]string{}, onSession: onSession}
 	switch provider {
 	case "claude":
 		return &claudeParser{base: b}
@@ -36,8 +38,23 @@ func newStreamParser(provider string, emit func(Event)) streamParser {
 }
 
 type base struct {
-	emit  func(Event)
-	names map[string]string // tool call id -> tool name
+	emit      func(Event)
+	names     map[string]string // tool call id -> tool name
+	session   string
+	onSession func(string)
+}
+
+func (b *base) sessionID() string { return b.session }
+
+// setSession keeps the CLI's session id and tells the caller the first time.
+func (b *base) setSession(id string) {
+	if id == "" || id == b.session || !sessionRE.MatchString(id) {
+		return
+	}
+	b.session = id
+	if b.onSession != nil {
+		b.onSession(id)
+	}
 }
 
 func (b *base) event(kind, title, body string, raw []byte) {
@@ -126,8 +143,10 @@ type partialUsage struct{ in, out, cacheRead, cacheWrite int64 }
 
 func (p *claudeParser) line(b []byte) {
 	var m struct {
-		Type    string `json:"type"`
-		Message struct {
+		Type string `json:"type"`
+		// Every line carries the session id, the init line first.
+		SessionID string `json:"session_id"`
+		Message   struct {
 			ID      string            `json:"id"`
 			Content []json.RawMessage `json:"content"`
 			Usage   *struct {
@@ -141,6 +160,7 @@ func (p *claudeParser) line(b []byte) {
 	if json.Unmarshal(b, &m) != nil {
 		return
 	}
+	p.setSession(m.SessionID)
 	switch m.Type {
 	case "assistant":
 		if u := m.Message.Usage; u != nil && m.Message.ID != "" {
@@ -309,10 +329,11 @@ type codexParser struct {
 
 func (p *codexParser) line(b []byte) {
 	var m struct {
-		Type    string          `json:"type"`
-		Item    json.RawMessage `json:"item"`
-		Message string          `json:"message"`
-		Error   struct {
+		Type     string          `json:"type"`
+		ThreadID string          `json:"thread_id"`
+		Item     json.RawMessage `json:"item"`
+		Message  string          `json:"message"`
+		Error    struct {
 			Message string `json:"message"`
 		} `json:"error"`
 		Usage struct {
@@ -326,6 +347,8 @@ func (p *codexParser) line(b []byte) {
 		return
 	}
 	switch m.Type {
+	case "thread.started":
+		p.setSession(m.ThreadID)
 	case "item.started", "item.completed":
 		p.item(m.Type == "item.completed", m.Item, b)
 	case "turn.completed":

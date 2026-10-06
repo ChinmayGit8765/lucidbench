@@ -3,7 +3,7 @@ import path from "node:path"
 
 import { expect, test } from "@playwright/test"
 
-import { git, shot, startDaemon, type Daemon } from "../harness"
+import { BASE, git, shot, startDaemon, type Daemon } from "../harness"
 
 let d: Daemon
 let code: string
@@ -88,7 +88,7 @@ test("first-run setup: accounts, a new vault, imported projects, a theme, power,
   await expect(page.getByTestId("setup-try")).toBeVisible()
   await page.screenshot({ path: shot("setup-6-try") })
   await page.getByTestId("setup-finish").click()
-  await expect(page).toHaveURL(/127\.0\.0\.1:7466\/$/)
+  await expect(page).toHaveURL(`${BASE}/`)
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
   await expect.poll(() => existsSync(path.join(d.data, "ui.json"))).toBe(true)
 

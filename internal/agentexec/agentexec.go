@@ -8,7 +8,8 @@
 //     empty temporary directory. One answer comes back in Result.Text.
 //   - ToolsEdit: the agent may edit files inside Request.Dir. The CLI streams
 //     JSON, which is normalised into Events (text, tool, tool_result, diff,
-//     error, done) as it arrives.
+//     error, done) as it arrives. The CLI keeps its session, so a later
+//     Request can continue it with Resume (Work's follow-up turns).
 package agentexec
 
 import (
@@ -57,6 +58,12 @@ const (
 	// KindImage is a picture the daemon saved for the session, such as a
 	// browser screenshot; Body is its API path. A CLI never emits it.
 	KindImage = "image"
+	// KindTurn opens a follow-up turn of a Work session: Title is "Turn N ·
+	// <how it continued>", Body the user's follow-up. A CLI never emits it.
+	KindTurn = "turn"
+	// KindNote is a line from Lucidbench itself, such as a turn that was
+	// stopped or cut short by a restart. A CLI never emits it.
+	KindNote = "note"
 )
 
 // Request is one run.
@@ -76,6 +83,17 @@ type Request struct {
 	Allow, Deny []string
 	Env         []string    // extra KEY=value pairs for the CLI, after the inherited environment
 	OnEvent     func(Event) // optional streaming callback (Work)
+	// Resume continues the CLI's own session with this id instead of
+	// starting a new one (ToolsEdit only): claude --resume, codex exec
+	// resume, grok --resume. The id is one a run reported (Result.SessionID).
+	Resume string
+	// NewSession names a new session for a CLI that lets the caller choose
+	// its id (grok --session-id), so it can be resumed by that id later. It
+	// must be a UUID; the other CLIs ignore it.
+	NewSession string
+	// OnSession is called when the CLI tells its session id, as soon as it
+	// is seen, so a caller keeps it even when the run is cut short.
+	OnSession func(id string)
 }
 
 // Usage is what one run cost, as far as the CLI reports it.
@@ -109,6 +127,10 @@ type Result struct {
 	Text   string  `json:"text"`
 	Usage  Usage   `json:"usage"`
 	Events []Event `json:"events"`
+	// SessionID is the CLI's own session id, for Request.Resume: claude's
+	// session_id, codex's thread_id, or Request.NewSession for grok. Empty
+	// when the CLI did not say.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // Errors returned by Run. Callers map each to a status.
@@ -148,6 +170,10 @@ func Run(ctx context.Context, r Request) (*Result, error) { return (&Runner{}).R
 
 var (
 	profileRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+	// sessionRE is a CLI session id: a UUID or a similar plain token that no
+	// CLI could read as a flag.
+	sessionRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+	uuidRE    = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	authRE    = regexp.MustCompile(`(?i)(not logged in|log ?in required|please (log|sign) ?in|/login|unauthori[sz]ed|authenticat|invalid api key|credentials)`)
 )
 
@@ -167,6 +193,15 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 	case "", HarnessMine, HarnessClean:
 	default:
 		return nil, fmt.Errorf("%w: harness must be mine or clean", ErrBadRequest)
+	}
+	if (r.Resume != "" || r.NewSession != "") && r.Tools != ToolsEdit {
+		return nil, fmt.Errorf("%w: only an editing run keeps a session to resume", ErrBadRequest)
+	}
+	if r.Resume != "" && !sessionRE.MatchString(r.Resume) {
+		return nil, fmt.Errorf("%w: invalid session id to resume", ErrBadRequest)
+	}
+	if r.NewSession != "" && !uuidRE.MatchString(r.NewSession) {
+		return nil, fmt.Errorf("%w: a new session id must be a UUID", ErrBadRequest)
 	}
 	if r.Tools == ToolsEdit {
 		if r.Dir == "" {
@@ -254,7 +289,7 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 	var sp streamParser
 	var lw *lineWriter
 	if a.stream {
-		sp = newStreamParser(r.Provider, emit)
+		sp = newStreamParser(r.Provider, emit, r.OnSession)
 		lw = &lineWriter{fn: sp.line}
 		cmd.Stdout = lw
 	} else {
@@ -305,7 +340,21 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 	}
 	usage.DurationMS = time.Since(start).Milliseconds()
 	res.Text, res.Usage = text, usage
+	switch {
+	case sp != nil && sp.sessionID() != "":
+		res.SessionID = sp.sessionID()
+	case r.Provider == "grok" && r.Tools == ToolsEdit && r.Resume != "":
+		res.SessionID = r.Resume
+	case r.Provider == "grok" && r.Tools == ToolsEdit:
+		res.SessionID = r.NewSession
+	}
 
+	if (runErr != nil || isErr) && ctx.Err() != nil {
+		// The caller ended the run on purpose (Work's Stop): no error to show,
+		// only that it stopped. Whatever usage streamed so far is kept.
+		emit(Event{Kind: KindDone, Title: "stopped"})
+		return res, fmt.Errorf("%s was stopped: %w", r.Provider, ctx.Err())
+	}
 	if runErr != nil || isErr {
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
@@ -381,6 +430,9 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 	case "claude":
 		in.argv = []string{"-p"}
 		in.stdin = r.Prompt
+		if r.Resume != "" {
+			in.argv = append(in.argv, "--resume", r.Resume)
+		}
 		if r.Tools == ToolsNone {
 			in.argv = append(in.argv, "--output-format", "json")
 		} else {
@@ -421,10 +473,19 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 				in.argv = append(in.argv, "--disallowedTools")
 				in.argv = append(in.argv, rules...)
 			}
+		} else {
+			// An answer is never continued. An editing run keeps its session
+			// on disk, so a Work follow-up can resume it.
+			in.argv = append(in.argv, "--no-session-persistence")
 		}
-		in.argv = append(in.argv, "--no-session-persistence")
 	case "codex":
-		in.argv = []string{"exec", "--skip-git-repo-check", "--ephemeral"}
+		in.argv = []string{"exec", "--skip-git-repo-check"}
+		switch {
+		case r.Tools == ToolsNone:
+			in.argv = append(in.argv, "--ephemeral")
+		case r.Resume != "":
+			in.argv = []string{"exec", "resume", "--skip-git-repo-check"}
+		}
 		if clean {
 			in.argv = append(in.argv, "--ignore-user-config", "--ignore-rules")
 		}
@@ -435,6 +496,11 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 			in.outFile = filepath.Join(aux, "answer.txt")
 			// --json adds the usage line; the answer still comes from -o.
 			in.argv = append(in.argv, "--sandbox", "read-only", "--color", "never", "--json", "-o", in.outFile, "-")
+		} else if r.Resume != "" {
+			// `codex exec resume` takes neither --sandbox nor --color, so the
+			// same sandbox is set through its config key.
+			in.argv = append(in.argv, "-c", `sandbox_mode="workspace-write"`, "-c", "sandbox_workspace_write.network_access=false", "--json", r.Resume, "-")
+			in.stream = true
 		} else {
 			// Codex has no per-command allow list. Its workspace-write sandbox
 			// lets commands run inside the worktree and keeps the network
@@ -455,6 +521,11 @@ func buildArgs(r Request, aux, work string) (invocation, error) {
 			}
 			in.argv = []string{"--prompt-file", f, "--output-format", "streaming-json", "--permission-mode", "acceptEdits", "--disable-web-search", "--no-subagents"}
 			in.stream = true
+			if r.Resume != "" {
+				in.argv = append(in.argv, "--resume", r.Resume)
+			} else if r.NewSession != "" {
+				in.argv = append(in.argv, "--session-id", r.NewSession)
+			}
 			for _, rule := range bashRules(r.Allow) {
 				in.argv = append(in.argv, "--allow", rule)
 			}

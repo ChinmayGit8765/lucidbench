@@ -36,9 +36,12 @@ func fail(w http.ResponseWriter, err error) {
 //	                                      (the PR state of each is refreshed from gh in the background)
 //	POST /api/work/sessions               start {card?, project, prompt?, provider, profile?, harness}
 //	GET  /api/work/sessions/{id}          one session with its diff summary (?refresh=1 reads it again)
-//	GET  /api/work/sessions/{id}/events   server-sent events: each normalised event, then "end"
+//	GET  /api/work/sessions/{id}/events   server-sent events: each normalised event, then "end" once
+//	                                      the session has ended (it stays open while it waits)
 //	GET  /api/work/sessions/{id}/raw      raw.log as text
-//	POST /api/work/sessions/{id}/stop     stop the agent
+//	POST /api/work/sessions/{id}/stop     stop the running turn; the session waits again
+//	POST /api/work/sessions/{id}/followup run a new turn of a waiting session {prompt}
+//	POST /api/work/sessions/{id}/end      end a waiting session
 //	POST /api/work/sessions/{id}/pr       push the branch and open a draft PR
 //	POST /api/work/sessions/{id}/pr/refresh  read the PR state from gh now
 //	POST /api/work/sessions/{id}/remove   remove the worktree {discard?}
@@ -120,6 +123,18 @@ func Register(mux *http.ServeMux, s *Service) {
 		})
 	}
 	action("stop", func(id string, _ *http.Request) (Session, error) { return s.Stop(id) })
+	action("followup", func(id string, r *http.Request) (Session, error) {
+		var in struct {
+			Prompt string `json:"prompt"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, MaxBody))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			return Session{}, errf(ErrBadRequest, "invalid JSON: %v", err)
+		}
+		return s.FollowUp(id, in.Prompt)
+	})
+	action("end", func(id string, _ *http.Request) (Session, error) { return s.End(id) })
 	action("pr", func(id string, _ *http.Request) (Session, error) { return s.OpenPR(id) })
 	// Reads the PR's state from gh now, instead of waiting for the minute.
 	action("pr/refresh", func(id string, _ *http.Request) (Session, error) {
@@ -180,7 +195,7 @@ func stream(w http.ResponseWriter, r *http.Request, s *Service, id string) {
 	defer ping.Stop()
 	sent := ""
 	for {
-		evs, running, changed, err := s.Events(id, next)
+		evs, open, changed, err := s.Events(id, next)
 		if err != nil {
 			return
 		}
@@ -191,13 +206,13 @@ func stream(w http.ResponseWriter, r *http.Request, s *Service, id string) {
 			next++
 		}
 		// The record goes out when its status changes, not on every event.
-		if se, err := s.Get(id); err == nil && (se.Status != sent || !running) {
+		if se, err := s.Get(id); err == nil && (se.Status != sent || !open) {
 			if !send("session", se, -1) {
 				return
 			}
 			sent = se.Status
 		}
-		if !running {
+		if !open {
 			_, _ = io.WriteString(w, "event: end\ndata: \n\n")
 			fl.Flush()
 			return

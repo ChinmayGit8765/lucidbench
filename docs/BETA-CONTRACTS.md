@@ -64,10 +64,13 @@ type Request struct {
     Timeout           time.Duration
     Env               []string        // extra KEY=value pairs for the CLI (Work: TMP, TEMP, TMPDIR)
     OnEvent           func(Event)     // optional streaming callback (Work)
+    Resume            string          // ToolsEdit: continue the CLI's own session with this id
+    NewSession        string          // ToolsEdit, grok: the UUID a new session takes (--session-id)
+    OnSession         func(id string) // called once the CLI tells its session id
 }
-type Result struct { Text string; Usage Usage; Events []Event }
+type Result struct { Text string; Usage Usage; Events []Event; SessionID string }
 type Usage  struct { Provider, Model string; InputTokens, OutputTokens, CacheRead, CacheWrite int64; CostUSD float64; DurationMS int64 }
-type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done|image */; Title, Body string; Raw json.RawMessage }
+type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done|image|turn|note */; Title, Body string; Raw json.RawMessage }
 func Run(ctx context.Context, r Request) (*Result, error)
 var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
 ```
@@ -76,6 +79,12 @@ var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
   - ToolsNone uses the theme flags (no tools, no MCP, no hooks, no session).
   - ToolsEdit streams JSON (`claude -p --output-format stream-json --verbose`, `codex exec --json`,
     grok headless JSON) and allows file edits inside `Dir` only.
+  - ToolsEdit keeps the CLI's session (no `--no-session-persistence`, no `--ephemeral`) so a Work
+    follow-up can resume it. `Result.SessionID` is claude's `session_id` (on every stream line),
+    codex's `thread_id` (`thread.started`), or the `NewSession` id grok was given.
+  - `Resume` runs `claude -p --resume <id>`, `codex exec resume … <id> -` (that subcommand has no
+    `--sandbox`, so `-c sandbox_mode="workspace-write"` keeps the same sandbox) or
+    `grok --resume <id>`, with the same harness, model and allow list as the first run.
 - **Harness:** Work sessions choose `harness: "mine" | "clean"`.
   - "mine" lets the CLI load the user's normal settings and hooks.
   - "clean" (the default) adds the no-settings, no-hooks flags: `claude --safe-mode
@@ -148,7 +157,32 @@ func Approve(id string, project string) (*boards.Card, error)
 
 ### `internal/work`
 - **Sessions:** `{id, provider, profile, harness, project, repo_path, branch, worktree, prompt,
-  card, status: running|done|failed|stopped, started, ended, usage}`.
+  card, status: running|waiting|done|failed|stopped, started, ended, usage, turns, resume_id}`.
+- **Turns and states:** a session is a conversation of turns, each one run of the CLI in the same
+  worktree.
+  - `running`: a turn runs. When it ends cleanly, or the user stops it, the session is `waiting`:
+    it keeps its worktree, branch, settings and agent browser, and takes a follow-up.
+  - `waiting` → `running` with `POST …/followup {prompt}`; `waiting` → `done` with `POST …/end`
+    (or when its worktree is removed). A first turn that fails makes the session `failed`; a later
+    turn that fails leaves it `waiting`, with the turn marked failed.
+  - `stopped` is only on sessions saved before follow-ups.
+  - `turns[]` is `{n, prompt (the follow-up; "" for turn 1), mode: first|resume|summary, status:
+    running|done|failed|stopped|interrupted, started, ended, usage, answer, error, event}`, where
+    `event` is the index of the turn's first event. `usage` on the session is the total of the
+    turns, `answer` the last turn's final message, `ended` when the last turn ended.
+- **Follow-ups:** the CLI resumes its own session when it told its id (`resume_id`); otherwise, or
+  after a resume failed, the turn is a fresh run whose prompt is the session's prompt plus "Earlier
+  in this session" (each follow-up, the agent's final message for each turn, the changed files and
+  commits) and the follow-up. Each follow-up opens with a `turn` event, `Title` "Turn N · resumed
+  with claude --resume" (or "… · a fresh run with a summary of the earlier turns") and `Body` the
+  follow-up.
+- **Agent browser while waiting:** the hold is kept for the idle time (10 minutes), then let go; a
+  later follow-up attaches the browser again and passes the new address. Ending the session lets
+  go at once.
+- **Restart:** a turn that was running when the daemon stopped is marked `interrupted`, with a
+  `note` event, and the session waits. Its process tree ended with the daemon on Windows (the Job
+  Object is kill-on-close); on Unix it is a process group that is killed on cancel, not when the
+  daemon itself is killed.
 - **Environment (beta):** a git worktree at `<repo_path>/../<repo-name>-lucid-<short-id>` on a
   new branch `lucid/<short-id>-<slug>` from the repo's current default branch. The container
   environment is optional and comes after beta.
@@ -160,9 +194,9 @@ func Approve(id string, project string) (*boards.Card, error)
   - It is removed when the run ends.
 - **Stop ends the whole tree.** `agentexec` runs each CLI in a Windows Job Object
   (kill-on-close) or a Unix process group and kills all of it on cancel or timeout, so a helper
-  the CLI started cannot keep editing. A stopped session is `stopped` and keeps the usage the CLI
-  had streamed (Claude reports it per message), with `usage.note` "stopped before the CLI reported
-  its final cost".
+  the CLI started cannot keep editing. A stopped turn is `stopped` (the session waits again) and
+  keeps the usage the CLI had streamed (Claude reports it per message), with `usage.note` "stopped
+  before the CLI reported its final cost", followed by a `note` event.
 - **The prompt** for a card is the brief (page body), plus "work only in this worktree; commit
   with clear messages; do not push". It is built from the builder template; see Prompt Studio below.
 - **After the run:** a diff summary is shown. "Open PR" pushes the branch and runs
@@ -201,9 +235,11 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/council/sessions/{id}/approve` | POST | `{project?}` returns the new card |
 | `/api/work/sessions` | GET / POST | list / start `{card? , project, prompt?, provider, profile?, harness, model?}`; `card` is a card id on the work board or `<board>/<id>` |
 | `/api/work/sessions/{id}` | GET | session + diff summary; `?refresh=1` reads the diff again |
-| `/api/work/sessions/{id}/events` | GET (SSE) | live normalised events |
+| `/api/work/sessions/{id}/events` | GET (SSE) | live normalised events; stays open while the session runs or waits, and sends `end` once it has ended |
 | `/api/work/sessions/{id}/raw` | GET | the CLI's own lines, as written |
-| `/api/work/sessions/{id}/stop` | POST | stop (kills the CLI's whole process tree) |
+| `/api/work/sessions/{id}/stop` | POST | stop the running turn (kills the CLI's whole process tree); the session waits again |
+| `/api/work/sessions/{id}/followup` | POST | `{prompt}` runs the next turn of a `waiting` session; `409` otherwise, `400` for an empty prompt |
+| `/api/work/sessions/{id}/end` | POST | ends a `waiting` session (`done`); `409` while a turn runs or once it has ended |
 | `/api/work/sessions/{id}/remove` | POST | `{discard}` removes the worktree; unpushed or uncommitted work needs `discard: true` |
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
 | `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once |
@@ -215,8 +251,8 @@ func Approve(id string, project string) (*boards.Card, error)
 `web/src/modules/` and keeps its section. Each one provides:
 - **Overview tiles:** Council: drafts waiting for approval. Work: running sessions. Boards: Ready
   count. Usage: window bars.
-- **Needs attention entries:** a brief to approve, a session finished with a diff to review, a
-  usage window above 80 %.
+- **Needs attention entries:** a brief to approve, the sessions waiting for you (one entry, "2
+  sessions waiting for you"), a session finished with a diff to review, a usage window above 80 %.
 - **Palette commands:** "New braindump…", "New page…", "Add card…", "Start work on card…".
 
 ## Rules every module follows

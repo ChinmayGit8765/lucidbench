@@ -231,7 +231,13 @@ function NextSteps({ idea }: { idea: Idea }) {
     buttons.push(
       <Button key="pr" size="sm" onClick={() => open("work", [last.id])}>
         {last.status === "running" ? <SquareTerminal /> : <GitPullRequest />}
-        {last.status === "running" ? "Watch the agent" : last.status === "done" ? "Review the diff and open a PR" : "Open the session"}
+        {last.status === "running"
+          ? "Watch the agent"
+          : last.status === "waiting"
+            ? "Reply to the agent"
+            : last.status === "done"
+              ? "Review the diff and open a PR"
+              : "Open the session"}
       </Button>,
     )
   }

@@ -3,11 +3,10 @@ import path from "node:path"
 
 import { expect, test } from "@playwright/test"
 
-import { BASE, makeRepo, projectYaml, shot, startDaemon, type Daemon } from "../harness"
+import { BASE, makeRepo, projectYaml, REMOTE_PORT, shot, startDaemon, type Daemon } from "../harness"
 
 // The phone remote listens on a second port. For the test it binds the
 // loopback address; on a real machine the operator picks a LAN or tailnet one.
-const REMOTE_PORT = 7467
 const REMOTE = `http://127.0.0.1:${REMOTE_PORT}`
 const CONFIRM = { "X-Lucid-Confirm": "yes" }
 
@@ -132,7 +131,7 @@ test("the phone page pairs from the QR link and approves with a confirm tap", as
   // The desktop's Settings › Phone remote shows the device and the action.
   await page.goto("/settings/remote")
   await expect(page.getByTestId("phone-remote")).toBeVisible()
-  await expect(page.getByText(/Listening on 127\.0\.0\.1:7467/)).toBeVisible()
+  await expect(page.getByText(`Listening on 127.0.0.1:${REMOTE_PORT}`)).toBeVisible()
   await expect(page.getByTestId("remote-audit")).toContainText("Approved a brief")
   await page.getByTestId("phone-remote").screenshot({ path: shot("remote-settings") })
 })

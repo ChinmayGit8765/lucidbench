@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,10 +26,11 @@ import (
 
 // fakeWork is an in-memory Work service.
 type fakeWork struct {
-	mu       sync.Mutex
-	sessions map[string]work.Session
-	events   map[string][]agentexec.Event
-	stopped  []string
+	mu        sync.Mutex
+	sessions  map[string]work.Session
+	events    map[string][]agentexec.Event
+	stopped   []string
+	followUps []string
 }
 
 func (f *fakeWork) List() []work.Session {
@@ -62,7 +64,7 @@ func (f *fakeWork) Events(id string, from int) ([]agentexec.Event, bool, <-chan 
 	if from > len(evs) {
 		from = len(evs)
 	}
-	return evs[from:], s.Status == work.StatusRunning, make(chan struct{}), nil
+	return evs[from:], s.Status == work.StatusRunning || s.Status == work.StatusWaiting, make(chan struct{}), nil
 }
 
 func (f *fakeWork) Stop(id string) (work.Session, error) {
@@ -75,9 +77,26 @@ func (f *fakeWork) Stop(id string) (work.Session, error) {
 	if s.Status != work.StatusRunning {
 		return s, work.ErrConflict
 	}
-	s.Status = work.StatusStopped
+	s.Status = work.StatusWaiting
 	f.sessions[id] = s
 	f.stopped = append(f.stopped, id)
+	return s, nil
+}
+
+func (f *fakeWork) FollowUp(id, prompt string) (work.Session, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s, ok := f.sessions[id]
+	if !ok {
+		return s, work.ErrNotFound
+	}
+	if s.Status != work.StatusWaiting {
+		return s, fmt.Errorf("%w: the worktree ~/code/demo-lucid-%s is busy", work.ErrConflict, id)
+	}
+	s.Status = work.StatusRunning
+	s.Turns = append(s.Turns, work.Turn{N: len(s.Turns) + 1, Prompt: prompt, Mode: work.TurnResume, Status: work.StatusRunning})
+	f.sessions[id] = s
+	f.followUps = append(f.followUps, id+": "+prompt)
 	return s, nil
 }
 
@@ -317,12 +336,84 @@ func TestAuthAndConfirm(t *testing.T) {
 	}
 }
 
-func TestFollowUpRefused(t *testing.T) {
+// The phone's follow-up runs a turn of a waiting session, behind the token,
+// the confirm header and the confidential 403.
+func TestFollowUp(t *testing.T) {
 	r := newRig(t)
 	tok := r.pair()
-	rec := r.do("POST", "/r/api/work/sessions/w1/followup", tok, true, `{"prompt":"go on"}`)
-	if rec.Code != http.StatusConflict {
+	path := "/r/api/work/sessions/w1/followup"
+	// Running: not waiting yet. The message names no path.
+	rec := r.do("POST", path, tok, true, `{"prompt":"go on"}`)
+	if rec.Code != http.StatusConflict || strings.Contains(rec.Body.String(), "~/") {
+		t.Fatalf("follow-up while running: %d %s", rec.Code, rec.Body)
+	}
+	s := r.work.sessions["w1"]
+	s.Status = work.StatusWaiting
+	r.work.sessions["w1"] = s
+	if rec := r.do("POST", path, "", true, `{"prompt":"go on"}`); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no token: %d", rec.Code)
+	}
+	if rec := r.do("POST", path, tok, false, `{"prompt":"go on"}`); rec.Code != http.StatusForbidden {
+		t.Errorf("no confirm: %d", rec.Code)
+	}
+	for _, body := range []string{`{"prompt":"  "}`, `{"text":"go on"}`, `{"prompt":"` + strings.Repeat("x", MaxNotes+1) + `"}`, `not json`} {
+		if rec := r.do("POST", path, tok, true, body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%.30s: %d", body, rec.Code)
+		}
+	}
+	if len(r.work.followUps) != 0 {
+		t.Fatalf("a refused follow-up was sent: %v", r.work.followUps)
+	}
+	rec = r.do("POST", path, tok, true, `{"prompt":"Add the tests too"}`)
+	if rec.Code != http.StatusOK {
 		t.Fatalf("follow-up: %d %s", rec.Code, rec.Body)
+	}
+	var v WorkView
+	_ = json.Unmarshal(rec.Body.Bytes(), &v)
+	if v.Status != work.StatusRunning || v.Turns != 1 || len(r.work.followUps) != 1 || r.work.followUps[0] != "w1: Add the tests too" {
+		t.Errorf("view %+v, sent %v", v, r.work.followUps)
+	}
+	// A confidential session is refused before anything is sent.
+	w2 := r.work.sessions["w2"]
+	w2.Status = work.StatusWaiting
+	r.work.sessions["w2"] = w2
+	if rec := r.do("POST", "/r/api/work/sessions/w2/followup", tok, true, `{"prompt":"go on"}`); rec.Code != http.StatusForbidden || strings.Contains(rec.Body.String(), "Secret") {
+		t.Errorf("confidential: %d %s", rec.Code, rec.Body)
+	}
+	if rec := r.do("POST", "/r/api/work/sessions/nope/followup", tok, true, `{"prompt":"go on"}`); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown: %d", rec.Code)
+	}
+	if len(r.work.followUps) != 1 {
+		t.Errorf("sent %v", r.work.followUps)
+	}
+	b, _ := os.ReadFile(filepath.Join(r.dir, "audit.jsonl"))
+	if strings.Count(string(b), `"action":"follow_up"`) < 2 || !strings.Contains(string(b), `"result":"ok"`) {
+		t.Errorf("audit:\n%s", b)
+	}
+}
+
+// A waiting session needs the user: it is an attention item on the phone.
+func TestOverviewListsWaitingSessions(t *testing.T) {
+	r := newRig(t)
+	tok := r.pair()
+	for _, id := range []string{"w1", "w2"} {
+		s := r.work.sessions[id]
+		s.Status = work.StatusWaiting
+		r.work.sessions[id] = s
+	}
+	var ov Overview
+	_ = json.Unmarshal(r.do("GET", "/r/api/overview", tok, false, "").Body.Bytes(), &ov)
+	waiting := 0
+	for _, a := range ov.Attention {
+		if a.Kind == "session" && strings.Contains(a.Detail, "waiting") {
+			waiting++
+			if a.Target == "w2" && a.Title != Redacted {
+				t.Errorf("confidential title shown: %+v", a)
+			}
+		}
+	}
+	if waiting != 2 || !ov.FollowUp {
+		t.Errorf("attention %+v follow_up %v", ov.Attention, ov.FollowUp)
 	}
 }
 

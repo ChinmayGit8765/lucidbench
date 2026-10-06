@@ -1,5 +1,5 @@
 import { lazy, useEffect, useState } from "react"
-import { ArrowRight, FileDiff, KanbanSquare, Play, SquareTerminal, TriangleAlert } from "lucide-react"
+import { ArrowRight, FileDiff, Hourglass, KanbanSquare, Play, SquareTerminal, TriangleAlert } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { ProviderMark, providerInfo, tintVar } from "@/components/ProviderMark"
@@ -10,7 +10,7 @@ import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { useNow } from "@/lib/time"
 import { plural } from "@/lib/utils"
-import { elapsedOf, formatElapsed, needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
+import { elapsedOf, formatElapsed, isWaiting, needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function WorkTile() {
@@ -20,6 +20,7 @@ function WorkTile() {
   const list = poll.data ?? []
   const running = list.filter((s) => s.status === "running")
   const review = list.filter(needsReview)
+  const waiting = list.filter(isWaiting)
   return (
     <StatTile
       icon={SquareTerminal}
@@ -28,7 +29,9 @@ function WorkTile() {
       loading={poll.loading && !poll.data}
       value={running.length}
       aside={
-        review.length > 0 ? (
+        waiting.length > 0 ? (
+          <StatusPill tone="warning">{waiting.length} waiting for you</StatusPill>
+        ) : review.length > 0 ? (
           <StatusPill tone="warning">{plural(review.length, "diff")} to review</StatusPill>
         ) : running.length > 0 ? (
           <StatusPill tone="info" pulse>
@@ -122,12 +125,33 @@ function useWorkCommands(paletteOpen: boolean): Command[] {
   ]
 }
 
-/** Needs attention: finished or failed sessions whose diff waits for review. */
+/**
+ * Needs attention: sessions whose agent waits for your follow-up, as one
+ * entry, then finished or failed sessions whose diff waits for review.
+ */
 function useWorkAttention(): AttentionItem[] | null {
   const { open } = useApp()
   const poll = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 4)
   if (!poll.data) return poll.error ? [] : null
-  return poll.data
+  const waiting = poll.data.filter(isWaiting)
+  const waitingItem: AttentionItem[] = waiting.length
+    ? [
+        {
+          key: "work-waiting",
+          severity: "warning",
+          icon: <Hourglass className="size-3.5 text-warning" />,
+          title: <>{plural(waiting.length, "session")} waiting for you</>,
+          meta: <>{waiting.slice(0, 3).map((s) => `${s.title} (${providerInfo(s.provider)?.label ?? s.provider})`).join(" · ")}</>,
+          action: (
+            <Button variant="ghost" size="sm" onClick={() => (waiting.length === 1 ? open("work", [waiting[0].id]) : open("work"))} data-testid="attention-waiting">
+              Reply <ArrowRight />
+            </Button>
+          ),
+        },
+      ]
+    : []
+  return waitingItem.concat(
+    poll.data
     .filter(needsReview)
     .slice(0, 6)
     .map((s): AttentionItem => {
@@ -159,7 +183,8 @@ function useWorkAttention(): AttentionItem[] | null {
           </Button>
         ),
       }
-    })
+    }),
+  )
 }
 
 export const work: ModuleDef = {

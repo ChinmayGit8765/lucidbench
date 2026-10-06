@@ -23,10 +23,6 @@ const maxBody = 8 << 10
 // MaxNotes is the longest "send back" note.
 const MaxNotes = 4000
 
-// errNoFollowUp is the answer to a follow-up prompt: Work runs each CLI once
-// and has no session that waits for input.
-var errNoFollowUp = errors.New("Work sessions run once and do not wait for input yet, so a follow-up cannot be sent; start a new session on the desktop")
-
 // Surface is the remote listener's handler: the phone page and an allowlist
 // of routes. Every route not listed in Routes is 404.
 type Surface struct {
@@ -348,11 +344,41 @@ func (s *Surface) stop(w http.ResponseWriter, r *http.Request, _ Device) (int, e
 	return 0, nil
 }
 
-func (s *Surface) followUp(_ http.ResponseWriter, r *http.Request, _ Device) (int, error) {
-	if _, code, err := s.workSession(r.PathValue("id")); err != nil {
+// followUp runs a new turn of a waiting session, like the desktop's
+// follow-up. A confidential session is refused with 403 before anything is
+// read from the body.
+func (s *Surface) followUp(w http.ResponseWriter, r *http.Request, _ Device) (int, error) {
+	id := r.PathValue("id")
+	if _, code, err := s.workSession(id); err != nil {
 		return code, err
 	}
-	return http.StatusConflict, errNoFollowUp
+	var in struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := decodeBody(r, &in); err != nil {
+		return http.StatusBadRequest, err
+	}
+	in.Prompt = strings.TrimSpace(in.Prompt)
+	if in.Prompt == "" {
+		return http.StatusBadRequest, errors.New("write a follow-up")
+	}
+	if len(in.Prompt) > MaxNotes {
+		return http.StatusBadRequest, errors.New("the follow-up is too long")
+	}
+	se, err := s.Services.Work.FollowUp(id, in.Prompt)
+	switch {
+	case errors.Is(err, work.ErrConflict):
+		// The desktop's message may name the worktree; the phone gets none.
+		return http.StatusConflict, errors.New("the session is not waiting for a follow-up: a turn is running, or it has ended")
+	case errors.Is(err, work.ErrNotFound):
+		return http.StatusNotFound, errors.New("no such session")
+	case errors.Is(err, work.ErrBadRequest):
+		return http.StatusBadRequest, err
+	case err != nil:
+		return http.StatusInternalServerError, errors.New("the follow-up could not start")
+	}
+	apiutil.WriteJSON(w, http.StatusOK, workView(se, false))
+	return 0, nil
 }
 
 // councilSession finds a council run and refuses a confidential one.
