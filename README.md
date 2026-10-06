@@ -22,11 +22,13 @@ braindump ─► Council ─► brief in Memory ─► card on a Board ─► Wo
 - **Picture:** back-end schematics as Mermaid diagrams (with a live preview) and front-end design canvases in Excalidraw, saved in the project's own repo under `docs/picture` or in Memory. "From live state" draws a project's deploys, containers, databases and runners with no AI; "Draft from code" asks your own CLI for a diagram from the file tree and README. See [Picture](docs/CONFIG.md#picture).
 - **Payments:** a Stripe extension. It reads your account (mode, balance, recent payments, products and prices, payment links, webhooks) in test or live mode, and "Set up payments for a project" turns a short form into a reviewable plan and creates products, prices, a payment link and an optional webhook endpoint in **test mode only**. See [Payments](docs/CONFIG.md#payments-stripe).
 - **Live browser:** a headless Chromium in a container with its own empty profile (nothing from your own browser), started on demand and stopped when idle. Watch it live, take over with your mouse and keyboard under a clear banner, preview your own local dev server in it, take screenshots, and attach it to a Work session so the agent can drive it over CDP. See [Live browser](docs/CONFIG.md#live-browser).
+- **Phone remote:** off until you turn it on. A second, small listener on one LAN or Tailscale address (never every interface) serves a phone page: what needs you, running agents with a live tail and Stop, and briefs to approve or send back. Pair by scanning a one-time QR code; the phone keeps its own token, revocable in Settings, and every write needs a confirm tap and is logged. Nothing else of the API is reachable from it. See [Phone remote](docs/CONFIG.md#phone-remote).
 
 **Safety in this beta:**
 - Work agents run as you on your machine. They are told to stay in their worktree, but this is not sandboxed yet.
 - Agents can spend real money on your subscriptions or API keys, and every run shows its cost.
 - Payments never moves money. It cannot refund, pay out or transfer in any mode, and it creates things only with a test-mode key: with a live key every write is refused. A webhook signing secret is shown once and never stored. Use a restricted key.
+- The phone remote speaks plain HTTP: on a LAN anyone who can watch the traffic can copy a paired phone's token. Use it on a network you trust, or over Tailscale; never forward its port to the internet.
 - The Windows installer is not code-signed yet, so SmartScreen will warn on first run: choose *More info → Run anyway*.
 
 ## Quick start
