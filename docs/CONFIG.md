@@ -70,6 +70,11 @@ is an error that names the file and the key, for example
 | `power.runner_idle_minutes` | `10` | | Minutes a runner has had no job and its repository no queued or running run before an on-demand runner is stopped (1-1440). |
 | `power.stacks` | `[]` | | Compose projects to start and stop as a group: a list of `{project, mode}` (mode defaults to `on-demand`). Listed projects may also be started and stopped on the Containers page. |
 | `power.poll_seconds` | `60` | | How often the cluster and runners are checked (10-3600). |
+| `integrations.linear.token` | `env:LINEAR_API_KEY` | `LUCID_INTEGRATIONS_LINEAR_TOKEN` | Secret reference for a Linear personal API key. See [Board connectors](#board-connectors-linear-and-trello). |
+| `integrations.linear.api_url` | `https://api.linear.app/graphql` | `LUCID_INTEGRATIONS_LINEAR_API_URL` | Linear GraphQL endpoint. Change it only to go through a proxy. |
+| `integrations.trello.key` | `env:TRELLO_API_KEY` | `LUCID_INTEGRATIONS_TRELLO_KEY` | Secret reference for the Trello API key. |
+| `integrations.trello.token` | `env:TRELLO_TOKEN` | `LUCID_INTEGRATIONS_TRELLO_TOKEN` | Secret reference for the Trello token. |
+| `integrations.trello.api_url` | `https://api.trello.com/1` | `LUCID_INTEGRATIONS_TRELLO_API_URL` | Trello REST base URL. Change it only to go through a proxy. |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -88,7 +93,8 @@ References only, never values. Nothing personal ever goes in the repo.
 - Your config file, `.env` files, databases and kubeconfig are git-ignored.
   Keep them in your user directories, not in a checkout.
 
-The only secret setting today is `ci.github.token`.
+The secret settings are `ci.github.token`, `integrations.linear.token`,
+`integrations.trello.key` and `integrations.trello.token`.
 
 ## Runners & CI
 
@@ -121,6 +127,47 @@ In docker compose, the daemon reaches local containers through the mounted
 docker socket, but the image has no GitHub CLI. Export `GITHUB_TOKEN` in the
 shell that runs `docker compose up` (or put it in a git-ignored `.env`);
 compose passes it through to the container.
+
+## Board connectors (Linear and Trello)
+
+The Linear and Trello extensions (Settings › Extensions) read and write remote
+boards beside your native Boards. They are off until you add them, and each
+needs credentials.
+
+```yaml
+integrations:
+  linear:
+    token: "env:LINEAR_API_KEY"
+  trello:
+    key: "env:TRELLO_API_KEY"
+    token: "env:TRELLO_TOKEN"
+```
+
+Each value names an environment variable; the daemon reads it when a request
+needs it. Secrets are never logged, never written anywhere and never returned
+by any API: the status routes say only whether a variable is set. The error
+messages Lucidbench shows never quote what the remote service answered.
+
+- **Linear:** create a personal API key in Linear under Settings › Account ›
+  Security & access (the "API" section), export it as `LINEAR_API_KEY` and
+  restart the daemon. A Linear MCP server in your AI client does not give
+  Lucidbench access: the connector talks to the GraphQL API itself and needs
+  the key. The page shows your teams, projects, active cycle and issues grouped
+  by state. From a native card you can **promote** it to a new Linear issue
+  (you pick team and project and confirm; nothing is created before that) or
+  **link** an existing issue. The card keeps `linear:: ENG-12` and the issue
+  URL. There is no two-way sync: Linear owns the issue, and the card links to
+  it.
+- **Trello:** create an API key and token at `trello.com/power-ups/admin`, and
+  export them as `TRELLO_API_KEY` and `TRELLO_TOKEN`. The page shows a board
+  as lists of cards. You can add a card to a list and move a card between
+  lists (each asks first), and link a native card to a Trello card.
+- Remote reads are cached for 60 seconds, a rate-limited call (HTTP 429) is
+  retried up to three times with a back-off (honouring `Retry-After`), and a
+  rejected credential (HTTP 401) is reported as "token invalid".
+- Every route that changes something (`POST`, `PUT`) requires the header
+  `X-Lucid-Confirm: yes`, which the web UI sends. The `api_url` keys exist for
+  proxies and for tests; leave them alone otherwise.
 
 ## Projects
 
