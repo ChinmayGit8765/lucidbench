@@ -143,9 +143,28 @@ func TestParseRefusesUnknownKeys(t *testing.T) {
 	}
 }
 
+// The one live haiku call answered {"days": 7}: a number where the format
+// has a string. A number or a true/false param reads as its text; anything
+// else is still refused, and the range check still applies.
+func TestParamsReadNumbers(t *testing.T) {
+	base := `{"id":"spend","title":"Spend","source":{"api":"/api/usage/summary","params":%s},"view":"bars","rows":"lucidbench.daily","fields":[{"path":"date"},{"path":"cost_usd","format":"usd"}]}`
+	s, err := Check([]byte(fmt.Sprintf(base, `{"days": 7}`)))
+	if err != nil || s.Source.Params["days"] != "7" {
+		t.Fatalf("numeric param: %+v %v", s.Source.Params, err)
+	}
+	if _, err := Check([]byte(fmt.Sprintf(base, `{"days": 400}`))); err == nil {
+		t.Error("out-of-range numeric param accepted")
+	}
+	for _, bad := range []string{`{"days": {"x": 1}}`, `{"days": [7]}`, `["days"]`} {
+		if _, err := Check([]byte(fmt.Sprintf(base, bad))); err == nil {
+			t.Errorf("params %s accepted", bad)
+		}
+	}
+}
+
 // The system prompt lists exactly the allowlisted routes.
 func TestPromptListsTheAllowlist(t *testing.T) {
-	if PromptVersion() != "v1" {
+	if PromptVersion() != "v2" {
 		t.Errorf("prompt version %q", PromptVersion())
 	}
 	listed := map[string]bool{}
@@ -247,7 +266,7 @@ func TestGenerateWithAFakeCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Section.ID != "cards-due" || out.Section.View != "table" || out.Model != "haiku" || out.Prompt != "v1" || out.Usage.CostUSD != 0.0031 {
+	if out.Section.ID != "cards-due" || out.Section.View != "table" || out.Model != "haiku" || out.Prompt != "v2" || out.Usage.CostUSD != 0.0031 {
 		t.Errorf("generated %+v", out)
 	}
 	args, _ := os.ReadFile(filepath.Join(state, "args.txt"))

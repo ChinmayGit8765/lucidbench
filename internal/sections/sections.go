@@ -62,8 +62,39 @@ const (
 // Source is the route a section reads and its parameters. Params go into the
 // route's {placeholders} or its query string; each API says which it takes.
 type Source struct {
-	API    string            `json:"api"`
-	Params map[string]string `json:"params,omitempty"`
+	API    string `json:"api"`
+	Params Params `json:"params,omitempty"`
+}
+
+// Params are a route's parameters. They are strings, but a number or a
+// true/false is read as its text: models write {"days": 7} as often as
+// {"days": "7"}, and both mean the same query.
+type Params map[string]string
+
+// UnmarshalJSON reads string, number and boolean values.
+func (p *Params) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return errors.New("source.params must be a mapping of names to values")
+	}
+	out := Params{}
+	for k, v := range raw {
+		var s string
+		var n json.Number
+		var t bool
+		switch {
+		case json.Unmarshal(v, &s) == nil:
+			out[k] = s
+		case json.Unmarshal(v, &n) == nil:
+			out[k] = n.String()
+		case json.Unmarshal(v, &t) == nil:
+			out[k] = strconv.FormatBool(t)
+		default:
+			return fmt.Errorf("source.params.%s must be a string or a number", trimTo(k, 30))
+		}
+	}
+	*p = out
+	return nil
 }
 
 // Field is one value shown: a path into a row (or into the answer, for a
