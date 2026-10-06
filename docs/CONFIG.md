@@ -283,6 +283,7 @@ the Lucidbench kind cluster.
 | `GET /api/docker/images`, `/api/docker/volumes` | read-only lists |
 | `GET /api/docker/containers/{name}/logs?tail=200[&follow=1]` | log tail; `follow=1` streams server-sent events |
 | `POST /api/docker/containers/{name}/{start\|stop\|restart}` | only where allowed (below) |
+| `POST /api/docker/projects/{project}/{start\|stop}` | every container of a compose project, only when all of them are allowed |
 | `GET /api/k8s/namespaces`, `/nodes`, `/pods`, `/jobs`, `/events` | `?namespace=` filters; events are the newest 50 |
 | `GET /api/k8s/pods/{ns}/{name}/logs?tail=200[&container=c][&follow=1]` | pod log tail or stream |
 | `DELETE /api/k8s/jobs/{ns}/{name}` | deletes a job that has completed or failed (`409` otherwise) |
@@ -291,9 +292,62 @@ Container labels, mounts and environment values are never returned; of the
 labels only the compose project and service and the kind cluster name are
 read. Start, stop and restart are allowed only for containers of the
 `lucidbench` compose project, runner containers (the `ci.runners` filter),
-compose projects listed in `docker.allowed_projects`, and kind nodes
-(restart only). Every other container is read-only. Every `POST` and
-`DELETE` needs `X-Lucid-Confirm: yes`.
+compose projects listed in `docker.allowed_projects` or `power.stacks`, and
+kind nodes (restart only). Every other container is read-only. Every `POST`
+and `DELETE` needs `X-Lucid-Confirm: yes`.
+
+## On-demand infrastructure
+
+The kind cluster, the runner containers and listed compose stacks can run
+only when something needs them. The daemon checks them every
+`power.poll_seconds` and records every start and stop, automatic or from a
+button, in `<data dir>/power/activity.jsonl`.
+
+| Mode | Meaning |
+|---|---|
+| `always` | Lucidbench never stops it. A stopped cluster is still started when a job is submitted. |
+| `on-demand` | Started when something needs it, stopped when it has been idle. |
+| `off` | Lucidbench never starts or stops it on its own. A job submitted to a stopped cluster fails with a clear message. |
+
+The Start and Stop buttons (System, Settings › Infrastructure, Kubernetes,
+the palette) work in every mode.
+
+- **Cluster.** A job submitted through the API (`POST /api/jobs/hello`) or
+  the Start button wakes the kind node: Lucidbench runs `docker start`
+  (three tries, for the `Exited (128)` a node can show after Docker
+  restarts), writes the kubeconfig again and waits up to 120 seconds for the
+  API and every node to be Ready, restarting the node once if its API has
+  not come up halfway through. It is idle when the `lucidbench` namespace has
+  no running or pending pod, no job is active and no job has been submitted
+  for `power.cluster_idle_minutes`. Reading the Kubernetes page never wakes
+  the cluster and never counts as activity, so an open page does not keep it
+  awake. A cluster whose pods cannot be read is never stopped.
+- **Runners.** For each runner container, the repository comes from its
+  `REPO_URL` (an organisation URL is left alone). When the repository has a
+  queued workflow run, its stopped runner is started. A runner is idle when
+  GitHub reports it not busy and its repository has no queued or in-progress
+  run; after `power.runner_idle_minutes` of that it is stopped, after asking
+  GitHub again, without the cache, that it is not busy. A busy runner is
+  never stopped, and nothing is stopped while GitHub cannot be read. Only
+  `on-demand` runners cause GitHub requests: two conditional requests
+  (`If-None-Match`) per repository per check, which do not count against
+  the rate limit when nothing changed, with backoff after errors and
+  `Retry-After` honoured.
+- **Stacks.** Compose projects in `power.stacks` start and stop as a group
+  from the UI. There is no idle signal for a stack, so an `on-demand` stack
+  is stopped only by "Sleep everything idle".
+- **Sleep everything idle** stops every `on-demand` thing that is idle right
+  now, without waiting for its timeout. Busy things stay up.
+
+| Route | What |
+|---|---|
+| `GET /api/power` | every managed thing: mode, state (`running`, `starting`, `stopping`, `sleeping`, `stopped`, `partial`, `missing`), idle time, time until an on-demand stop, memory in use from `docker stats`, the last error, and the newest activity |
+| `POST /api/power/{cluster\|runner\|stack}/{name}/{start\|stop}` | start or stop one thing. Starting the cluster answers `202` at once and shows `starting` until it is ready. Stopping a cluster with running pods or a busy runner answers `409`. |
+| `POST /api/power/sleep` | sleep everything idle; the answer says what stopped and why the rest stayed up |
+
+The daemon never writes `config.yaml`. Settings › Infrastructure shows the
+`power:` block for the modes you pick, to paste into the file before a
+restart.
 
 ## Containers
 
