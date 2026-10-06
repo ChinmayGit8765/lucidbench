@@ -147,6 +147,8 @@ const (
 	DefaultTrelloKey   SecretRef = "env:TRELLO_API_KEY"
 	DefaultTrelloToken SecretRef = "env:TRELLO_TOKEN"
 	DefaultTrelloAPI             = "https://api.trello.com/1"
+	DefaultStripeKey   SecretRef = "env:STRIPE_API_KEY"
+	DefaultStripeAPI             = "https://api.stripe.com"
 )
 
 // LinearConfig configures the Linear extension. APIURL is the GraphQL
@@ -163,11 +165,19 @@ type TrelloConfig struct {
 	APIURL string    `json:"api_url"`
 }
 
+// StripeConfig configures the Payments extension. Key is a restricted or
+// secret key; the mode (test or live) is read from its prefix at runtime.
+type StripeConfig struct {
+	Key    SecretRef `json:"key"`
+	APIURL string    `json:"api_url"`
+}
+
 // IntegrationsConfig holds the credential references of the board
 // connectors. Like every secret setting they are env:NAME references.
 type IntegrationsConfig struct {
 	Linear LinearConfig `json:"linear"`
 	Trello TrelloConfig `json:"trello"`
+	Stripe StripeConfig `json:"stripe"`
 }
 
 // Config is the effective configuration. It holds no secret values.
@@ -213,6 +223,7 @@ func Default() *Config {
 		Integrations: IntegrationsConfig{
 			Linear: LinearConfig{Token: DefaultLinearToken, APIURL: DefaultLinearAPI},
 			Trello: TrelloConfig{Key: DefaultTrelloKey, Token: DefaultTrelloToken, APIURL: DefaultTrelloAPI},
+			Stripe: StripeConfig{Key: DefaultStripeKey, APIURL: DefaultStripeAPI},
 		},
 		sources: map[string]string{},
 	}
@@ -235,7 +246,8 @@ func Keys() []string {
 		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match", "docker.allowed_projects",
 		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds",
 		"integrations.linear.token", "integrations.linear.api_url",
-		"integrations.trello.key", "integrations.trello.token", "integrations.trello.api_url")
+		"integrations.trello.key", "integrations.trello.token", "integrations.trello.api_url",
+		"integrations.stripe.key", "integrations.stripe.api_url")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -574,16 +586,18 @@ func (c *Config) integrationFields() (secrets map[string]*SecretRef, urls map[st
 			"integrations.linear.token": &i.Linear.Token,
 			"integrations.trello.key":   &i.Trello.Key,
 			"integrations.trello.token": &i.Trello.Token,
+			"integrations.stripe.key":   &i.Stripe.Key,
 		}, map[string]*string{
 			"integrations.linear.api_url": &i.Linear.APIURL,
 			"integrations.trello.api_url": &i.Trello.APIURL,
+			"integrations.stripe.api_url": &i.Stripe.APIURL,
 		}
 }
 
 func (d *fileDecoder) integrations(e entry) error {
 	secrets, urls := d.c.integrationFields()
 	return d.section(e, func(svc string, sv *yaml.Node) (bool, error) {
-		if svc != "linear" && svc != "trello" {
+		if svc != "linear" && svc != "trello" && svc != "stripe" {
 			return false, nil
 		}
 		return true, d.section(entry{"integrations." + svc, sv}, func(k string, v *yaml.Node) (bool, error) {
@@ -1000,6 +1014,10 @@ func (c *Config) value(key string) string {
 		return c.Integrations.Trello.Token.String()
 	case "integrations.trello.api_url":
 		return c.Integrations.Trello.APIURL
+	case "integrations.stripe.key":
+		return c.Integrations.Stripe.Key.String()
+	case "integrations.stripe.api_url":
+		return c.Integrations.Stripe.APIURL
 	case "power.cluster":
 		return c.Power.Cluster
 	case "power.cluster_idle_minutes":

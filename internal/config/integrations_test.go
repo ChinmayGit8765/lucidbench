@@ -49,3 +49,27 @@ func TestIntegrationsUnknownKeyWarns(t *testing.T) {
 		t.Fatalf("err=%v warns=%v", err, warns)
 	}
 }
+
+const nl = "\n"
+
+func TestStripeIntegration(t *testing.T) {
+	if s := Default().Integrations.Stripe; s.Key != "env:STRIPE_API_KEY" || s.APIURL != "https://api.stripe.com" {
+		t.Fatalf("stripe defaults %+v", s)
+	}
+	p := write(t, "integrations:"+nl+"  stripe:"+nl+"    key: env:MY_STRIPE"+nl)
+	c, warns, err := LoadFrom(p, env(map[string]string{"LUCID_INTEGRATIONS_STRIPE_API_URL": "http://localhost:7"}))
+	if err != nil || len(warns) != 0 {
+		t.Fatalf("err=%v warns=%v", err, warns)
+	}
+	if c.Integrations.Stripe.Key != "env:MY_STRIPE" || c.Integrations.Stripe.APIURL != "http://localhost:7" || c.Source("integrations.stripe.key") != "file" {
+		t.Fatalf("stripe %+v", c.Integrations.Stripe)
+	}
+	if c.value("integrations.stripe.key") != "env:MY_STRIPE" {
+		t.Fatalf("value %q", c.value("integrations.stripe.key"))
+	}
+	const lit = "stripe_literal_value_12345"
+	_, _, err = LoadFrom(write(t, ""), env(map[string]string{"LUCID_INTEGRATIONS_STRIPE_KEY": lit}))
+	if err == nil || !strings.Contains(err.Error(), "integrations.stripe.key") || strings.Contains(err.Error(), lit) {
+		t.Fatalf("env err = %v", err)
+	}
+}
