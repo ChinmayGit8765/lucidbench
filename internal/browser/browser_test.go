@@ -71,6 +71,11 @@ func TestNavigateOverCDP(t *testing.T) {
 	if _, err := s.Navigate(ctx, NavRequest{Action: ActionClose, Target: "TAB2"}); err != nil || len(f.closed) != 1 || f.closed[0] != "TAB2" {
 		t.Errorf("close = %v, %v", f.closed, err)
 	}
+	// A new blank tab needs no URL and navigates nothing.
+	before := len(f.find("Page.navigate"))
+	if res, err := s.Navigate(ctx, NavRequest{Action: ActionNew}); err != nil || res.Target == "" || res.Target == "TAB1" || len(f.find("Page.navigate")) != before {
+		t.Errorf("new tab = %+v, %v", res, err)
+	}
 	if _, err := s.Navigate(ctx, NavRequest{Target: "GONE", URL: "https://example.com/"}); !errors.Is(err, ErrNoTab) {
 		t.Errorf("unknown tab: %v", err)
 	}

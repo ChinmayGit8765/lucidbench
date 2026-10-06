@@ -145,8 +145,9 @@ func (c *Conn) readLoop() {
 		ch <- reply{err: c.err}
 		delete(c.pending, id)
 	}
-	c.mu.Unlock()
+	// Closed under the lock, so a Call that registers after the drain sees it.
 	close(c.done)
+	c.mu.Unlock()
 }
 
 func (c *Conn) send(id int64, method string, params any) error {

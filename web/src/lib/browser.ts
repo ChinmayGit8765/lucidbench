@@ -43,7 +43,11 @@ export interface BrowserShot {
   bytes: number
 }
 
-export const BROWSER_POLL_MS = 3000
+/** Matches Containers: each read costs a few docker calls. */
+export const BROWSER_POLL_MS = 10000
+
+/** While it starts, a quick look shows it as soon as it is up. */
+export const BROWSER_STARTING_POLL_MS = 2000
 
 /** Whether the Live browser extension is in the sidebar; its hooks stay quiet until it is. */
 export function useBrowserAdded(): boolean {
@@ -52,8 +56,8 @@ export function useBrowserAdded(): boolean {
 }
 
 /** The agent browser's state and tabs. Reading it never wakes it or keeps it awake. */
-export function useBrowser(enabled = true): Polled<BrowserStatus> {
-  return usePoll<BrowserStatus>(enabled ? "/api/browser" : null, BROWSER_POLL_MS)
+export function useBrowser(enabled = true, fast = false): Polled<BrowserStatus> {
+  return usePoll<BrowserStatus>(enabled ? "/api/browser" : null, fast ? BROWSER_STARTING_POLL_MS : BROWSER_POLL_MS)
 }
 
 export const startBrowser = () => sendJSON<BrowserStatus>("/api/browser/start", "POST")
@@ -62,7 +66,7 @@ export const stopBrowser = () => sendJSON<BrowserStatus>("/api/browser/stop", "P
 export interface NavigateRequest {
   target?: string
   url?: string
-  action?: "go" | "back" | "forward" | "reload" | "close"
+  action?: "go" | "back" | "forward" | "reload" | "close" | "new"
   new_tab?: boolean
 }
 

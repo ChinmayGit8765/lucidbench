@@ -61,7 +61,7 @@ type Request struct {
 }
 type Result struct { Text string; Usage Usage; Events []Event }
 type Usage  struct { Provider, Model string; InputTokens, OutputTokens, CacheRead, CacheWrite int64; CostUSD float64; DurationMS int64 }
-type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done */; Title, Body string; Raw json.RawMessage }
+type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done|image */; Title, Body string; Raw json.RawMessage }
 func Run(ctx context.Context, r Request) (*Result, error)
 var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
 ```

@@ -367,7 +367,7 @@ function Running({ st, refresh }: { st: BrowserStatus; refresh: () => void }) {
             selected={tab?.id}
             onSelect={setChosen}
             onClose={(id) => void nav({ target: id, action: "close" })}
-            onNew={() => void nav({ url: "https://example.com", action: "go", new_tab: true })}
+            onNew={() => void nav({ action: "new" })}
           />
           <Card className="p-4">
             <h2 className="text-sm font-semibold">Preview a dev server</h2>
@@ -407,9 +407,13 @@ function Running({ st, refresh }: { st: BrowserStatus; refresh: () => void }) {
 }
 
 export default function Browser() {
-  const poll = useBrowser(true)
-  const st = poll.data
   const [busy, setBusy] = useState(false)
+  const [fast, setFast] = useState(false)
+  const poll = useBrowser(true, fast)
+  const st = poll.data
+  const starting = busy || st?.state === "starting"
+  // Look often only while it starts.
+  useEffect(() => setFast(starting), [starting])
 
   const act = async (fn: () => Promise<unknown>, failed: string) => {
     setBusy(true)
@@ -422,7 +426,6 @@ export default function Browser() {
       setBusy(false)
     }
   }
-  const starting = busy || st?.state === "starting"
 
   return (
     <div className="space-y-6">
@@ -437,7 +440,7 @@ export default function Browser() {
                 {starting && st.state !== "running" ? "Starting" : STATE[st.state].label}
               </StatusPill>
             )}
-            {st?.state === "running" && (
+            {st && st.state !== "sleeping" && (
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(stopBrowser, "Could not stop the browser")}>
                 <Square /> Stop
               </Button>

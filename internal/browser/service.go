@@ -34,8 +34,9 @@ import (
 const (
 	ContainerName = "lucidbench-browser"
 	LabelBrowser  = "lucidbench.browser"
-	// DefaultImage is chromedp/headless-shell (BSD-3-Clause, Chromium under
-	// its own licences), pinned to a Chromium version.
+	// DefaultImage is chromedp/headless-shell (build scripts MIT, Chromium
+	// BSD-3-Clause with its components under their own licences), pinned to a
+	// Chromium version.
 	DefaultImage = "chromedp/headless-shell:155.0.8059.26"
 	// cdpPort is the port the image's socat listens on inside the container.
 	cdpPort = 9222
@@ -498,6 +499,8 @@ const (
 	ActionForward = "forward"
 	ActionReload  = "reload"
 	ActionClose   = "close"
+	// ActionNew opens a blank tab.
+	ActionNew = "new"
 )
 
 // NavRequest is POST /api/browser/navigate.
@@ -505,7 +508,7 @@ type NavRequest struct {
 	// Target is a tab id; empty means the first tab (one is opened when there is none).
 	Target string `json:"target,omitempty"`
 	URL    string `json:"url,omitempty"`
-	// Action is go (the default), back, forward, reload or close.
+	// Action is go (the default), back, forward, reload, close or new (a blank tab).
 	Action string `json:"action,omitempty"`
 	// NewTab opens the URL in a new tab.
 	NewTab bool `json:"new_tab,omitempty"`
@@ -532,6 +535,18 @@ func (s *Service) Navigate(ctx context.Context, r NavRequest) (NavResult, error)
 		if open, err = CheckURL(r.URL); err != nil {
 			return NavResult{}, err
 		}
+	}
+	if r.Action == ActionNew {
+		e, err := s.endpoint(ctx)
+		if err != nil {
+			return NavResult{}, err
+		}
+		t, err := e.NewTarget(ctx)
+		if err != nil {
+			return NavResult{}, err
+		}
+		s.touch()
+		return NavResult{Target: t.ID}, nil
 	}
 	e, t, err := s.tab(ctx, r.Target, r.Action == ActionGo)
 	if err != nil {
@@ -560,7 +575,7 @@ func (s *Service) Navigate(ctx context.Context, r NavRequest) (NavResult, error)
 	case ActionClose:
 		err = e.CloseTarget(ctx, t.ID)
 	default:
-		return res, fmt.Errorf("%w: action must be go, back, forward, reload or close", ErrURL)
+		return res, fmt.Errorf("%w: action must be go, back, forward, reload, close or new", ErrURL)
 	}
 	return res, err
 }
@@ -672,7 +687,7 @@ func (s *Service) Screenshot(ctx context.Context, target, session string) (Shot,
 	if t.URL != "" {
 		title += ": " + t.URL
 	}
-	ev := agentexec.Event{Time: s.now().UTC(), Kind: "image", Title: title, Body: ShotPath + name}
+	ev := agentexec.Event{Time: s.now().UTC(), Kind: agentexec.KindImage, Title: title, Body: ShotPath + name}
 	if err := s.Sink(session, ev); err != nil {
 		return sh, err
 	}

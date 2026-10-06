@@ -45,7 +45,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 //	GET  /api/browser                       state (sleeping | starting | running), the tabs and the DevTools address
 //	POST /api/browser/start                 start the container (pulls the image the first time)
 //	POST /api/browser/stop                  stop it
-//	POST /api/browser/navigate              {url, target?, action?: go|back|forward|reload|close, new_tab?}
+//	POST /api/browser/navigate              {url, target?, action?: go|back|forward|reload|close|new, new_tab?}
 //	GET  /api/browser/stream?target=<id>    server-sent events: a "frame" event per JPEG frame
 //	POST /api/browser/input                 {takeover: true, target?, type: move|down|up|click|scroll|key|text, ...}
 //	POST /api/browser/screenshot            {target?, session?} a PNG; with a session it joins that Work session's timeline

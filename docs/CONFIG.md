@@ -753,7 +753,7 @@ always sends an `Origin` would need `--remote-allow-origins=*` to get past it. `
 
 API (every POST needs `X-Lucid-Confirm: yes`): `GET /api/browser` (state `sleeping`, `starting` or
 `running`, the tabs, the DevTools address), `POST /api/browser/start`, `POST /api/browser/stop`,
-`POST /api/browser/navigate` with `{"url": "...", "target": "<tab>", "action": "go|back|forward|reload|close", "new_tab": false}`,
+`POST /api/browser/navigate` with `{"url": "...", "target": "<tab>", "action": "go|back|forward|reload|close|new", "new_tab": false}`,
 `GET /api/browser/stream[?target=<tab>]` (server-sent events: `frame` with `{jpeg, width, height}`),
 `POST /api/browser/input` with `{"takeover": true, "type": "move|down|up|click|scroll|key|text", ...}`,
 `POST /api/browser/screenshot` with `{"target": "...", "session": "..."}` and
