@@ -536,6 +536,10 @@ func TestStop(t *testing.T) {
 	if _, err := f.svc.FollowUp(se.ID, "hurry up"); !errors.Is(err, ErrConflict) {
 		t.Errorf("follow-up while running: %v", err)
 	}
+	// End is for a waiting session; a running turn is stopped first.
+	if _, err := f.svc.End(se.ID); !errors.Is(err, ErrConflict) {
+		t.Errorf("end while running: %v", err)
+	}
 	start := time.Now()
 	got, err := f.svc.Stop(se.ID)
 	if err != nil {
@@ -554,6 +558,11 @@ func TestStop(t *testing.T) {
 	evs, _, _, _ := f.svc.Events(se.ID, 0)
 	if last := evs[len(evs)-1]; last.Kind != agentexec.KindNote || last.Title != "stopped" {
 		t.Errorf("last event %+v", last)
+	}
+	for _, ev := range evs {
+		if ev.Kind == agentexec.KindError {
+			t.Errorf("a stop is not an error: %+v", ev)
+		}
 	}
 	if _, err := f.svc.Stop(se.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("second stop: %v", err)

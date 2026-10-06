@@ -375,7 +375,7 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
                 <span
                   className={cn(
                     "absolute left-[7px] top-1.5 z-[1] flex size-[22px] items-center justify-center rounded-full border bg-card",
-                    t.status === "done" ? "border-success/50 text-success" : "border-danger/50 text-danger",
+                    t.status === "done" ? "border-success/50 text-success" : t.status === "failed" ? "border-danger/50 text-danger" : "text-subtle-foreground",
                   )}
                 >
                   {t.status === "done" ? <CircleCheck className="size-3" /> : <CircleX className="size-3" />}

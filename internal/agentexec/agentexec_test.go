@@ -673,8 +673,12 @@ func TestCancelKillsTree(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run did not return within 3s of cancel")
 	}
-	if o.err == nil {
-		t.Fatal("a cancelled run returned no error")
+	if o.err == nil || !errors.Is(o.err, context.Canceled) {
+		t.Fatalf("a cancelled run returned %v", o.err)
+	}
+	// Stopped on purpose: no error event, a done titled stopped.
+	if k := kinds(o.res.Events); strings.Contains(k, "error") || o.res.Events[len(o.res.Events)-1].Title != "stopped" {
+		t.Errorf("events after cancel: %s %+v", k, o.res.Events[len(o.res.Events)-1])
 	}
 	if u := o.res.Usage; u.InputTokens != 12 || u.OutputTokens != 34 || u.CacheRead != 5 || u.CacheWrite != 6 {
 		t.Errorf("partial usage not kept: %+v", u)

@@ -349,6 +349,12 @@ func (g *Runner) Run(ctx context.Context, r Request) (*Result, error) {
 		res.SessionID = r.NewSession
 	}
 
+	if (runErr != nil || isErr) && ctx.Err() != nil {
+		// The caller ended the run on purpose (Work's Stop): no error to show,
+		// only that it stopped. Whatever usage streamed so far is kept.
+		emit(Event{Kind: KindDone, Title: "stopped"})
+		return res, fmt.Errorf("%s was stopped: %w", r.Provider, ctx.Err())
+	}
 	if runErr != nil || isErr {
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
