@@ -32,6 +32,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
+	"github.com/ChinmayGit8765/lucidbench/internal/setup"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -169,6 +170,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	work.Register(mux, workSvc)
 	ideas.Register(mux, &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault})
 	home, _ := os.UserHomeDir()
+	setup.Register(mux, &setup.Service{DataDir: data, ProjectsPath: projects.Path, Home: home})
 	resolver := &prompts.Resolver{Projects: projects.Load, Vault: vault, Council: councilSvc, Home: home}
 	prompts.Register(mux, &prompts.API{
 		Store:    &prompts.Store{Dir: filepath.Join(data, "prompts")},
