@@ -276,7 +276,7 @@ const metaQuery = `query {
   teams(first: 50) { nodes { id key name
     activeCycle { id number name startsAt endsAt progress }
     states(first: 30) { nodes { ` + stateFields + ` } } } }
-  projects(first: 100) { nodes { id name state teams(first: 10) { nodes { id } } } }
+  projects(first: 100) { nodes { id name teams(first: 10) { nodes { id } } } }
 }`
 
 type nodes[T any] struct {

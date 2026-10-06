@@ -98,6 +98,18 @@ export function LinkInput({
  * titled like the card. Nothing is created before the button is pressed.
  */
 export function PromoteDialog({ board, card, open, onClose, onDone }: { board: string; card: Card; open: boolean; onClose: () => void; onDone: (c: Card) => void }) {
+  // The dialog sits over the card sheet, which also closes on Escape. Take the
+  // key first (capture phase) so Escape closes only the dialog.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.stopImmediatePropagation()
+      onClose()
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [open, onClose])
   return (
     <Dialog open={open} onClose={onClose} title="Promote to Linear" description="Creates a new issue in your Linear workspace from this card, and links the two. Linear owns the issue afterwards.">
       {open && <PromoteForm board={board} card={card} onClose={onClose} onDone={onDone} />}

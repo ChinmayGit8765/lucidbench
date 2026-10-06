@@ -27,7 +27,7 @@ export function SetupCard({
   return (
     <Card className="relative overflow-hidden">
       <div aria-hidden className="tile-glow pointer-events-none absolute inset-0" />
-      <div className="relative grid gap-6 p-6 @3xl:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="relative grid items-start gap-6 p-6 @3xl:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-xl border border-border-strong bg-elevated text-brand shadow-card">
