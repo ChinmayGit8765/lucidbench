@@ -247,7 +247,8 @@ func (s *Surface) workSession(id string) (work.Session, int, error) {
 
 // events streams a session's events as server-sent events, like the desktop
 // route, with each event cut down to its kind, title and text. The device is
-// checked again on every change and ping, so a revoked phone's stream ends.
+// checked again on every change, ping and revocation, so a revoked phone's
+// stream ends at once.
 func (s *Surface) events(w http.ResponseWriter, r *http.Request, dev Device) {
 	id := r.PathValue("id")
 	if _, code, err := s.workSession(id); err != nil {
@@ -285,6 +286,7 @@ func (s *Surface) events(w http.ResponseWriter, r *http.Request, dev Device) {
 	defer ping.Stop()
 	sent := ""
 	for {
+		revoked := s.Devices.Revoked()
 		if !s.Devices.Has(dev.ID) {
 			return
 		}
@@ -312,6 +314,7 @@ func (s *Surface) events(w http.ResponseWriter, r *http.Request, dev Device) {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-revoked:
 		case <-changed:
 		case <-ping.C:
 			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {

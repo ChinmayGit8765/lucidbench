@@ -63,6 +63,7 @@ type Devices struct {
 	list     []Device
 	codeHash []byte
 	codeExp  time.Time
+	revoked  chan struct{} // closed and replaced on every revocation
 }
 
 func (d *Devices) now() time.Time {
@@ -231,6 +232,17 @@ func (d *Devices) List() ([]Public, error) {
 	return out, nil
 }
 
+// Revoked returns a channel closed on the next revocation, so a live stream
+// can check its device again at once.
+func (d *Devices) Revoked() <-chan struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.revoked == nil {
+		d.revoked = make(chan struct{})
+	}
+	return d.revoked
+}
+
 // Revoke forgets a device; its token stops working at once.
 func (d *Devices) Revoke(id string) (Device, error) {
 	d.mu.Lock()
@@ -247,6 +259,10 @@ func (d *Devices) Revoke(id string) (Device, error) {
 		if err := d.saveLocked(); err != nil {
 			d.list = old
 			return Device{}, err
+		}
+		if d.revoked != nil {
+			close(d.revoked)
+			d.revoked = nil
 		}
 		return dev, nil
 	}

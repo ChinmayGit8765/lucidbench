@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
@@ -92,6 +93,27 @@ func (p *privacy) page(path string) bool {
 	}
 	c, err := p.vault.IsConfidential(path)
 	return err != nil || c
+}
+
+// repo reports whether a CI repository (owner/name) belongs to a
+// confidential project. Without a project list every repo counts.
+func (p *privacy) repo(r string) bool {
+	if p.err != nil || p.list == nil {
+		return true
+	}
+	norm := func(s string) string {
+		s = strings.ToLower(strings.TrimSpace(s))
+		s = strings.TrimPrefix(s, "https://")
+		s = strings.TrimPrefix(s, "github.com/")
+		return strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git")
+	}
+	want := norm(r)
+	for _, pr := range p.list.Projects {
+		if pr.Visibility == "confidential" && pr.Repo != "" && norm(pr.Repo) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *privacy) work(se work.Session) bool {
@@ -268,9 +290,12 @@ func (s Services) overview(ctx context.Context) Overview {
 		cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 		sum := s.CI(cctx)
 		cancel()
-		v := &CIView{Configured: sum.Configured, Runs: sum.Runs24h.Total, InProgress: sum.Runs24h.InProgress, PassRate: sum.Runs24h.PassRate, FailingRepos: sum.FailingRepos}
-		if v.FailingRepos == nil {
-			v.FailingRepos = []string{}
+		v := &CIView{Configured: sum.Configured, Runs: sum.Runs24h.Total, InProgress: sum.Runs24h.InProgress, PassRate: sum.Runs24h.PassRate, FailingRepos: []string{}}
+		for _, r := range sum.FailingRepos {
+			if pv.repo(r) {
+				r = Redacted
+			}
+			v.FailingRepos = append(v.FailingRepos, r)
 		}
 		for _, r := range v.FailingRepos {
 			out.Attention = append(out.Attention, Attention{Severity: "error", Kind: "ci", Title: r, Detail: "The latest CI run failed"})
