@@ -136,6 +136,9 @@ func keepReason(root *os.Root, id string, now time.Time, grace time.Duration,
 	}
 	owner := filepath.Join(id, ownerFile)
 	ofi, err := root.Lstat(owner)
+	if errors.Is(err, os.ErrNotExist) {
+		return "no owner record (made by an older version or still being created); delete it by hand if it is stale"
+	}
 	if err != nil {
 		return "owner record unreadable: " + err.Error()
 	}

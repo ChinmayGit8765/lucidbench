@@ -228,11 +228,17 @@ func TestSweepNeverDeletesLiveRun(t *testing.T) {
 			mu.Lock()
 			removed = append(removed, res.Removed...)
 			mu.Unlock()
+			time.Sleep(time.Millisecond)
 		}
 	}()
 	o := Options{Provider: "codex", Profile: HostProfile, Prompt: "hi", Home: home, DataDir: data,
 		LockPath: filepath.Join(data, "locks", "codex-host.lock")}
 	for i := 0; i < 25; i++ {
+		// On Windows a sweep reading the lock can make Release fail; the lock
+		// then names this (live) test process. Clear it so the next run starts.
+		if err := os.Remove(o.LockPath); err == nil {
+			t.Logf("run %d: cleared a lock the previous release left behind", i)
+		}
 		_, _, err := Run(o, func([]string) int {
 			entries, err := os.ReadDir(filepath.Join(data, "runs"))
 			if err != nil {
