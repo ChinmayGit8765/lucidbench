@@ -138,7 +138,7 @@ func installFakes(t *testing.T, mode string) (claudeLog, ghLog string) {
 }
 
 // canon is one spelling of a path for comparing: symlinks resolved and, on
-// Windows, 8.3 short names (t.TempDir() can be C:\Users\RUNNER~1\...) expanded.
+// Windows, 8.3 short names (t.TempDir() can be a RUNNER~1 style name on CI) expanded.
 func canon(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		p = r
