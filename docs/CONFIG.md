@@ -205,6 +205,8 @@ projects:
     builds_into: [other-id]    # optional
     needs:                     # optional; status todo | doing | done | blocked
       - { what: "Release pipeline", from: build-tools, status: doing }
+    deploy:                    # optional: where it runs (see Cloud)
+      - { provider: vercel, service: my-app }
 ```
 
 `local_path` is where the project's checkout lives on this machine. It must be
@@ -445,6 +447,45 @@ the palette) work in every mode.
 The daemon never writes `config.yaml`. Settings › Infrastructure shows the
 `power:` block for the modes you pick, to paste into the file before a
 restart.
+
+## Cloud
+
+The Cloud extension is a read-only inventory of what you have deployed. It runs the CLIs you are
+already signed in to, asks them for JSON, and keeps nothing: Lucidbench has no cloud settings and
+stores no cloud credential. Add it from Settings › Extensions.
+
+| Provider | CLI | What is read |
+|---|---|---|
+| Google Cloud | `gcloud` | the active account and project, your projects, and Cloud Run services across regions (URL, last revision, ready or failed) |
+| Cloudflare | `wrangler` | the signed-in account and its Pages projects; a Pages project's latest deployment and the deployments of a Worker only when a `deploy` entry names them |
+| Vercel | `vercel` | the signed-in user and team, projects, and recent deployments (a project's status is its newest production deployment) |
+| Azure | `az` | who is signed in (`az account show`) |
+| AWS | `aws` | the account id (`aws sts get-caller-identity`) |
+
+Wrangler has no command that lists Workers, so they appear only when a project's `deploy` list
+names them. Each provider fails on its own with a clear state: not installed, not signed in
+(shown with the command to sign in), or the CLI's own error, trimmed to one line. Emails, tokens
+and environment values are never returned; the one account id shown is what the CLI prints.
+Results are cached for five minutes and **Refresh** runs the CLIs again. Each CLI call has a
+30-second limit.
+
+`deploy` on a project in `projects.yaml` links it to this inventory:
+
+```yaml
+    deploy:
+      - { provider: gcloud, service: my-api, region: us-central1, project: my-gcp-project }
+      - { provider: vercel, service: my-app }          # the Vercel project name
+      - { provider: wrangler, service: my-site }       # a Pages project or a Worker name
+```
+
+`provider` is `gcloud`, `wrangler` or `vercel`, and `service` is required. `region` and `project`
+(the Google Cloud project id; the active project by default) are for `gcloud` only. Invalid
+entries are reported and ignored. With the Cloud extension added, the project's card then shows
+each entry's status, last deploy time and links. A failed deploy also appears under Needs
+attention on Overview.
+
+API: `GET /api/cloud` (every provider), `GET /api/cloud/{provider}` and `GET /api/cloud/deploys`
+(project entries matched to the inventory). Add `?refresh=1` to skip the cache.
 
 ## Containers
 

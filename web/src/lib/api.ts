@@ -87,18 +87,19 @@ export interface Polled<T> {
 /**
  * Fetches JSON now and every intervalMs; keeps the last good data on errors.
  * Polling pauses while the tab is hidden and catches up when it returns.
+ * A null path fetches nothing (a module that is not added stays quiet).
  */
-export function usePoll<T>(path: string, intervalMs = 10000): Polled<T> {
+export function usePoll<T>(path: string | null, intervalMs = 10000): Polled<T> {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<ApiError | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(path !== null)
   const [refreshing, setRefreshing] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const alive = useRef(true)
   const inflight = useRef<string | null>(null)
 
   const load = useCallback(async () => {
-    if (inflight.current === path) return
+    if (path === null || inflight.current === path) return
     inflight.current = path
     setRefreshing(true)
     try {

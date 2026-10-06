@@ -27,8 +27,8 @@ Today's modules:
 - **AI (core):** Accounts, MCP servers, Council (soon), Usage (soon)
 - **Bottom (core):** System, Settings
 - **Extensions:** Runners & CI, Containers and Kubernetes (added by default),
-  Linear and Trello (board connectors that need credentials), plus roadmap
-  cards for Cloud, Databases, Payments, Picture and Live browser
+  Cloud (added from the gallery), Linear and Trello (board connectors that need credentials),
+  plus roadmap cards for Databases, Payments, Picture and Live browser
 
 A module with `status: "soon"` shows in the sidebar or gallery but cannot be
 opened or added. Opening an extension the user has not added leads to its

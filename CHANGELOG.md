@@ -13,6 +13,12 @@ marked `-beta.N`.
   first), and link a native card to a Trello card. Needs `TRELLO_API_KEY` and `TRELLO_TOKEN`.
 - Cards store `linear::` and `trello::` links. The remote owns the item; nothing is synced back.
   Credentials are `env:NAME` references under the new `integrations` config section.
+- **Cloud:** a read-only inventory of what you have deployed, read through the CLIs you are
+  already signed in to: Cloud Run services on Google Cloud, Pages projects and named Workers on
+  Cloudflare, projects and recent deployments on Vercel, and who is signed in to Azure and AWS.
+  Each provider fails on its own with a clear message, results are cached for five minutes, and
+  Lucidbench stores no cloud credentials. Add `deploy:` to a project in `projects.yaml` to see its
+  live deploy status on its card; a failed deploy shows under Needs attention.
 
 ## 0.3.0-beta.1 (2026-10-06)
 

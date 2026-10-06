@@ -22,6 +22,7 @@ import {
 
 import { AssessSheet } from "@/components/AssessSheet"
 import { CopyCommand } from "@/components/CopyCommand"
+import { DeployRows } from "@/components/Deploys"
 import { GraphLegend, ProjectGraph, graphEdges } from "@/components/ProjectGraph"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill } from "@/components/ui/badge"
@@ -31,6 +32,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { RISK, useKinds } from "@/lib/assess"
+import { useCloudAdded, useCloudDeploys, type CloudDeploy } from "@/lib/cloud"
 import {
   blockedNeeds,
   CATEGORIES,
@@ -175,6 +177,7 @@ function ProjectCard({
   focused,
   kindName,
   onAssess,
+  deploys,
 }: {
   p: Project
   byId: Map<string, Project>
@@ -182,6 +185,8 @@ function ProjectCard({
   focused: boolean
   kindName?: string
   onAssess: (p: Project) => void
+  /** Live status of p.deploy, by position; null when the Cloud extension is not added. */
+  deploys: CloudDeploy[] | undefined | null
 }) {
   const { open } = useApp()
   const st = STATUS[p.status] ?? { tone: "neutral" as const, label: p.status }
@@ -253,6 +258,8 @@ function ProjectCard({
           )}
         </div>
       )}
+
+      {p.deploy && p.deploy.length > 0 && <DeployRows entries={p.deploy} live={deploys} />}
 
       {(p.builds_into.length > 0 || p.built_by.length > 0) && (
         <div className="mt-3 space-y-1.5">
@@ -536,6 +543,9 @@ export default function Projects() {
   const [focused, setFocused] = useState<string | null>(null)
   const [assessing, setAssessing] = useState<Project | null>(null)
   const kinds = useKinds()
+  // Deploy status runs the user's CLIs, so it waits for the Cloud extension to be added.
+  const cloudAdded = useCloudAdded()
+  const deployPoll = useCloudDeploys(cloudAdded && all.some((p) => (p.deploy?.length ?? 0) > 0))
   const timer = useRef<number | undefined>(undefined)
 
   const setView = (v: View) => {
@@ -803,6 +813,7 @@ export default function Projects() {
                       focused={focused === p.id}
                       kindName={kinds.find((k) => k.id === p.assessment?.kind)?.name}
                       onAssess={setAssessing}
+                      deploys={cloudAdded ? (deployPoll.data ? (deployPoll.data.projects[p.id] ?? []) : deployPoll.error ? [] : undefined) : null}
                     />
                   ))}
                 </div>

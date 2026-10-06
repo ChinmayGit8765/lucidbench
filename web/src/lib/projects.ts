@@ -45,6 +45,8 @@ export interface Project {
   /** The project's git checkout on this machine; Work needs it. */
   local_path?: string
   summary?: string
+  /** Where it runs; the card shows each one's live status from the Cloud extension. */
+  deploy?: { provider: string; service: string; region?: string; project?: string }[]
   builds_into: string[]
   needs: Need[]
   built_by: string[]
