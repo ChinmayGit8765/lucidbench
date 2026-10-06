@@ -273,14 +273,34 @@ function useRunnerAttention(): AttentionItem[] | null {
       ),
     })
   }
+  // One row per cause: a bad token fails every repository the same way, and
+  // a row per repository would bury the rest of the list.
+  const byCause = new Map<string, string[]>()
   for (const e of s?.errors ?? []) {
     if (e.source === "github") continue
+    if (e.source === "docker") {
+      out.push({
+        key: `err-docker-${e.message}`,
+        severity: "danger",
+        icon: <TriangleAlert className="size-3.5 text-danger" />,
+        title: "Docker is not reachable",
+        meta: e.message,
+      })
+      continue
+    }
+    const cause = e.message.replace(/^.*:\s+(?=\d{3}\b)/, "")
+    const repos = byCause.get(cause) ?? []
+    if (!repos.includes(shortRepo(e.source))) repos.push(shortRepo(e.source))
+    byCause.set(cause, repos)
+  }
+  for (const [cause, repos] of byCause) {
     out.push({
-      key: `err-${e.source}-${e.message}`,
+      key: `err-${cause}`,
       severity: "danger",
       icon: <TriangleAlert className="size-3.5 text-danger" />,
-      title: e.source === "docker" ? "Docker is not reachable" : `Cannot read ${shortRepo(e.source)}`,
-      meta: e.message,
+      title: repos.length === 1 ? `Cannot read ${repos[0]}` : `Cannot read ${repos.length} repositories`,
+      meta: `${cause}${repos.length > 1 ? ` · ${repos.join(", ")}` : ""}`,
+      action: view,
     })
   }
   return out
