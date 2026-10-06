@@ -29,6 +29,8 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   runs/<id>/                    existing per-run auth staging (internal/runner)
   power/activity.jsonl          every start and stop of the cluster, runners, stacks and database managers (internal/power)
   databases.yaml                saved database connections, passwords as env:NAME (internal/databases)
+  payments/<project>.yaml       Stripe object ids created for a project, ids only (internal/payments)
+  payments/audit.jsonl          every Stripe write: time, mode, action, object ids; no secrets (internal/payments)
 ```
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault
@@ -242,6 +244,12 @@ func Approve(id string, project string) (*boards.Card, error)
 
 **Power**
 - `GET /api/power`, `POST /api/power/{kind}/{name}/{start|stop}`, `POST /api/power/sleep` and `POST /api/docker/projects/{project}/{start|stop}`. See docs/CONFIG.md `power`.
+
+**Payments** (`internal/stripe`, `internal/payments`, web module `payments`, Business extension)
+- `GET /api/payments/status|account|balance|charges|products|links|webhooks|audit` and `GET /api/payments/project/{id}` read Stripe (cached 60 s) and the local files. `charges` takes `limit` and `days`; with `days` it also totals succeeded payments per currency.
+- `POST /api/payments/plan` takes `{project, product_name, description?, prices[{amount (smallest unit), currency, interval?, nickname?}], success_url, webhook_url?, webhook_events?}` and returns a plan `{id, digest, mode, writable, refusal?, request, steps[{id, kind, title, detail, path, idempotency_key, needs}], warnings}`. It calls nobody and writes nothing.
+- `POST /api/payments/plan/execute` takes the plan back unchanged, needs `X-Lucid-Confirm: yes`, rebuilds the steps from `request` and refuses a changed digest (409). A key that is not a test key gets 403 `live mode writes are not supported in this version` before any request is made. The answer is `{plan_id, project, mode, status: complete|partial|failed, steps[{id, kind, title, status: created|failed|skipped, object_id?, url?, error?}], webhook_secret?, note?}`; the first failed step stops the run and the rest are `skipped`.
+- Writes are the allow-listed creates only: products, prices, payment links, webhook endpoints, each with an `Idempotency-Key` of `lucid-<plan id>-<step id>`. No refund, payout or transfer call exists. `webhook_secret` appears in that one answer and nowhere else.
 
 **Prompt Studio** (`internal/prompts`, web module `studio`, AI section)
 - **Templates** have sections, each optional: `role`, `context`, `contract`, `task`, `constraints`, `verify`, `report`. The built-ins are versioned in `internal/prompts/templates/*.yaml`: builder, critic, scout, researcher, reviewer and braindump. The user's templates and snippets live in `<data dir>/prompts/templates/` and `<data dir>/prompts/snippets/`. A user template with a built-in's id overrides it in Studio. The council's three prompts are listed read-only as `council-propose`, `council-critique` and `council-synthesise`.

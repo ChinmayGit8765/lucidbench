@@ -20,11 +20,13 @@ braindump ─► Council ─► brief in Memory ─► card on a Board ─► Wo
 - **Cloud:** a read-only inventory of your Google Cloud Run services, Cloudflare Pages and Workers and Vercel projects (plus Azure and AWS sign-ins) through the CLIs you are already signed in to. Lucidbench stores no cloud credentials, and a project's card shows its live deploy status.
 - **Databases:** finds Postgres, MySQL, MariaDB, Redis and Mongo containers (running or stopped), keeps connection profiles with `env:` passwords, and reads them read-only: health, tables and columns, and a query box. An optional pgweb (or Adminer for MySQL) opens in a frame and stops when idle. See [Databases](docs/CONFIG.md#databases).
 - **Picture:** back-end schematics as Mermaid diagrams (with a live preview) and front-end design canvases in Excalidraw, saved in the project's own repo under `docs/picture` or in Memory. "From live state" draws a project's deploys, containers, databases and runners with no AI; "Draft from code" asks your own CLI for a diagram from the file tree and README. See [Picture](docs/CONFIG.md#picture).
-- **Not yet:** Payments and Live browser are visible as "soon" extensions.
+- **Payments:** a Stripe extension. It reads your account (mode, balance, recent payments, products and prices, payment links, webhooks) in test or live mode, and "Set up payments for a project" turns a short form into a reviewable plan and creates products, prices, a payment link and an optional webhook endpoint in **test mode only**. See [Payments](docs/CONFIG.md#payments-stripe).
+- **Not yet:** Live browser is visible as a "soon" extension.
 
 **Safety in this beta:**
 - Work agents run as you on your machine. They are told to stay in their worktree, but this is not sandboxed yet.
 - Agents can spend real money on your subscriptions or API keys, and every run shows its cost.
+- Payments never moves money. It cannot refund, pay out or transfer in any mode, and it creates things only with a test-mode key: with a live key every write is refused. A webhook signing secret is shown once and never stored. Use a restricted key.
 - The Windows installer is not code-signed yet, so SmartScreen will warn on first run: choose *More info → Run anyway*.
 
 ## Quick start
