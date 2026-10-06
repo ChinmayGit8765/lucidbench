@@ -5,7 +5,8 @@
 //
 //   - claude: in Work (stream-json) it writes a file and commits it in its
 //     working directory; in the council it answers with a brief, or with an
-//     "ok" critique when the council-critique prompt is in its input.
+//     "ok" critique when the council-critique prompt is in its input; asked
+//     for a section (Settings › Sections), it answers with one.
 //   - codex, grok: critics; they always answer "ok".
 //   - gh: `pr create` prints a PR URL; `pr view` reports the state written
 //     in $LUCID_E2E_STATE/pr-state (OPEN unless a test wrote MERGED).
@@ -101,6 +102,12 @@ One command prints, for every project in the folder, whether its own build or te
 - Which folder holds the projects?
 `
 
+// section is what "Describe a section" gets back: the briefs waiting for
+// approval, as a list.
+const section = `{"id": "briefs-waiting", "title": "Briefs waiting for me", "description": "Council briefs to approve, newest first.",
+ "source": {"api": "/api/council/sessions"}, "view": "list", "filter": [{"field": "status", "op": "eq", "value": "draft"}],
+ "sort": {"field": "updated", "desc": true}, "fields": [{"path": "title"}, {"path": "project", "format": "badge"}, {"path": "updated", "format": "relative"}]}`
+
 // claude answers the council (no tools, one JSON result) or does Work's
 // edit-and-commit run (stream-json).
 func claude(args []string) int {
@@ -116,8 +123,11 @@ func claude(args []string) int {
 		}
 	}
 	answer := brief
-	if strings.Contains(text, "council-critique") {
+	switch {
+	case strings.Contains(text, "council-critique"):
 		answer = okCritique
+	case strings.Contains(text, "You design one dashboard section"):
+		answer = section
 	}
 	out(m{"type": "result", "is_error": false, "result": answer, "total_cost_usd": 0.02,
 		"usage": m{"input_tokens": 100, "output_tokens": 50}, "modelUsage": m{"claude-fake": m{}}})
