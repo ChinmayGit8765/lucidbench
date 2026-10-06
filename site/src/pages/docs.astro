@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import { REPO, DOCS } from '../lib/site';
+
+const docs = [
+  { href: `${DOCS}/CONFIG.md`, t: 'Configuration', d: 'config.yaml, environment variables, board connectors, databases, Picture, Payments, Live browser, Runners & CI and projects.yaml.' },
+  { href: `${DOCS}/EXTENDING.md`, t: 'Extending Lucidbench', d: 'How a module is one file, core modules versus extensions, themes and the end-to-end test harness.' },
+  { href: `${DOCS}/TEAM-SPEC.md`, t: 'AI-team spec', d: 'The lucid-team.yaml format: the model, profile, MCP servers, commands and budget of each role.' },
+  { href: `${DOCS}/BETA-CONTRACTS.md`, t: 'Beta contracts', d: 'The interfaces the beta modules (Council, Memory, Boards, Work, Usage) build against, for contributors.' },
+  { href: `${DOCS}/STACK.md`, t: 'Stack decision', d: 'The use case, the criteria and the scored options behind the stack.' },
+];
+---
+
+<Base title="Docs" current="docs" description="Where to find the Lucidbench documentation.">
+  <section>
+    <div class="wrap prose">
+      <h1>Docs</h1>
+      <p class="lede">The documentation lives in the repository next to the code, so it changes with it. These links open the current version on GitHub.</p>
+      <ul class="doclist">
+        <li><a href={`${REPO}#readme`}>README</a><br /><span class="small">Overview, quick start, accounts, the local cluster, Runners &amp; CI, the web UI and the desktop app.</span></li>
+        {docs.map((d) => (<li><a href={d.href}>{d.t}</a><br /><span class="small">{d.d}</span></li>))}
+      </ul>
+
+      <h2>Quick start</h2>
+      <p>With Docker:</p>
+      <pre><code>docker compose up</code></pre>
+      <p>Then open <code>http://localhost:7420</code>. To work on it you need Go 1.26, Node 22 and Docker; the README has the development commands.</p>
+
+      <h2>Configuration in one paragraph</h2>
+      <p>Everything specific to you lives in your own config directory or in <code>LUCID_*</code> environment variables, never in the repository. <code>lucid config init</code> writes a commented <code>config.yaml</code>, and <code>lucid config show</code> prints the effective values. Secrets are never stored in the file, only <code>env:NAME</code> references.</p>
+    </div>
+  </section>
+</Base>

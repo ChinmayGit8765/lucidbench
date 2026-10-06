@@ -34,6 +34,23 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # The static website. Built and link-checked here; never deployed from CI.
+  site:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check-links
+
   # The UI end to end in headless Chromium, against a lucidd with a temporary
   # data dir and fake claude, codex, grok, gh and docker on its PATH.
   e2e:

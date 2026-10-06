@@ -1,0 +1,32 @@
+---
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { marked } from 'marked';
+import Base from '../layouts/Base.astro';
+import { REPO } from '../lib/site';
+
+// Rendered at build time from the repository's CHANGELOG.md.
+const src = readFileSync(resolve(process.cwd(), '..', 'CHANGELOG.md'), 'utf8').replace(/^# .*\n/, '');
+
+// Relative links in the changelog point at repo files: send them to GitHub.
+marked.use({
+  renderer: {
+    link({ href, title, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const abs = /^(https?:|mailto:|#)/.test(href) ? href : `${REPO}/blob/main/${href.replace(/^\.?\//, '')}`;
+      const t = title ? ` title="${title.replace(/"/g, '&quot;')}"` : '';
+      return `<a href="${abs}"${t}>${text}</a>`;
+    },
+  },
+});
+const html = marked.parse(src, { async: false }) as string;
+---
+
+<Base title="Changelog" current="changelog" description="What changed in each Lucidbench release.">
+  <section>
+    <div class="wrap prose changelog">
+      <h1>Changelog</h1>
+      <Fragment set:html={html} />
+    </div>
+  </section>
+</Base>
