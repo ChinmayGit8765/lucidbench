@@ -3,7 +3,7 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
-## 0.3.0-beta.1 (unreleased)
+## 0.3.0-beta.1 (2026-10-06)
 
 The first beta: the core loop works end to end.
 

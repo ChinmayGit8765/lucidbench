@@ -1,8 +1,27 @@
 # Lucidbench
 
-Lucidbench is an open-source, all-in-one AI workspace: your Claude, ChatGPT/Codex, Grok and Cursor accounts in one clear workspace, a cross-model council that lets models check each other, usage planning across all of them, Linear, GitHub and Obsidian integrations, and a Kubernetes job runner for agent work.
+Lucidbench is an open-source, all-in-one AI workspace for building things with the AI accounts you already pay for (Claude, ChatGPT/Codex, Grok and Cursor). It turns a messy idea into clear, reviewed work and runs agents on it, from one desktop app.
 
-**Status: pre-alpha, M0 (containerised foundation).** Works today: account detection across Claude, Codex, Grok and Cursor (several accounts per provider), running a prompt through your own logged-in CLI inside a container, a local Kubernetes cluster with jobs, and a web UI for all of it. The council arrives in M1.
+**Status: beta (0.3.0-beta.1).** Expect rough edges. Report them in [issues](https://github.com/ChinmayGit8765/lucidbench/issues).
+
+### The core loop
+
+```
+braindump ─► Council ─► brief in Memory ─► card on a Board ─► Work session ─► draft PR ─► CI ─► Overview
+```
+
+- **Council:** one model drafts a brief from your braindump, two others critique it in parallel, and the draft is revised for up to two rounds. You approve the result, and approving puts a card on your board.
+- **Memory:** a Notion-style editor over a plain Markdown vault that Obsidian can open (page tree, `[[wikilinks]]`, backlinks, search). Pages marked `confidential: true` are never sent to a provider.
+- **Boards:** native kanban boards stored as Markdown in Memory (Obsidian Kanban format).
+- **Work:** runs Claude Code, Codex or Grok on a card in its own git worktree, using your own logins. The steps read like a conversation, with the diff inline, the raw log one click away, and Stop that really stops. When you confirm, it opens a **draft** PR. Merging is always your call.
+- **Usage:** token use from your local Claude Code and Codex logs, Codex rate-limit windows, and what Lucidbench's own runs cost.
+- **Also here:** account detection (several accounts per provider), the MCP access matrix, a projects map, Runners & CI for self-hosted GitHub Actions runners, Containers, Kubernetes (local kind), themes you can describe in words, and a Windows desktop app.
+- **Not yet:** Cloud, Databases, Payments, Picture, Live browser, and the Linear/Trello board connectors are visible as "soon" extensions.
+
+**Safety in this beta:**
+- Work agents run as you on your machine. They are told to stay in their worktree, but this is not sandboxed yet.
+- Agents can spend real money on your subscriptions or API keys, and every run shows its cost.
+- The Windows installer is not code-signed yet, so SmartScreen will warn on first run: choose *More info → Run anyway*.
 
 ## Quick start
 
@@ -154,9 +173,9 @@ If neither works, the splash screen shows the error with a Retry button. The win
 
 ## Roadmap
 
-- **M0**: containerised foundation (daemon, CLI, web shell, Docker, CI)
-- **M1**: accounts, council and clarity
-- **M2**: usage planner
+- **M0** (done): containerised foundation (daemon, CLI, web shell, Docker, CI)
+- **M1** (beta): accounts, council, memory, boards, work sessions
+- **M2**: usage planner (a minimal Usage page ships in the beta)
 - **M3**: boards and integrations
 - **M4**: Kubernetes runner and acting agents
 - **M5**: conversational terminal
