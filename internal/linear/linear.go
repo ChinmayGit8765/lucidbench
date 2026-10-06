@@ -292,11 +292,18 @@ func (s *Service) Meta(ctx context.Context) (*Meta, error) {
 	var d struct {
 		Viewer Person `json:"viewer"`
 		Teams  nodes[struct {
-			ID          string       `json:"id"`
-			Key         string       `json:"key"`
-			Name        string       `json:"name"`
-			ActiveCycle *Cycle       `json:"activeCycle"`
-			States      nodes[State] `json:"states"`
+			ID          string `json:"id"`
+			Key         string `json:"key"`
+			Name        string `json:"name"`
+			ActiveCycle *struct {
+				ID       string  `json:"id"`
+				Number   int     `json:"number"`
+				Name     string  `json:"name"`
+				StartsAt string  `json:"startsAt"`
+				EndsAt   string  `json:"endsAt"`
+				Progress float64 `json:"progress"`
+			} `json:"activeCycle"`
+			States nodes[State] `json:"states"`
 		}] `json:"teams"`
 		Projects nodes[struct {
 			ID    string                     `json:"id"`
@@ -314,7 +321,11 @@ func (s *Service) Meta(ctx context.Context) (*Meta, error) {
 		if states == nil {
 			states = []State{}
 		}
-		m.Teams = append(m.Teams, Team{ID: t.ID, Key: t.Key, Name: t.Name, States: states, ActiveCycle: t.ActiveCycle})
+		team := Team{ID: t.ID, Key: t.Key, Name: t.Name, States: states}
+		if c := t.ActiveCycle; c != nil {
+			team.ActiveCycle = &Cycle{ID: c.ID, Number: c.Number, Name: c.Name, StartsAt: c.StartsAt, EndsAt: c.EndsAt, Progress: c.Progress}
+		}
+		m.Teams = append(m.Teams, team)
 	}
 	for _, p := range d.Projects.Nodes {
 		ids := []string{}

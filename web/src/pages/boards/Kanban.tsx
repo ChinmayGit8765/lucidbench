@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { CalendarDays, Check, ChevronLeft, FileText, PenLine, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
+import { CalendarDays, Check, ChevronLeft, FileText, LayoutList, PenLine, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader, RefreshButton } from "@/components/Shell"
@@ -440,7 +440,7 @@ function CardFace({ card, onToggle, overlay }: { card: CardT; onToggle?: () => v
         </button>
         <span className={cn("min-w-0 flex-1 leading-snug", card.done && "text-subtle-foreground line-through")}>{card.title}</span>
       </div>
-      {(card.project || card.due || card.memory || card.council || card.work) && (
+      {(card.project || card.due || card.memory || card.council || card.work || card.linear || card.trello) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-6 text-2xs text-muted-foreground">
           {card.project && <span className="rounded border bg-background/60 px-1.5 py-px font-mono">{card.project}</span>}
           {card.due && (
@@ -468,6 +468,16 @@ function CardFace({ card, onToggle, overlay }: { card: CardT; onToggle?: () => v
           {card.work && (
             <span title="Work session" className="flex items-center">
               <SquareTerminal className="size-3" />
+            </span>
+          )}
+          {card.linear && (
+            <span title="Linked Linear issue" className="rounded border bg-background/60 px-1.5 py-px font-mono">
+              {card.linear}
+            </span>
+          )}
+          {card.trello && (
+            <span title="Linked Trello card" className="flex items-center">
+              <LayoutList className="size-3" />
             </span>
           )}
         </div>

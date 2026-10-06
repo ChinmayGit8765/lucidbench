@@ -170,7 +170,7 @@ func TestMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Viewer.Name != "Sam" || len(m.Teams) != 1 || m.Teams[0].ActiveCycle.Number != 7 || m.Teams[0].States[0].Name != "Todo" || m.Projects[0].TeamIDs[0] != "t1" {
+	if m.Viewer.Name != "Sam" || len(m.Teams) != 1 || m.Teams[0].ActiveCycle.Number != 7 || m.Teams[0].ActiveCycle.StartsAt != "2026-10-01" || m.Teams[0].ActiveCycle.EndsAt != "2026-10-15" || m.Teams[0].ActiveCycle.Progress != 0.4 || m.Teams[0].States[0].Name != "Todo" || m.Projects[0].TeamIDs[0] != "t1" {
 		t.Errorf("meta = %+v", m)
 	}
 }

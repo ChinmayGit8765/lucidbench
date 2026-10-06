@@ -99,10 +99,12 @@ func (v *Vault) Backlinks(path string) ([]string, error)  // [[wikilinks]]
   - each `## Column` heading is a column;
   - each `- [ ] card` line is a card. This is the Obsidian Kanban plugin format.
 - **Card metadata** sits on the indented lines under each card as `key:: value` pairs (Dataview
-  style): `id`, `project`, `memory` (page path), `council`, `work`, `due`, `labels`.
+  style): `id`, `project`, `memory` (page path), `council`, `work`, `due`, `labels`, and the remote
+  links `linear` (issue identifier), `linear_url`, `trello` (card id) and `trello_url`. The remote owns the
+  item; the extensions (Linear, Trello) only write these four keys and never sync back.
 
 ```go
-type Card  struct { ID, Title, Column, Project, Memory, Council, Work, Due string; Labels []string; Done bool }
+type Card  struct { ID, Title, Column, Project, Memory, Council, Work, Due string; Labels []string; Done bool; Linear, LinearURL, Trello, TrelloURL string }
 type Board struct { ID, Title string; Columns []string; Cards []Card }
 func List(v *memory.Vault) ([]BoardSummary, error)
 func Get(v *memory.Vault, id string) (*Board, error)

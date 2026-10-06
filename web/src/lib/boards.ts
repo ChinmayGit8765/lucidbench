@@ -15,6 +15,11 @@ export interface Card {
   due?: string
   labels?: string[]
   done: boolean
+  /** The linked Linear issue (identifier and URL) and Trello card (id and URL). The remote owns them. */
+  linear?: string
+  linear_url?: string
+  trello?: string
+  trello_url?: string
 }
 
 export interface Board {
