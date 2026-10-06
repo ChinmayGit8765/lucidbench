@@ -1,0 +1,46 @@
+id: site
+name: Site
+blurb: A website that shows something, such as a portfolio, a landing page or docs.
+order: 7
+types: [site]
+questions:
+  - id: purpose
+    text: What is the site for?
+    type: choice
+    options: [portfolio, landing-page, docs, blog]
+  - id: build
+    text: How is it made?
+    type: choice
+    options: [plain-html, static-generator, web-framework]
+  - id: forms
+    text: Does it collect anything from visitors, such as a form or email list?
+    type: bool
+  - id: domain
+    text: Does it have its own domain?
+    type: bool
+  - id: audience
+    text: Who needs to find it?
+    type: choice
+    options: [a-few-people, search-visitors, customers-or-employers]
+rules:
+  - criteria:
+      - "Every page loads, every link works and nothing is missing on a phone — proof: a link check and a screenshot at phone width"
+  - when: {build: [static-generator, web-framework]}
+    commands: [npm test]
+    criteria:
+      - "The production build succeeds with no errors — proof: the build output"
+  - when: {forms: "true"}
+    criteria:
+      - "A submission arrives, and the visitor is told what happens to their details — proof: a test submission and the privacy note"
+    risk:
+      level: medium
+      reason: Collecting details from visitors brings privacy duties and spam
+  - when: {domain: "true"}
+    criteria:
+      - "The domain serves over HTTPS and the www and bare forms agree — proof: a request to each"
+  - when: {audience: [search-visitors, customers-or-employers]}
+    criteria:
+      - "Titles, descriptions and a share preview are set on each page — proof: the page source or a preview check"
+    risk:
+      level: medium
+      reason: It is the first thing people judge you by

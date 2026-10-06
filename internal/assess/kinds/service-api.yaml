@@ -1,0 +1,76 @@
+id: service-api
+name: Service or API
+blurb: A server other programs call, running somewhere all the time.
+order: 5
+types: [service]
+questions:
+  - id: language
+    text: What is it written in?
+    type: choice
+    options: [go, node, python, rust, other]
+  - id: callers
+    text: Who calls it?
+    type: choice
+    options: [just-me, my-other-services, outside-customers]
+  - id: store
+    text: Does it own a database or other state?
+    type: bool
+  - id: auth
+    text: Does it check who is calling?
+    type: bool
+  - id: uptime
+    text: What happens if it is down for an hour?
+    type: choice
+    options: [nothing, someone-is-annoyed, money-is-lost]
+  - id: deploy
+    text: Where does it run?
+    type: choice
+    options: [my-machine, one-server, managed-cloud]
+rules:
+  - when: {language: go}
+    commands: [go test, go vet, gofmt]
+    criteria:
+      - "The tests, go vet and gofmt are clean — proof: go test, go vet and gofmt output"
+  - when: {language: node}
+    commands: [npm test]
+    criteria:
+      - "The tests pass — proof: npm test output"
+  - when: {language: python}
+    commands: [pytest]
+    criteria:
+      - "The tests pass — proof: pytest output"
+  - when: {language: rust}
+    commands: [cargo test, cargo clippy]
+    criteria:
+      - "The tests and clippy are clean — proof: cargo test and cargo clippy output"
+  - when: {language: other}
+    criteria:
+      - "The tests pass — proof: <the project's test command> and its exit code (fill in the command)"
+  - criteria:
+      - "A health endpoint answers, and every endpoint returns a clear error for bad input — proof: a request per endpoint, such as with curl"
+  - when: {store: "true"}
+    criteria:
+      - "A schema change can be applied and reversed on a copy of the data — proof: the migration up and down output"
+    risk:
+      level: medium
+      reason: A bad migration can lose data
+  - when: {auth: "false"}
+    risk:
+      level: medium
+      reason: Anyone who can reach it can use it
+  - when: {callers: outside-customers}
+    criteria:
+      - "A breaking change to the API is caught before release — proof: a contract test or a versioned route"
+    risk:
+      level: high
+      reason: Outside callers cannot be told to upgrade in step with you
+  - when: {uptime: money-is-lost}
+    criteria:
+      - "A failed deploy can be rolled back in minutes — proof: a rollback rehearsed on a staging copy"
+    risk:
+      level: high
+      reason: Downtime costs money
+  - when: {deploy: my-machine}
+    risk:
+      level: medium
+      reason: It stops when the machine does

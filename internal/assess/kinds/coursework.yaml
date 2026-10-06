@@ -1,0 +1,58 @@
+id: coursework
+name: Coursework
+blurb: Work for a course or a team under someone else's rules.
+order: 9
+types: []
+questions:
+  - id: kind
+    text: What is being assessed?
+    type: choice
+    options: [individual-assignment, team-project, thesis-or-report]
+  - id: rules
+    text: Are there process rules, such as branch names, commit format or review gates?
+    type: bool
+  - id: deadline
+    text: How soon is the deadline?
+    type: choice
+    options: [weeks-away, this-week, within-days]
+  - id: marks
+    text: Do the marks depend on tests or a demo?
+    type: choice
+    options: [neither, automated-tests, live-demo]
+  - id: integrity
+    text: Are there limits on outside help or AI tools?
+    type: bool
+  - id: brief
+    text: Where is the assignment brief?
+    type: text
+rules:
+  - criteria:
+      - "Every item in the assignment brief is ticked off against the work — proof: a checklist built from the brief"
+  - when: {rules: "true"}
+    criteria:
+      - "Branches, commits and pull requests follow the team's rules — proof: a look at the log and the PR against the rules document"
+    risk:
+      level: medium
+      reason: Breaking the process rules can cost marks even when the code works
+  - when: {marks: automated-tests}
+    criteria:
+      - "The provided tests pass on a clean checkout — proof: the test run output"
+  - when: {marks: live-demo}
+    criteria:
+      - "The demo runs start to finish on the demo machine — proof: a rehearsal on that machine the day before"
+    risk:
+      level: medium
+      reason: A demo has no second try
+  - when: {kind: team-project}
+    criteria:
+      - "Each person's part is merged and the shared branch builds — proof: the CI run on the final branch"
+  - when: {integrity: "true"}
+    criteria:
+      - "Help used is recorded the way the course asks — proof: the acknowledgement or log the course requires"
+    risk:
+      level: high
+      reason: A breach of academic integrity rules has serious consequences
+  - when: {deadline: [this-week, within-days]}
+    risk:
+      level: high
+      reason: The deadline is close, so cut scope rather than quality

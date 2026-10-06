@@ -1,0 +1,64 @@
+id: ml-research
+name: ML or research
+blurb: An experiment that trains models or tests an idea with data.
+order: 6
+types: [ml-research]
+questions:
+  - id: goal
+    text: What is the experiment for?
+    type: choice
+    options: [learn-something, beat-a-baseline, ship-a-model]
+  - id: data
+    text: Where does the data come from?
+    type: choice
+    options: [public-dataset, my-own-data, someone-elses-private-data]
+  - id: compute
+    text: What does a run need?
+    type: choice
+    options: [laptop, one-gpu, rented-cluster]
+  - id: reproducible
+    text: Can you rerun a result from a clean checkout?
+    type: bool
+  - id: baseline
+    text: Is there a baseline to compare against?
+    type: bool
+  - id: question
+    text: What is the question, in one sentence?
+    type: text
+rules:
+  - commands: [python, pytest]
+    criteria:
+      - "The question is answered in writing, with the numbers that answer it — proof: a short results note that links the run"
+  - when: {reproducible: "false"}
+    criteria:
+      - "A clean checkout reproduces the headline number — proof: seed, config and the command that reruns it"
+    risk:
+      level: medium
+      reason: A result that cannot be rerun cannot be trusted
+  - when: {baseline: "false"}
+    criteria:
+      - "A simple baseline is measured first — proof: the baseline score next to the model's"
+  - when: {data: someone-elses-private-data}
+    criteria:
+      - "The data stays where it is allowed to be, and none of it is in the repo — proof: a check of the ignore rules and the data's terms"
+    risk:
+      level: high
+      reason: The data is not yours to share, so a leak cannot be undone
+  - when: {data: my-own-data}
+    criteria:
+      - "Any personal data in the set is removed or covered by consent — proof: a note of what was removed"
+    risk:
+      level: medium
+      reason: Your own data may still contain other people's details
+  - when: {compute: [one-gpu, rented-cluster]}
+    criteria:
+      - "A run has a time or cost cap — proof: the cap in the run config"
+    risk:
+      level: medium
+      reason: Compute is billed by time and can overrun
+  - when: {goal: ship-a-model}
+    criteria:
+      - "The model is checked on data it never saw, including the cases that matter most — proof: an evaluation report"
+    risk:
+      level: high
+      reason: A shipped model fails in ways a test score hides
