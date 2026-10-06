@@ -306,6 +306,25 @@ func TestListMoveDeleteTrash(t *testing.T) {
 	if err := v.Delete("missing.md"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete missing = %v", err)
 	}
+	// Restore brings back the newest copy, once.
+	if err := v.Restore("A/moved.md"); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := v.Read("A/moved.md"); err != nil || !strings.Contains(p.Body, "again") {
+		t.Errorf("restored = %+v, %v", p, err)
+	}
+	if err := v.Restore("A/moved.md"); !errors.Is(err, ErrExists) {
+		t.Errorf("restore over a page = %v", err)
+	}
+	if err := v.Delete("A/moved.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Restore("../x.md"); !errors.Is(err, ErrBadPath) {
+		t.Errorf("restore outside = %v", err)
+	}
+	if err := v.Restore("never.md"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("restore unknown = %v", err)
+	}
 	// The trash is invisible to search and listings.
 	if hits, _ := v.Search("again", 10); len(hits) != 0 {
 		t.Errorf("search found trash: %+v", hits)

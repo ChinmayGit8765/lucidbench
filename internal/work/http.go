@@ -40,6 +40,7 @@ func fail(w http.ResponseWriter, err error) {
 //	GET  /api/work/sessions/{id}/raw      raw.log as text
 //	POST /api/work/sessions/{id}/stop     stop the agent
 //	POST /api/work/sessions/{id}/pr       push the branch and open a draft PR
+//	POST /api/work/sessions/{id}/pr/refresh  read the PR state from gh now
 //	POST /api/work/sessions/{id}/remove   remove the worktree {discard?}
 //
 // Every POST needs X-Lucid-Confirm.
@@ -120,6 +121,13 @@ func Register(mux *http.ServeMux, s *Service) {
 	}
 	action("stop", func(id string, _ *http.Request) (Session, error) { return s.Stop(id) })
 	action("pr", func(id string, _ *http.Request) (Session, error) { return s.OpenPR(id) })
+	// Reads the PR's state from gh now, instead of waiting for the minute.
+	action("pr/refresh", func(id string, _ *http.Request) (Session, error) {
+		if _, err := s.Get(id); err != nil {
+			return Session{}, err
+		}
+		return s.RefreshPR(id), nil
+	})
 	action("remove", func(id string, r *http.Request) (Session, error) {
 		var in struct {
 			Discard bool `json:"discard"`
