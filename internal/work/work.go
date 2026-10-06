@@ -130,9 +130,11 @@ type Session struct {
 	Answer  string           `json:"answer,omitempty"`
 	// AllowedCommands are the shell commands the agent may run without asking.
 	AllowedCommands []string `json:"allowed_commands,omitempty"`
-	Events          int      `json:"events"`
-	Diff            *Diff    `json:"diff,omitempty"`
-	PR              string   `json:"pr_url,omitempty"`
+	// Browser says the agent browser was attached to this session.
+	Browser bool   `json:"browser,omitempty"`
+	Events  int    `json:"events"`
+	Diff    *Diff  `json:"diff,omitempty"`
+	PR      string `json:"pr_url,omitempty"`
 	// PRState is draft, open, merged or closed as GitHub last said, "" when
 	// it is not known (no gh, or not asked yet); PRChecks counts the PR's
 	// status checks and PRChecked is when both were read.
@@ -160,6 +162,9 @@ type StartRequest struct {
 	// plain command prefixes such as "go" or "git status". Nil means the
 	// default (see DefaultAllowed); an empty list allows no command at all.
 	AllowedCommands []string `json:"allowed_commands,omitempty"`
+	// Browser attaches the agent browser (Live browser extension): the
+	// session's environment gets LUCID_BROWSER_CDP and its prompt a note.
+	Browser bool `json:"browser,omitempty"`
 }
 
 // Service runs and keeps the sessions.
@@ -175,6 +180,10 @@ type Service struct {
 	Home string
 	// PRView reads a PR's state and checks; nil asks gh.
 	PRView func(dir, url string) (PRInfo, error)
+	// Browser starts the agent browser for a session that asks for one and
+	// returns its DevTools address and a release func, called when the
+	// session ends. nil means the extension is not available.
+	Browser func(ctx context.Context, session string) (cdp string, release func(), err error)
 
 	mu       sync.Mutex
 	loaded   bool
@@ -193,6 +202,7 @@ type entry struct {
 	done     chan struct{} // closed when the run has ended; nil when not running here
 	eventsF  *os.File
 	rawF     *os.File
+	release  func() // lets go of the agent browser when the run ends
 }
 
 // New returns a Service keeping its sessions in dir.
@@ -583,6 +593,26 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		return Session{}, err
 	}
 	id := newID()
+	var cdp string
+	var release func()
+	started := false
+	if req.Browser {
+		if s.Browser == nil {
+			return Session{}, errf(ErrBadRequest, "the Live browser extension is not available here")
+		}
+		// The first start may pull the image.
+		bctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		cdp, release, err = s.Browser(bctx, id)
+		cancel()
+		if err != nil {
+			return Session{}, errf(ErrBadRequest, "the agent browser did not start: %v", err)
+		}
+		defer func() {
+			if !started {
+				release()
+			}
+		}()
+	}
 	wt, err := createWorktree(t.project.LocalPath, id, slug(t.title))
 	if err != nil {
 		return Session{}, err
@@ -596,7 +626,11 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	if t.card != nil {
 		se.Card = t.card.ID
 	}
-	e := &entry{s: se, changed: make(chan struct{}), events: []agentexec.Event{}, done: make(chan struct{})}
+	if req.Browser {
+		se.Browser = true
+		se.Prompt += browserNote
+	}
+	e := &entry{s: se, changed: make(chan struct{}), events: []agentexec.Event{}, done: make(chan struct{}), release: release}
 	if err := s.save(&e.s); err != nil {
 		return Session{}, err
 	}
@@ -624,9 +658,22 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		Env:     agentTempEnv(wt.path),
 		OnEvent: func(ev agentexec.Event) { s.record(e, ev) },
 	}
+	if cdp != "" {
+		areq.Env = append(areq.Env, BrowserEnv+"="+cdp)
+	}
+	started = true
 	go s.run(ctx, e, areq)
 	return se, nil
 }
+
+// BrowserEnv is the environment variable that holds the attached agent
+// browser's DevTools address.
+const BrowserEnv = "LUCID_BROWSER_CDP"
+
+// browserNote closes the prompt of a session with the agent browser attached.
+const browserNote = "\n\n## Browser\n\nA headless Chromium is attached. Its DevTools (CDP) address is in the environment variable " + BrowserEnv +
+	"; you may drive it over CDP (for example with connectOverCDP). It is a separate browser with an empty profile: no logins, and it cannot see the user's own browser. " +
+	"To open a server on this machine in it, use host.docker.internal instead of localhost. Use it only for what the task needs.\n"
 
 // tmpDirName is the agent's scratch directory inside its worktree. There is no
 // OS sandbox yet, so pointing the temp variables here keeps the files a CLI
@@ -688,6 +735,9 @@ func (s *Service) record(e *entry, ev agentexec.Event) {
 // run runs the agent and settles the session.
 func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	defer close(e.done)
+	if e.release != nil {
+		defer e.release()
+	}
 	res, err := s.Runner.Run(ctx, req)
 	_ = os.RemoveAll(filepath.Join(req.Dir, tmpDirName))
 	diff, derr := summarise(req.Dir, e.s.BaseSHA)
@@ -764,6 +814,23 @@ func (s *Service) moveCard(board, cardID, column, work string, done bool) {
 		}
 		return
 	}
+}
+
+// AddEvent adds an event to a running session's timeline, such as a browser
+// screenshot. A session that is not running refuses it.
+func (s *Service) AddEvent(id string, ev agentexec.Event) error {
+	e, err := s.get(id)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	running := e.s.Status == StatusRunning && e.done != nil
+	e.mu.Unlock()
+	if !running {
+		return errf(ErrConflict, "the session is not running")
+	}
+	s.record(e, ev)
+	return nil
 }
 
 // Stop cancels a running session.
