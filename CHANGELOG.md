@@ -3,6 +3,38 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
+## Unreleased
+
+- **First-run setup:** a fresh install opens a calm six-step setup (also in Settings › General ›
+  Run setup again): which accounts are signed in and how to sign in to the rest; a new Memory
+  vault or the snippet for a folder you already have; your git repositories, found in a folder you
+  pick and appended to `projects.yaml` with a backup and a preview; a theme; power modes; and a
+  sample braindump for the council. Every step can be skipped, and `config.yaml` is never written.
+- **Quick-access launcher:** the sidebar mascot (or the logo) opens New braindump, Start work,
+  Add card, New prompt, Sleep everything idle and Switch theme. The mascot shows what the app is
+  doing: working, thinking or asleep.
+- **State sprites:** themes can set `art.sprites` for loading, working, thinking, success,
+  failure, sleeping, empty and celebrate. Every slot a theme leaves empty shows Lumi, a small
+  original placeholder bot drawn in the theme's colours. Settings › Appearance › Sprites shows the
+  slots and takes an upload per slot into the theme's folder (built-in themes are copied first).
+  A theme may now carry 32 art files.
+- **Feel:** cards and lists rise in, loading areas show the loading sprite, and a card reaching
+  Done or a merged PR gets a short celebration, once. Moving a card, trashing a Memory page and
+  removing an extension each offer Undo (`POST /api/memory/restore` brings a trashed page back).
+- **Keyboard:** `?` lists the shortcuts; `g o`, `g w`, `g b`, `g m`, `g c`, `g i` and `g s` go to
+  a page, `n` starts a braindump and `/` searches.
+- **Work:** Open PR says why it is off (no commits yet, uncommitted changes, still running), and
+  Check PR (`POST /api/work/sessions/{id}/pr/refresh`) asks GitHub now instead of within the minute.
+- **Overview** tiles and Needs attention fill in as each answers, and one broken tile no longer
+  blanks the page. The Projects empty state imports repositories from a folder.
+- Fixed: the Ideas entries in the command palette re-read every council session each time the
+  palette opened; they are now cached for a minute. Remaining "1 minutes"-style counts use the
+  plural helper.
+- **End-to-end tests:** a Playwright suite in `e2e/` drives the UI in headless Chromium against a
+  lucidd with a temporary data dir and fake claude, codex, grok, gh and docker, from braindump to
+  merged PR, plus setup, Memory, boards, themes, extensions, assessments and Studio. CI runs it on
+  every push and pull request.
+
 ## 0.3.0-beta.2 (2026-10-07)
 
 - **Picture extension:** back-end schematics and front-end design canvases next to your code.

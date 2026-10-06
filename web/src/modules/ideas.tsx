@@ -7,15 +7,29 @@ import { useApp } from "@/lib/app"
 import { IDEAS_PATH, STAGE_INFO, type IdeaSummary } from "@/lib/ideas"
 import type { ModuleDef } from "@/modules/types"
 
+/**
+ * The ideas the palette lists. Deriving them reads every council session on
+ * the daemon, so one answer serves every palette opening for a minute.
+ */
+let cache: { at: number; list: IdeaSummary[] } | null = null
+const CACHE_MS = 60_000
+
 /** Every idea, once the user types: jump straight to its page. */
 function useIdeaCommands(paletteOpen: boolean): Command[] {
   const { open } = useApp()
-  const [list, setList] = useState<IdeaSummary[]>([])
+  const [list, setList] = useState<IdeaSummary[]>(() => cache?.list ?? [])
   useEffect(() => {
     if (!paletteOpen) return
+    if (cache && Date.now() - cache.at < CACHE_MS) {
+      setList(cache.list)
+      return
+    }
     let cancelled = false
     getJSON<IdeaSummary[]>(IDEAS_PATH)
-      .then((l) => !cancelled && setList(l))
+      .then((l) => {
+        cache = { at: Date.now(), list: l }
+        if (!cancelled) setList(l)
+      })
       .catch(() => undefined)
     return () => {
       cancelled = true

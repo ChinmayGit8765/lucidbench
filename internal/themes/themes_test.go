@@ -334,3 +334,53 @@ func TestHTTP(t *testing.T) {
 		t.Errorf("unknown field = %d", rec.Code)
 	}
 }
+
+func TestStateSprites(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	b := bundle("ember")
+	b.Theme.Art.Sprites = map[string]string{"working": "busy.svg", "celebrate": "party.gif"}
+	b.Assets["busy.svg"] = `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><circle r="3" onclick="x()"/></svg>`
+	b.Assets["party.gif"] = base64.StdEncoding.EncodeToString([]byte("GIF89a\x01\x00"))
+	if _, err := s.Save(b); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("ember")
+	if err != nil || got.Art.Sprites["working"] != "busy.svg" || got.Art.Sprites["celebrate"] != "party.gif" {
+		t.Fatalf("saved sprites = %+v, %v", got.Art, err)
+	}
+	svg, _ := os.ReadFile(filepath.Join(s.Dir, "ember", "busy.svg"))
+	if strings.Contains(string(svg), "script") || strings.Contains(string(svg), "onclick") {
+		t.Errorf("sprite svg not sanitised: %s", svg)
+	}
+	ex, _ := s.Export("ember")
+	if _, ok := ex.Assets["party.gif"]; !ok {
+		t.Errorf("export lost a sprite: %v", ex.Assets)
+	}
+
+	for _, bad := range []map[string]string{
+		{"dancing": "busy.svg"},           // not a slot
+		{"working": ""},                   // no file
+		{"working": "../busy.svg"},        // not a plain file name
+		{"working": "busy.html"},          // not an image
+		{"working": "missing-sprite.png"}, // neither uploaded nor saved
+	} {
+		b := bundle("ember")
+		b.Theme.Art.Sprites = bad
+		if _, err := s.Save(b); err == nil {
+			t.Errorf("accepted sprites %v", bad)
+		}
+	}
+
+	// Clean keeps good slots and drops unknown slots and missing files.
+	th := sample("x")
+	th.Art.Sprites = map[string]string{"loading": "orb.svg", "nope": "orb.svg", "empty": "gone.svg"}
+	dropped := th.Clean(map[string]bool{"orb.svg": true, "banner.svg": true})
+	if len(th.Art.Sprites) != 1 || th.Art.Sprites["loading"] != "orb.svg" || len(dropped) != 2 {
+		t.Errorf("clean = %v, dropped %v", th.Art.Sprites, dropped)
+	}
+
+	// Every state sprite plus a full board fits under the asset cap.
+	if n := 3 + 12 + len(SpriteSlots); n > MaxAssets {
+		t.Errorf("a full theme needs %d assets, cap is %d", n, MaxAssets)
+	}
+}

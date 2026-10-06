@@ -15,6 +15,7 @@ import {
 
 import { CopyCommand, copyText } from "@/components/CopyCommand"
 import { RunBars, RunIcon, RunnerDot } from "@/components/ci"
+import { StateSprite } from "@/components/StateSprite"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -120,7 +121,18 @@ function SummaryStrip({ s, runs, now }: { s: CISummary | null; runs: CIRun[]; no
       )}
       <Cell
         label="Failing"
-        value={failingList.length}
+        value={
+          <span className="flex items-center gap-2">
+            {failingList.length}
+            {runs.length > 0 && (
+              <StateSprite
+                state={failingList.length ? "failure" : "success"}
+                className="-my-2 size-9"
+                label={failingList.length ? "Some runs are failing" : "All green"}
+              />
+            )}
+          </span>
+        }
         sub={
           failingList.length
             ? `${failingRepoCount === 1 ? shortRepo(failingList[0].repo) : `${failingRepoCount} repos`} · re-run below`

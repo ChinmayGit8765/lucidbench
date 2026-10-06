@@ -35,7 +35,7 @@ import {
   type NewConnection,
   type SavedDb,
 } from "@/lib/databases"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
 
 const field =
@@ -445,7 +445,7 @@ function ManagerPanel({ s, status, onChanged }: { s: SavedDb; status: ManagerSta
             {status.name} <span className="font-normal text-muted-foreground">for {displayName(s)}</span>
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            Runs in a container on 127.0.0.1 and stops by itself after {status.idle_minutes ?? 10} minutes without this page.
+            Runs in a container on 127.0.0.1 and stops by itself after {plural(status.idle_minutes ?? 10, "minute")} without this page.
           </div>
         </div>
         <Button variant="ghost" size="sm" asChild>

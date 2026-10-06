@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronRight, Monitor, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Sun, type LucideIcon } from "lucide-react"
 
+import { Launcher, SidebarMascot } from "@/components/Launcher"
 import { Wordmark } from "@/components/Logo"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -93,10 +94,9 @@ function NavItem({ m, active, rail }: { m: ModuleDef; active: boolean; rail: boo
 
 /** The sidebar, generated from the module registry and the user's prefs. */
 export function Sidebar({ current, version }: { current?: string; version?: string }) {
-  const { prefs, active, inlineAssets } = usePrefs()
+  const { prefs } = usePrefs()
   const { rail, wide, toggle } = useSidebar()
   const { main, bottom } = sidebarGroups(prefs)
-  const mascot = active?.art?.sidebarMascot
   return (
     <aside
       className={cn(
@@ -105,7 +105,9 @@ export function Sidebar({ current, version }: { current?: string; version?: stri
       )}
     >
       <div className={cn("flex h-14 items-center", rail ? "justify-center" : "px-1.5")}>
-        <Wordmark collapsed={rail} />
+        <Launcher label="Quick actions" placement="down">
+          <Wordmark collapsed={rail} />
+        </Launcher>
       </div>
 
       <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -126,15 +128,7 @@ export function Sidebar({ current, version }: { current?: string; version?: stri
         </div>
       </nav>
 
-      {mascot && active && !rail && (
-        <div className="pointer-events-none flex justify-center pb-1 pt-3">
-          <img
-            src={assetURL(active, mascot, inlineAssets(active))}
-            alt=""
-            className="theme-art size-14 object-contain opacity-90 drop-shadow-[0_4px_16px_var(--brand-soft)]"
-          />
-        </div>
-      )}
+      {!rail && <SidebarMascot />}
 
       <div className={cn("flex items-center border-t py-3", rail ? "justify-center" : "justify-between px-1")}>
         {!rail && version && <span className="font-mono text-2xs text-subtle-foreground">lucidd {version}</span>}

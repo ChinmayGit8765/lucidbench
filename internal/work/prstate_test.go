@@ -154,6 +154,35 @@ func TestPollPRsSkipsFreshAndMerged(t *testing.T) {
 	}
 }
 
+func TestRefreshPRRoute(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	se, _, _ := startCardSession(t, f)
+	if _, err := f.svc.OpenPR(se.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.PRView = func(string, string) (PRInfo, error) { return PRInfo{State: PRMerged}, nil }
+	mux := http.NewServeMux()
+	Register(mux, f.svc)
+	for _, c := range []struct {
+		id      string
+		confirm bool
+		want    int
+	}{{se.ID, false, http.StatusForbidden}, {"nope", true, http.StatusNotFound}, {se.ID, true, http.StatusOK}} {
+		req := httptest.NewRequest(http.MethodPost, "/api/work/sessions/"+c.id+"/pr/refresh", nil)
+		if c.confirm {
+			req.Header.Set("X-Lucid-Confirm", "yes")
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("%s confirm=%v: %d %s", c.id, c.confirm, rec.Code, rec.Body)
+		}
+	}
+	if got := f.svc.mustGet(se.ID); got.PRState != PRMerged || !got.CardDone {
+		t.Errorf("after refresh: %+v", got)
+	}
+}
+
 func TestSummaryIsSmall(t *testing.T) {
 	big := strings.Repeat("x", 20<<10)
 	se := Session{

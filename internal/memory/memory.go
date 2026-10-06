@@ -448,6 +448,66 @@ func (v *Vault) Delete(p string) error {
 	return os.Rename(abs, dst)
 }
 
+// trashStampRE matches the suffix Delete adds to a name already in the trash.
+var trashStampRE = regexp.MustCompile(`^-\d{8}T\d{6}\.\d{9}$`)
+
+// Restore moves the most recently trashed copy of p back to p: the one with
+// the newest timestamp suffix, else the one with the plain name. It answers
+// ErrExists when something is at p again, and ErrNotFound when the trash has
+// no copy.
+func (v *Vault) Restore(p string) error {
+	c, abs, err := v.resolve(p)
+	if err != nil {
+		return err
+	}
+	if c == "" {
+		return fmt.Errorf("%w: cannot restore the vault root", ErrBadPath)
+	}
+	if _, err := os.Lstat(abs); err == nil {
+		return fmt.Errorf("%w: %q", ErrExists, p)
+	}
+	in := filepath.Join(v.root, TrashDir, filepath.FromSlash(path.Dir(c)))
+	base := path.Base(c)
+	ext := path.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	ents, err := os.ReadDir(in)
+	if err != nil {
+		return mapErr(err)
+	}
+	best, bestStamp := "", ""
+	for _, e := range ents {
+		n := e.Name()
+		if n == base {
+			if best == "" {
+				best = n
+			}
+			continue
+		}
+		if !strings.HasPrefix(n, stem) || !strings.HasSuffix(n, ext) {
+			continue
+		}
+		stamp := strings.TrimSuffix(strings.TrimPrefix(n, stem), ext)
+		if trashStampRE.MatchString(stamp) && stamp > bestStamp {
+			best, bestStamp = n, stamp
+		}
+	}
+	if best == "" {
+		return fmt.Errorf("%w: %q is not in the trash", ErrNotFound, p)
+	}
+	src := filepath.Join(in, best)
+	fi, err := os.Lstat(src)
+	if err != nil {
+		return mapErr(err)
+	}
+	if !fi.Mode().IsRegular() && !fi.IsDir() {
+		return fmt.Errorf("%w: %q in the trash is a link or special file", ErrBadPath, p)
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(src, abs)
+}
+
 // walk calls fn for every visible Markdown page, in path order. Hidden
 // folders and symlinks are skipped.
 func (v *Vault) walk(fn func(rel string, abs string) error) error {

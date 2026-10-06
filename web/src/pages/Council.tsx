@@ -28,6 +28,7 @@ import { toast } from "sonner"
 
 import { ProviderMark, ProviderTile, providerInfo, tintVar } from "@/components/ProviderMark"
 import { PageHeader, RefreshButton } from "@/components/Shell"
+import { StateSprite } from "@/components/StateSprite"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -634,6 +635,7 @@ function StageStrip({ s }: { s: CouncilSession }) {
           })}
         </ol>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {s.status === "running" && <StateSprite state="thinking" className="-my-2 size-9" />}
           {s.status === "running" && thinking.length > 0 && (
             <span className="flex items-center gap-1.5">
               <ProviderStack providers={thinking} />

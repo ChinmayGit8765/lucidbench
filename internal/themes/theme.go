@@ -47,6 +47,32 @@ type Art struct {
 	SidebarMascot string   `json:"sidebarMascot,omitempty"`
 	EmptyState    string   `json:"emptyState,omitempty"`
 	SpriteBoard   []Sprite `json:"spriteBoard,omitempty"`
+	// Sprites are the state sprites, keyed by slot (see SpriteSlots): the
+	// art the UI shows while loading, working, thinking and so on.
+	Sprites map[string]string `json:"sprites,omitempty"`
+}
+
+// SpriteSlots are the state sprites a theme may set, in display order,
+// with where the UI shows each.
+var SpriteSlots = []struct{ Slot, Where string }{
+	{"loading", "loading placeholders"},
+	{"working", "a Work session running, and the mascot while one runs"},
+	{"thinking", "the Council deliberating"},
+	{"success", "a CI run that passed"},
+	{"failure", "a CI run that failed"},
+	{"sleeping", "infrastructure asleep after Sleep everything"},
+	{"empty", "empty boards and lists"},
+	{"celebrate", "a card reaching Done or a PR merged"},
+}
+
+// ValidSlot reports whether s is a state sprite slot.
+func ValidSlot(s string) bool {
+	for _, x := range SpriteSlots {
+		if x.Slot == s {
+			return true
+		}
+	}
+	return false
 }
 
 // Sprite is one tile of the Overview sprite board.
@@ -68,6 +94,11 @@ func (a *Art) Files() []string {
 	}
 	for _, s := range a.SpriteBoard {
 		out = append(out, s.File)
+	}
+	for _, x := range SpriteSlots {
+		if f := a.Sprites[x.Slot]; f != "" {
+			out = append(out, f)
+		}
 	}
 	return out
 }
@@ -225,6 +256,14 @@ func (t *Theme) Validate() error {
 		if len(t.Art.SpriteBoard) > 12 {
 			return fmt.Errorf("art.spriteBoard: at most 12 sprites")
 		}
+		for slot, f := range t.Art.Sprites {
+			if !ValidSlot(slot) {
+				return fmt.Errorf("art.sprites: %q is not a sprite slot (loading, working, thinking, success, failure, sleeping, empty, celebrate)", slot)
+			}
+			if f == "" {
+				return fmt.Errorf("art.sprites: %s: names no file", slot)
+			}
+		}
 		for _, f := range t.Art.Files() {
 			if !ValidFile(f) {
 				return fmt.Errorf("art: %q must be a lowercase file name ending in .svg, .png, .webp or .gif", f)
@@ -324,6 +363,17 @@ func (t *Theme) Clean(assets map[string]bool) []string {
 			}
 		}
 		a.SpriteBoard = sprites
+		for slot, f := range a.Sprites {
+			if !ValidSlot(slot) {
+				dropped = append(dropped, "sprite "+slot)
+				delete(a.Sprites, slot)
+			} else if keep(f) == "" {
+				delete(a.Sprites, slot)
+			}
+		}
+		if len(a.Sprites) == 0 {
+			a.Sprites = nil
+		}
 	}
 	if len(t.Description) > 200 || controlRE.MatchString(t.Description) {
 		t.Description = ""

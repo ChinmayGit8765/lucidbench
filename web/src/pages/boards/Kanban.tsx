@@ -20,6 +20,8 @@ import { toast } from "sonner"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { celebrate } from "@/components/Celebrate"
+import { StateSprite } from "@/components/StateSprite"
 import { ErrorState, Skeleton } from "@/components/ui/states"
 import { errorMessage, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
@@ -145,11 +147,32 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
     const index = list.indexOf(a)
     const before = poll.data ? orderOf(poll.data) : null
     if (before && startCol.current === col && before[col]?.indexOf(a) === index) return
+    const from = startCol.current
+    const fromIndex = from && before ? Math.max(0, before[from]?.indexOf(a) ?? 0) : 0
+    const card = cards.get(a)
     busy.current = true
     try {
+      // The new order is already on screen; the server catches up.
       const moved = await boardsApi.move(id, a, col, index)
       patchCard(moved)
+      if (from && from !== col) {
+        if (col === "Done") celebrate({ key: `card:${a}`, title: "Done!", detail: card?.title })
+        toast(`Moved to ${col}`, {
+          description: card?.title,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              void boardsApi
+                .move(id, a, from, fromIndex)
+                .then(patchCard)
+                .catch((e) => toast.error("Could not undo the move", { description: errorMessage(e) }))
+                .finally(reload),
+          },
+        })
+      }
     } catch (e) {
+      // Put it back where it was.
+      if (before) setOrder(before)
       toast.error("Could not move the card", { description: errorMessage(e) })
     } finally {
       busy.current = false
@@ -172,6 +195,7 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
     patchCard({ ...c, done: !c.done })
     try {
       patchCard(await boardsApi.update(id, c.id, { done: !c.done }))
+      if (!c.done) celebrate({ key: `card:${c.id}`, title: "Done!", detail: c.title })
     } catch (e) {
       patchCard(c)
       toast.error("Could not update the card", { description: errorMessage(e) })
@@ -226,9 +250,7 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
       />
       {total === 0 && board.id === DEFAULT_BOARD && (
         <Card className="flex flex-wrap items-center gap-3 border-dashed px-4 py-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-fg">
-            <Vote className="size-4" />
-          </span>
+          <StateSprite state="empty" className="size-12" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">Approve a brief in Council to get your first card</div>
             <div className="text-xs text-muted-foreground">An approved brief lands here in Ready, linked to its page in Memory. From the card, Start work hands it to an agent.</div>

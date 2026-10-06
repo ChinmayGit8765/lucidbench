@@ -1,10 +1,13 @@
 import { useEffect, useRef, type ReactNode } from "react"
-import { BookOpen, ExternalLink } from "lucide-react"
+import { BookOpen, ExternalLink, Sparkles } from "lucide-react"
 
 import { CopyCommand, copyText } from "@/components/CopyCommand"
 import { StatusPill } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
+import { useApp } from "@/lib/app"
+import { SETUP_ROUTE } from "@/lib/setup"
 import { cn } from "@/lib/utils"
 import { Section } from "@/pages/settings/controls"
 
@@ -95,6 +98,7 @@ function VaultSection({ dataDir, focus }: { dataDir?: string; focus: boolean }) 
 }
 
 export function General({ focus }: { focus?: string }) {
+  const { navigate } = useApp()
   const about = usePoll<About>("/api/about", 60000)
   const a = about.data
   return (
@@ -140,6 +144,18 @@ export function General({ focus }: { focus?: string }) {
       </Section>
 
       <VaultSection dataDir={a?.data_dir} focus={focus === "vault"} />
+
+      <Section
+        title="First-run setup"
+        description="Accounts, the Memory vault, your projects, a theme and power modes, one calm step at a time. It changes nothing until you confirm."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => navigate(SETUP_ROUTE)} data-testid="run-setup">
+            <Sparkles /> Run setup again
+          </Button>
+        }
+      >
+        {null}
+      </Section>
 
       <Section title="Documentation" description="How to configure Lucidbench and how to add a module of your own.">
         <ul className="border-t py-1">

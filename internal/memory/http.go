@@ -64,6 +64,7 @@ func Fail(w http.ResponseWriter, err error) {
 //	PUT    /api/memory/page?path=       write a page: {front, body, title}
 //	DELETE /api/memory/page?path=       move a page or folder to .trash/
 //	POST   /api/memory/move             {from, to}
+//	POST   /api/memory/restore          {path}: the newest trashed copy back to path (undo)
 //	GET    /api/memory/search?q=&limit= full-text hits
 //	GET    /api/memory/backlinks?path=  pages that link to a page
 //	GET    /api/memory/info             vault folder and page count
@@ -157,6 +158,25 @@ func Register(mux *http.ServeMux, open Opener) {
 				return
 			}
 			apiutil.WriteJSON(w, http.StatusOK, map[string]string{"path": in.To})
+		})
+	})
+	mux.HandleFunc("POST /api/memory/restore", func(w http.ResponseWriter, r *http.Request) {
+		if !apiutil.Confirmed(w, r) {
+			return
+		}
+		var in struct{ Path string }
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			http.Error(w, "invalid restore JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		with(w, func(v *Vault) {
+			if err := v.Restore(in.Path); err != nil {
+				Fail(w, err)
+				return
+			}
+			apiutil.WriteJSON(w, http.StatusOK, map[string]string{"path": in.Path})
 		})
 	})
 	mux.HandleFunc("GET /api/memory/search", func(w http.ResponseWriter, r *http.Request) {

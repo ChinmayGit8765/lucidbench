@@ -339,6 +339,89 @@ html[data-density="comfortable"] {
   animation: lb-pulse-ring 1.8s var(--ease-out-soft) infinite;
 }
 
+/*
+ * Lumi, the placeholder state sprite (components/StateSprite.tsx). Each
+ * state moves a little; reduced motion stops all of it (below).
+ */
+@keyframes lumi-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes lumi-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes lumi-look {
+  0%, 100% { transform: translateX(-1.5px); }
+  50% { transform: translateX(1.5px); }
+}
+@keyframes lumi-dot {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+@keyframes lumi-z {
+  0% { opacity: 0; transform: translate(0, 4px); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(4px, -6px); }
+}
+@keyframes lumi-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-14deg); }
+}
+@keyframes lumi-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.lumi .lumi-body { transform-box: view-box; transform-origin: 32px 40px; }
+.lumi-idle .lumi-body, .lumi-loading .lumi-body, .lumi-thinking .lumi-body { animation: lumi-bob 3.2s ease-in-out infinite; }
+.lumi-working .lumi-body { animation: lumi-bob 0.9s ease-in-out infinite; }
+.lumi-celebrate .lumi-body { animation: lumi-bob 0.7s ease-in-out infinite; }
+.lumi-sleeping .lumi-body { animation: lumi-bob 5s ease-in-out infinite; }
+.lumi .lumi-blink { transform-box: fill-box; transform-origin: center; animation: lumi-blink 4.5s infinite; }
+.lumi .lumi-look { animation: lumi-look 1.4s ease-in-out infinite; }
+.lumi .lumi-dot { animation: lumi-dot 1.2s ease-in-out infinite; }
+.lumi .lumi-dot-2 { animation-delay: 0.2s; }
+.lumi .lumi-dot-3 { animation-delay: 0.4s; }
+.lumi .lumi-z { animation: lumi-z 2.6s ease-out infinite; }
+.lumi .lumi-z-2 { animation-delay: 1.3s; }
+.lumi .lumi-arm-r, .lumi .lumi-tool { transform-box: view-box; transform-origin: 50px 34px; animation: lumi-wave 0.6s ease-in-out infinite; }
+.lumi .lumi-arm-l { transform-box: view-box; transform-origin: 14px 32px; animation: lumi-wave 0.7s ease-in-out infinite reverse; }
+.lumi .lumi-confetti { transform-box: view-box; transform-origin: 32px 20px; animation: lumi-pop 0.5s var(--ease-out-soft) both; }
+
+/* Lists and cards rise in, one after another (style="--i: n" sets the order). */
+@keyframes lb-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.lb-rise {
+  animation: lb-rise 0.36s var(--ease-out-soft) both;
+  animation-delay: calc(min(var(--i, 0), 12) * 35ms);
+}
+
+/* Celebrations: confetti that falls once, and a soft glow. */
+@keyframes lb-confetti-fall {
+  0% { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(var(--dx, 0), 105vh, 0) rotate(var(--spin, 540deg)); opacity: 0.9; }
+}
+.lb-confetti {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  animation: lb-confetti-fall var(--t, 2.4s) cubic-bezier(0.25, 0.6, 0.4, 1) var(--d, 0s) both;
+}
+@keyframes lb-glow {
+  0% { opacity: 0; transform: scale(0.85); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.15); }
+}
+.lb-glow {
+  background: radial-gradient(closest-side, var(--success-soft, var(--brand-soft)), transparent);
+  animation: lb-glow 1.6s var(--ease-out-soft) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

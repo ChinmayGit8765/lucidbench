@@ -18,6 +18,8 @@ export interface ThemeArt {
   sidebarMascot?: string
   emptyState?: string
   spriteBoard?: Sprite[]
+  /** State sprites by slot: loading, working, thinking, success, failure, sleeping, empty, celebrate. */
+  sprites?: Partial<Record<string, string>>
 }
 
 export interface Theme {
@@ -154,4 +156,4 @@ export function assetURL(theme: Theme, file: string, inline?: Record<string, str
 }
 
 export const hasArt = (t: Theme | undefined) =>
-  !!t?.art && !!(t.art.headerImage || t.art.sidebarMascot || t.art.emptyState || t.art.spriteBoard?.length)
+  !!t?.art && !!(t.art.headerImage || t.art.sidebarMascot || t.art.emptyState || t.art.spriteBoard?.length || Object.keys(t.art.sprites ?? {}).length)

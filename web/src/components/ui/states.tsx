@@ -1,9 +1,23 @@
 import type { ReactNode } from "react"
 import { AlertTriangle, RotateCw } from "lucide-react"
 
+import { StateSprite } from "@/components/StateSprite"
 import { useEmptyArt } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+/**
+ * A loading area with the theme's loading sprite (or Lumi) over a line of
+ * text, sized like the content it stands in for so nothing jumps.
+ */
+export function LoadingArt({ label = "Loading…", className }: { label?: string; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" className={cn("flex flex-col items-center justify-center gap-2 py-6 text-center", className)} data-testid="loading-art">
+      <StateSprite state="loading" className="size-14" />
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  )
+}
 
 /** A shimmering placeholder block. */
 export function Skeleton({ className }: { className?: string }) {

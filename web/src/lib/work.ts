@@ -117,6 +117,8 @@ export const sessionPath = (id: string) => `${sessionsPath}/${encodeURIComponent
 export const startSession = (req: StartRequest) => sendJSON<WorkSession>(sessionsPath, "POST", req)
 export const stopSession = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/stop`, "POST")
 export const openPR = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/pr`, "POST")
+/** Asks gh for the PR's state now instead of waiting for the next minute. */
+export const refreshPR = (id: string) => sendJSON<WorkSession>(`${sessionPath(id)}/pr/refresh`, "POST")
 export const removeWorktree = (id: string, discard: boolean) =>
   sendJSON<WorkSession>(`${sessionPath(id)}/remove`, "POST", { discard })
 

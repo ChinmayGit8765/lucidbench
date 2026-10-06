@@ -27,7 +27,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { celebrate } from "@/components/Celebrate"
 import { copyText } from "@/components/CopyCommand"
+import { StateSprite } from "@/components/StateSprite"
 import { ProviderTile, providerInfo } from "@/components/ProviderMark"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,6 +51,7 @@ import {
   formatElapsed,
   openPR,
   PR_INFO,
+  refreshPR,
   removeWorktree,
   SANDBOX_NOTICE,
   sessionPath,
@@ -250,6 +253,7 @@ export function SessionView({ id }: { id: string }) {
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             <div className="flex items-center gap-2">
+              {running && <StateSprite state="working" className="-my-3 size-10" label="The agent is working" />}
               <StatusPill tone={st.tone} pulse={running}>
                 {st.label}
               </StatusPill>
@@ -327,6 +331,30 @@ function Changes({
       return n
     })
   const noCommits = d.commits.length === 0
+  // Why Open PR is off, in words, shown next to the button.
+  const prBlocked = session.removed
+    ? "The worktree was removed"
+    : session.status === "running"
+      ? "Wait for the run to finish"
+      : noCommits
+        ? d.uncommitted.length > 0
+          ? `No commits yet: commit the ${plural(d.uncommitted.length, "uncommitted change")} first`
+          : "No commits yet: nothing to open a PR with"
+        : null
+  const [checking, setChecking] = useState(false)
+  const checkPR = async () => {
+    setChecking(true)
+    try {
+      const s = await refreshPR(session.id)
+      onChange(s)
+      if (s.pr_state === "merged") celebrate({ key: `pr:${s.id}`, title: "PR merged", detail: s.title || s.branch })
+      else toast(s.pr_state ? `The PR is ${PR_INFO[s.pr_state].label.toLowerCase()}` : "GitHub did not answer", { description: checksLabel(s.pr_checks) || undefined })
+    } catch (e) {
+      toast.error("Could not read the PR", { description: errorMessage(e) })
+    } finally {
+      setChecking(false)
+    }
+  }
   const base = session.base_ref.replace(/^origin\//, "")
   const [refreshing, setRefreshing] = useState(false)
   const refresh = async () => {
@@ -396,15 +424,29 @@ function Changes({
         </div>
         <div className="flex items-center gap-2">
           {session.pr_url ? (
-            <Button asChild variant="secondary" size="sm">
-              <a href={session.pr_url} target="_blank" rel="noreferrer">
-                <GitPullRequest className="text-success" /> View draft PR <ExternalLink />
-              </a>
-            </Button>
+            <>
+              {session.pr_state !== "merged" && (
+                <Button variant="ghost" size="sm" onClick={() => void checkPR()} disabled={checking} title="Ask GitHub for the PR's state now" data-testid="check-pr">
+                  <RefreshCw className={cn(checking && "animate-spin")} /> Check PR
+                </Button>
+              )}
+              <Button asChild variant="secondary" size="sm">
+                <a href={session.pr_url} target="_blank" rel="noreferrer">
+                  <GitPullRequest className="text-success" /> {session.pr_state === "merged" ? "View merged PR" : "View draft PR"} <ExternalLink />
+                </a>
+              </Button>
+            </>
           ) : (
-            <Button size="sm" onClick={pr} disabled={noCommits || session.removed || session.status === "running"} title={noCommits ? "The branch has no commits yet" : undefined}>
-              <GitPullRequest /> Open PR
-            </Button>
+            <>
+              {prBlocked && (
+                <span className="text-xs text-muted-foreground" data-testid="pr-blocked">
+                  {prBlocked}
+                </span>
+              )}
+              <Button size="sm" onClick={pr} disabled={!!prBlocked} title={prBlocked ?? "Push the branch and open a draft PR"} data-testid="open-pr">
+                <GitPullRequest /> Open PR
+              </Button>
+            </>
           )}
           {!session.removed && (
             <Button

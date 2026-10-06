@@ -10,6 +10,7 @@ import { useApp } from "@/lib/app"
 import { runHelloJob } from "@/lib/jobs"
 import { isAsleep, powerAction, sleepIdle, usePower, type PowerState } from "@/lib/power"
 import { relativeTime, useNow } from "@/lib/time"
+import { plural } from "@/lib/utils"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function useSystemCommands(paletteOpen: boolean): Command[] {
@@ -83,7 +84,7 @@ function useSystemCommands(paletteOpen: boolean): Command[] {
         label: `Start ${s.name}`,
         group: "Actions",
         icon: Layers,
-        hint: `stack · ${s.containers.length} containers`,
+        hint: `stack · ${plural(s.containers.length, "container")}`,
         keywords: "power stack compose start wake",
         run: () => void powerAction("stack", s.name, "start"),
       })

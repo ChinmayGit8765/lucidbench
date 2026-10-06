@@ -11,7 +11,7 @@ import type { PowerMode } from "@/lib/power"
 import { Row, Section, Segmented } from "@/pages/settings/controls"
 
 /** The power section of GET /api/config. */
-interface PowerConfig {
+export interface PowerConfig {
   cluster: PowerMode
   cluster_idle_minutes: number
   runners: PowerMode
@@ -25,14 +25,14 @@ interface ConfigView {
   sources: Record<string, string>
 }
 
-const MODES: { id: PowerMode; label: string; title: string }[] = [
+export const MODES: { id: PowerMode; label: string; title: string }[] = [
   { id: "always", label: "Always on", title: "Lucidbench never stops it" },
   { id: "on-demand", label: "On demand", title: "Started when needed, stopped when idle" },
   { id: "off", label: "Manual", title: "Lucidbench never starts or stops it on its own" },
 ]
 
 /** The power: block for config.yaml, in the same shape as config.example.yaml. */
-function snippet(p: PowerConfig): string {
+export function snippet(p: PowerConfig): string {
   const stacks =
     p.stacks.length === 0
       ? "  stacks: []"
