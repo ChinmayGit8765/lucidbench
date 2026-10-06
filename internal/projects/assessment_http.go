@@ -86,9 +86,10 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 //	GET  /api/assess/kinds                        every kind with its questions
 //	GET  /api/projects/{id}/assessment            the project's assessment and what it suggests
 //	PUT  /api/projects/{id}/assessment            confirm {kind, answers}; assessed_at is set here
+//	POST /api/projects/{id}/assessment/preview    {kind, answers}: what they would suggest, nothing saved
 //	POST /api/projects/{id}/assessment/suggest    {kind}: answers guessed from the project's files
 //
-// PUT and POST need X-Lucid-Confirm. Nothing is saved by the suggest route.
+// PUT and suggest need X-Lucid-Confirm. Nothing is saved by preview or suggest.
 func RegisterAssessment(mux *http.ServeMux, a *AssessAPI) {
 	mux.HandleFunc("GET /api/assess/kinds", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -140,6 +141,29 @@ func RegisterAssessment(mux *http.ServeMux, a *AssessAPI) {
 		}
 		p.Assessment, p.AssessmentFrom = &next, "app"
 		apiutil.WriteJSON(w, http.StatusOK, view(p))
+	})
+	// Preview computes what answers would suggest without saving anything, so
+	// the last step of the flow can show the suggestions before they are confirmed.
+	mux.HandleFunc("POST /api/projects/{id}/assessment/preview", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Kind    string            `json:"kind"`
+			Answers map[string]string `json:"answers"`
+		}
+		if !decodeBody(w, r, &in) {
+			return
+		}
+		if a.project(w, r.PathValue("id")) == nil {
+			return
+		}
+		next := assess.Assessment{Kind: in.Kind, Answers: in.Answers}
+		if next.Answers == nil {
+			next.Answers = map[string]string{}
+		}
+		if err := assess.Validate(next); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		apiutil.WriteJSON(w, http.StatusOK, assess.Suggest(next))
 	})
 	mux.HandleFunc("POST /api/projects/{id}/assessment/suggest", func(w http.ResponseWriter, r *http.Request) {
 		if !apiutil.Confirmed(w, r) {

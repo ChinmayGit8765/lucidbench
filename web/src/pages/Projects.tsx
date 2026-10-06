@@ -5,6 +5,7 @@ import {
   Circle,
   CircleCheck,
   CircleDot,
+  ClipboardCheck,
   EyeOff,
   FolderGit2,
   FolderKanban,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react"
 
+import { AssessSheet } from "@/components/AssessSheet"
 import { CopyCommand } from "@/components/CopyCommand"
 import { GraphLegend, ProjectGraph, graphEdges } from "@/components/ProjectGraph"
 import { PageHeader, RefreshButton } from "@/components/Shell"
@@ -28,6 +30,7 @@ import { Card } from "@/components/ui/card"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { RISK, useKinds } from "@/lib/assess"
 import {
   blockedNeeds,
   CATEGORIES,
@@ -170,11 +173,15 @@ function ProjectCard({
   byId,
   onFocus,
   focused,
+  kindName,
+  onAssess,
 }: {
   p: Project
   byId: Map<string, Project>
   onFocus: (id: string) => void
   focused: boolean
+  kindName?: string
+  onAssess: (p: Project) => void
 }) {
   const { open } = useApp()
   const st = STATUS[p.status] ?? { tone: "neutral" as const, label: p.status }
@@ -215,6 +222,20 @@ function ProjectCard({
           </a>
         )}
         {p.linear && <Badge className="font-mono" title="Linear">{p.linear}</Badge>}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {p.assessment && (
+          <Badge title={`Assessed as ${kindName ?? p.assessment.kind}`}>
+            <ClipboardCheck /> {kindName ?? p.assessment.kind}
+          </Badge>
+        )}
+        {p.assessment && p.risk && RISK[p.risk] && (
+          <StatusPill tone={RISK[p.risk].tone}>{RISK[p.risk].label}</StatusPill>
+        )}
+        <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => onAssess(p)}>
+          <ClipboardCheck /> {p.assessment ? "Re-assess" : "Assess"}
+        </Button>
       </div>
 
       {p.summary && <p className="mt-2.5 line-clamp-2 text-sm text-muted-foreground">{p.summary}</p>}
@@ -513,6 +534,8 @@ export default function Projects() {
   const [visibility, setVisibility] = useState("")
   const [q, setQ] = useState("")
   const [focused, setFocused] = useState<string | null>(null)
+  const [assessing, setAssessing] = useState<Project | null>(null)
+  const kinds = useKinds()
   const timer = useRef<number | undefined>(undefined)
 
   const setView = (v: View) => {
@@ -772,13 +795,22 @@ export default function Projects() {
                 </div>
                 <div className="grid gap-3 @3xl:grid-cols-2 @6xl:grid-cols-3">
                   {items.map((p) => (
-                    <ProjectCard key={p.id} p={p} byId={byId} onFocus={show} focused={focused === p.id} />
+                    <ProjectCard
+                      key={p.id}
+                      p={p}
+                      byId={byId}
+                      onFocus={show}
+                      focused={focused === p.id}
+                      kindName={kinds.find((k) => k.id === p.assessment?.kind)?.name}
+                      onAssess={setAssessing}
+                    />
                   ))}
                 </div>
               </section>
             ))}
         </>
       )}
+      <AssessSheet project={assessing} kinds={kinds} onClose={() => setAssessing(null)} onSaved={poll.refresh} />
     </div>
   )
 }

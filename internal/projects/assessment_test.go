@@ -171,6 +171,21 @@ func TestConfirmValidation(t *testing.T) {
 	}
 }
 
+func TestPreviewSavesNothing(t *testing.T) {
+	f := newFixture(t, commented)
+	w := f.do("POST", "/api/projects/demo-game/assessment/preview", map[string]any{"kind": "game", "answers": gameAnswers})
+	var s assess.Suggestion
+	if err := json.Unmarshal(w.Body.Bytes(), &s); err != nil || w.Code != 200 || !slices.Contains(s.CheckCommands, "godot") {
+		t.Fatalf("preview = %d %s", w.Code, w.Body)
+	}
+	if _, err := os.Stat(f.dir); err == nil {
+		t.Error("preview wrote the assessments folder")
+	}
+	if w := f.do("POST", "/api/projects/demo-game/assessment/preview", map[string]any{"kind": "game", "answers": map[string]string{}}); w.Code != 400 {
+		t.Errorf("incomplete preview = %d", w.Code)
+	}
+}
+
 func TestKindsRoute(t *testing.T) {
 	f := newFixture(t, commented)
 	w := f.do("GET", "/api/assess/kinds", nil)
