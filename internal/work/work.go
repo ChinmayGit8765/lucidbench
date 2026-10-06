@@ -141,7 +141,7 @@ type StartRequest struct {
 	Model   string `json:"model,omitempty"`
 	// AllowedCommands replaces the project's default list for this session:
 	// plain command prefixes such as "go" or "git status". Nil means the
-	// default (see DefaultAllowed); an empty list allows only the base set.
+	// default (see DefaultAllowed); an empty list allows no command at all.
 	AllowedCommands []string `json:"allowed_commands,omitempty"`
 }
 

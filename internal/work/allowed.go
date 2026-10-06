@@ -112,7 +112,7 @@ func sessionAllowed(req *StartRequest, p projects.Project) ([]string, error) {
 	if req.AllowedCommands == nil {
 		return projectAllowed(p), nil
 	}
-	clean, refused := CleanAllowed(append(slices.Clone(baseAllowed), req.AllowedCommands...))
+	clean, refused := CleanAllowed(req.AllowedCommands)
 	if len(refused) > 0 {
 		return nil, errf(ErrBadRequest, "these commands cannot be allowed: %s", strings.Join(refused, ", "))
 	}

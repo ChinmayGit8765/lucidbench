@@ -116,14 +116,14 @@ func TestAllowedCommandsReachTheCLI(t *testing.T) {
 		t.Errorf("session.allowed_commands = %v", se.AllowedCommands)
 	}
 
-	// The request's own list replaces the project's default, base commands stay.
+	// The request's own list replaces the project's default, as it is.
 	se, err = f.svc.Start(StartRequest{Project: "demo", Prompt: "make it", Provider: "claude", AllowedCommands: []string{"make"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	se = wait(t, f.svc, se.ID)
 	allow = listAfter("--allowedTools")
-	if !slices.Contains(allow, "Bash(make:*)") || slices.Contains(allow, "Bash(go:*)") || !slices.Contains(allow, "Bash(git status:*)") {
+	if !slices.Contains(allow, "Bash(make:*)") || slices.Contains(allow, "Bash(go:*)") || slices.Contains(allow, "Bash(git status:*)") || len(allow) != 1 {
 		t.Errorf("override --allowedTools = %v", allow)
 	}
 
