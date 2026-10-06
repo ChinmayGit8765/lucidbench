@@ -12,14 +12,17 @@ import {
   GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
+  Hourglass,
   KanbanSquare,
   Lightbulb,
   ListTree,
   Play,
   RefreshCw,
   ScrollText,
+  SendHorizontal,
   ShieldCheck,
   Square,
+  SquareCheck,
   Terminal,
   Timer,
   Trash2,
@@ -31,7 +34,7 @@ import { toast } from "sonner"
 import { celebrate } from "@/components/Celebrate"
 import { copyText } from "@/components/CopyCommand"
 import { StateSprite } from "@/components/StateSprite"
-import { ProviderTile, providerInfo } from "@/components/ProviderMark"
+import { ProviderMark, ProviderTile, providerInfo, tintVar } from "@/components/ProviderMark"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -48,6 +51,8 @@ import {
   buildSteps,
   checksLabel,
   elapsedOf,
+  endSession,
+  followUp,
   formatCost,
   formatElapsed,
   openPR,
@@ -174,7 +179,8 @@ export function SessionView({ id }: { id: string }) {
   const stop = () =>
     setConfirm({
       title: `Stop ${label}?`,
-      description: "Lucidbench stops the agent's process. Whatever it already changed stays in the worktree; use the refresh on Changes to see anything written after the stop.",
+      description:
+        "Lucidbench stops the agent's process and this turn ends. Whatever it already changed stays in the worktree, and the agent waits for your next message; use the refresh on Changes to see anything written after the stop.",
       confirmLabel: "Stop agent",
       danger: true,
       run: async () => {
@@ -263,6 +269,11 @@ export function SessionView({ id }: { id: string }) {
               <StatusPill tone={st.tone} pulse={running}>
                 {st.label}
               </StatusPill>
+              {(session.turns?.length ?? 0) > 1 && (
+                <span className="font-mono text-2xs tabular-nums text-subtle-foreground" title="Turns in this session">
+                  {session.turns!.length} turns
+                </span>
+              )}
               {running && (
                 <Button variant="secondary" size="sm" onClick={stop} className="border-danger/40 text-danger-fg hover:bg-danger-soft">
                   <Square className="fill-current" /> Stop
@@ -273,8 +284,15 @@ export function SessionView({ id }: { id: string }) {
               <Meta icon={Timer} title="Elapsed">
                 <span className="font-mono tabular-nums">{formatElapsed(elapsedOf(session, now))}</span>
               </Meta>
-              <Meta icon={CircleDollarSign} title={session.usage ? `${session.usage.input_tokens ?? 0} in · ${session.usage.output_tokens ?? 0} out · ${session.usage.model ?? ""}${session.usage.note ? ` · ${session.usage.note}` : ""}` : "Cost is known when the run ends"}>
-                <span className="font-mono tabular-nums">{running ? "…" : formatCost(session.usage?.cost_usd)}</span>
+              <Meta
+                icon={CircleDollarSign}
+                title={
+                  session.usage
+                    ? `All turns: ${session.usage.input_tokens ?? 0} in · ${session.usage.output_tokens ?? 0} out · ${session.usage.model ?? ""}${session.usage.note ? ` · ${session.usage.note}` : ""}`
+                    : "Cost is known when the turn ends"
+                }
+              >
+                <span className="font-mono tabular-nums">{running ? (session.usage?.cost_usd ? `${formatCost(session.usage.cost_usd)} + …` : "…") : formatCost(session.usage?.cost_usd)}</span>
               </Meta>
             </div>
           </div>
@@ -302,7 +320,162 @@ export function SessionView({ id }: { id: string }) {
       {tab === "raw" && <RawLog id={session.id} version={events.length} />}
       <div ref={end} />
 
+      <Composer session={session} onChange={setSession} onStop={stop} setConfirm={setConfirm} />
+
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </div>
+  )
+}
+
+/* ---------- composer ---------- */
+
+/**
+ * The bottom of a session, like a coding agent's prompt box: write the next
+ * message while the agent waits (Enter sends, Shift+Enter is a new line),
+ * stop it while it works, or end the session or open its PR.
+ */
+function Composer({
+  session,
+  onChange,
+  onStop,
+  setConfirm,
+}: {
+  session: WorkSession
+  onChange: (s: WorkSession) => void
+  onStop: () => void
+  setConfirm: (c: ConfirmRequest | null) => void
+}) {
+  const [text, setText] = useState("")
+  const [sending, setSending] = useState(false)
+  const area = useRef<HTMLTextAreaElement>(null)
+  const running = session.status === "running"
+  const waiting = session.status === "waiting" && !session.removed
+  const turns = session.turns?.length ?? 1
+  const label = providerInfo(session.provider)?.label ?? session.provider
+  const model = session.model || session.usage?.model
+  const canSend = waiting && text.trim() !== "" && !sending
+
+  // When a turn ends, put the cursor back in the box.
+  useEffect(() => {
+    if (waiting) area.current?.focus({ preventScroll: true })
+  }, [waiting])
+
+  if (!running && !waiting) return null
+
+  const send = async () => {
+    if (!canSend) return
+    setSending(true)
+    try {
+      onChange(await followUp(session.id, text.trim()))
+      setText("")
+    } catch (e) {
+      toast.error("Could not send the follow-up", { description: errorMessage(e) })
+    } finally {
+      setSending(false)
+    }
+  }
+  const end = () =>
+    setConfirm({
+      title: "End this session?",
+      description: "The agent stops waiting for follow-ups. The worktree, the branch and any PR stay; removing the worktree is separate.",
+      confirmLabel: "End session",
+      run: async () => {
+        try {
+          onChange(await endSession(session.id))
+        } catch (e) {
+          toast.error("Could not end the session", { description: errorMessage(e) })
+        }
+      },
+    })
+  const d = session.diff
+  const prReady = !session.pr_url && !!d && d.commits.length > 0
+  const pr = () =>
+    setConfirm({
+      title: "Push and open a draft PR?",
+      description: `Pushes ${session.branch} to origin and runs gh pr create --draft against ${session.base_ref.replace(/^origin\//, "")}. Nothing is merged, and the session keeps waiting for you.`,
+      confirmLabel: "Push and open PR",
+      run: async () => {
+        try {
+          const s = await openPR(session.id)
+          onChange(s)
+          toast.success("Draft PR opened", { description: s.pr_url })
+        } catch (e) {
+          toast.error("Could not open the PR", { description: errorMessage(e) })
+        }
+      },
+    })
+
+  return (
+    <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 pb-4 pt-3 backdrop-blur-md md:-mx-8 md:px-8" data-testid="composer">
+      {waiting && (
+        <div className="mb-2 flex items-center gap-2 text-sm text-warning-fg" role="status" data-testid="waiting-banner">
+          <Hourglass className="size-3.5" />
+          <span className="font-medium">{label} is waiting for you.</span>
+          <span className="text-muted-foreground max-[720px]:hidden">Send a follow-up, open a PR, or end the session.</span>
+        </div>
+      )}
+      <Card className={cn("overflow-hidden transition-colors focus-within:border-border-strong", waiting && "border-warning/40")}>
+        <label htmlFor="follow-up" className="sr-only">
+          Follow-up for the agent
+        </label>
+        <textarea
+          id="follow-up"
+          ref={area}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              void send()
+            }
+          }}
+          rows={2}
+          maxLength={32000}
+          disabled={sending}
+          placeholder={running ? `${label} is working. Write your next message; Send opens once this turn ends, or Stop to step in now.` : `Reply to ${label}…`}
+          data-testid="composer-input"
+          className="block max-h-56 min-h-16 w-full resize-none bg-transparent px-4 pt-3 text-[0.9375rem] leading-relaxed outline-none placeholder:text-subtle-foreground/70"
+        />
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5 pt-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-background/60 px-2 py-0.5 text-2xs text-muted-foreground" title={model ? `${label} · ${model}` : label} data-testid="composer-chip">
+            <span style={{ color: tintVar(session.provider) }}>
+              <ProviderMark provider={session.provider} className="size-3" />
+            </span>
+            {label}
+            {model && <span className="max-w-40 truncate font-mono">· {model}</span>}
+          </span>
+          <span className="rounded-full border bg-background/60 px-2 py-0.5 font-mono text-2xs tabular-nums text-muted-foreground" data-testid="turn-indicator">
+            turn {turns}
+          </span>
+          <span className="text-2xs text-subtle-foreground max-[720px]:hidden">Enter to send · Shift+Enter for a new line</span>
+          <span className="flex-1" />
+          {running ? (
+            <Button variant="secondary" size="sm" onClick={onStop} className="border-danger/40 text-danger-fg hover:bg-danger-soft" data-testid="composer-stop">
+              <Square className="fill-current" /> Stop
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={end} data-testid="end-session">
+                <SquareCheck /> End session
+              </Button>
+              {session.pr_url ? (
+                <Button asChild variant="ghost" size="sm">
+                  <a href={session.pr_url} target="_blank" rel="noreferrer">
+                    <GitPullRequest className="text-success" /> View PR
+                  </a>
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={pr} disabled={!prReady} title={prReady ? "Push the branch and open a draft PR" : "No commits yet: nothing to open a PR with"} data-testid="composer-open-pr">
+                  <GitPullRequest /> Open PR
+                </Button>
+              )}
+            </>
+          )}
+          <Button size="sm" onClick={() => void send()} disabled={!canSend} aria-label="Send follow-up" data-testid="send">
+            <SendHorizontal /> Send
+          </Button>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -341,7 +514,7 @@ function Changes({
   const prBlocked = session.removed
     ? "The worktree was removed"
     : session.status === "running"
-      ? "Wait for the run to finish"
+      ? "Wait for the turn to finish"
       : noCommits
         ? d.uncommitted.length > 0
           ? `No commits yet: commit the ${plural(d.uncommitted.length, "uncommitted change")} first`
@@ -573,9 +746,11 @@ function Changes({
               ? "Nothing committed yet."
               : session.status === "running"
                 ? "No changes yet."
-                : "The agent changed nothing. If it asked you something, start a new session with your answers in the prompt."}
+                : session.status === "waiting"
+                  ? "No changes yet. If the agent asked you something, answer it below."
+                  : "The agent changed nothing. If it asked you something, start a new session with your answers in the prompt."}
           </p>
-          {d.uncommitted.length === 0 && session.status !== "running" && (
+          {d.uncommitted.length === 0 && session.status !== "running" && session.status !== "waiting" && (
             <Button size="sm" variant="secondary" onClick={() => open("work", session.card ? ["new", session.card] : ["new", "project", session.project])}>
               <Play /> Answer and start again
             </Button>

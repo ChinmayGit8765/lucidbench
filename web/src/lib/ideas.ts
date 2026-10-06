@@ -58,7 +58,7 @@ export interface IdeaCard extends Card {
 export interface IdeaSession {
   id: string
   title: string
-  status: "running" | "done" | "failed" | "stopped"
+  status: "running" | "waiting" | "done" | "failed" | "stopped"
   provider: string
   model?: string
   branch: string
