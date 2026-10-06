@@ -8,6 +8,7 @@ import {
   FileText,
   FolderKanban,
   GitPullRequest,
+  Lightbulb,
   Link2,
   Play,
   SquareTerminal,
@@ -24,6 +25,7 @@ import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet } from "@/components/ui/dialog"
 import { errorMessage, getJSON } from "@/lib/api"
+import { cardIdeaId } from "@/lib/ideas"
 import { useApp } from "@/lib/app"
 import { boardsApi, DEFAULT_BOARD, labelColor, type Board, type Card, type CardFields } from "@/lib/boards"
 import { linearApi } from "@/lib/linear"
@@ -186,6 +188,14 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
       </div>
 
       <dl className="space-y-1">
+        <Prop icon={Lightbulb} label="Idea">
+          <LinkRow
+            icon={Lightbulb}
+            onClick={() => open("ideas", [cardIdeaId(board.id, card.id)])}
+            label="Follow this idea"
+            detail={card.council ? "council → brief → card → PR" : "card → work → PR"}
+          />
+        </Prop>
         <Prop icon={Columns3} label="Column">
           <select value={card.column} onChange={(e) => void save({ column: e.target.value })} className={field} aria-label="Column">
             {board.columns.map((c) => (

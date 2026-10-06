@@ -12,6 +12,7 @@ import {
   GitCommitHorizontal,
   GitPullRequest,
   KanbanSquare,
+  Lightbulb,
   ListTree,
   Play,
   RefreshCw,
@@ -37,6 +38,7 @@ import { Tabs } from "@/components/ui/tabs"
 import { ApiError, errorMessage, getJSON, request } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { DEFAULT_BOARD } from "@/lib/boards"
+import { cardIdeaId } from "@/lib/ideas"
 import { useNow } from "@/lib/time"
 import { cn, plural } from "@/lib/utils"
 import {
@@ -221,6 +223,11 @@ export function SessionView({ id }: { id: string }) {
               {session.brief && (
                 <Meta icon={FileText} title={`Open the brief: ${session.brief}`} onClick={() => open("memory", session.brief!.split("/"))}>
                   brief
+                </Meta>
+              )}
+              {session.card && (
+                <Meta icon={Lightbulb} title="The whole idea: council, brief, card, sessions and PRs" onClick={() => open("ideas", [cardIdeaId(session.board || DEFAULT_BOARD, session.card!)])}>
+                  idea
                 </Meta>
               )}
             </div>

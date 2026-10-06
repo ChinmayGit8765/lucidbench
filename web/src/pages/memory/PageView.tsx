@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileText,
   ImagePlus,
+  Lightbulb,
   Link2,
   Loader2,
   Lock,
@@ -22,6 +23,7 @@ import { copyText } from "@/components/CopyCommand"
 import { Menu } from "@/components/ui/menu"
 import { ErrorState, Skeleton } from "@/components/ui/states"
 import { ApiError, errorMessage } from "@/lib/api"
+import { useApp } from "@/lib/app"
 import { baseName, dirOf, memoryApi, type Page } from "@/lib/memory"
 import { cn } from "@/lib/utils"
 import type { LinkItem } from "@/pages/memory/Editor"
@@ -405,6 +407,8 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
           </div>
         )}
 
+        {front.type === "brief" && typeof front.council === "string" && front.council && <BriefBanner council={front.council} status={typeof front.status === "string" ? front.status : ""} />}
+
         <div className="mt-4 border-b pb-3">
           <Properties front={front} onChange={(next) => updateFront(next, true)} />
         </div>
@@ -432,6 +436,26 @@ function Loaded({ page, vaultRoot, fresh, onOpenLink, findPages, onCreatePage, o
 
         <Backlinks links={backlinks} openPath={openPath} />
       </div>
+    </div>
+  )
+}
+
+/** A council brief links to its idea: the council, the card, the sessions and the PRs together. */
+function BriefBanner({ council, status }: { council: string; status: string }) {
+  const { open } = useApp()
+  return (
+    <div role="note" className="mt-4 flex items-center gap-2.5 rounded-lg border border-brand/25 bg-brand-soft px-3 py-2 text-sm">
+      <Lightbulb className="size-4 shrink-0 text-brand" />
+      <span className="min-w-0 flex-1 text-muted-foreground">
+        <span className="font-medium text-foreground">A council brief{status ? `, ${status}` : ""}.</span> See where it went: the card, the agent sessions and the pull requests.
+      </span>
+      <button
+        type="button"
+        onClick={() => open("ideas", [council])}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-brand-fg hover:bg-brand/10"
+      >
+        Open the idea <ArrowUpRight className="size-3.5" />
+      </button>
     </div>
   )
 }
