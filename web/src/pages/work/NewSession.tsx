@@ -29,6 +29,7 @@ import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Skeleton } from "@/components/ui/states"
 import { errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { useBrowserAdded } from "@/lib/browser"
 import { PROJECTS_POLL_MS, typeInfo, type ProjectList } from "@/lib/projects"
 import { putHandoff, takeHandoff } from "@/lib/prompts"
 import { cn, isMac } from "@/lib/utils"
@@ -94,6 +95,8 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   const [profile, setProfile] = useState("")
   const [harness, setHarness] = useState<Harness>("mine")
   const [harnessTouched, setHarnessTouched] = useState(false)
+  const browserAdded = useBrowserAdded()
+  const [attachBrowser, setAttachBrowser] = useState(false)
   const [project, setProject] = useState(initialProject ?? "")
   const [cardId, setCardId] = useState(initialCard ?? "")
   // A prompt composed in Prompt Studio arrives once, with its project.
@@ -193,6 +196,7 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
             card: card?.id,
             prompt: prompt.trim() || undefined,
             allowed_commands: edited ?? undefined,
+            browser: attachBrowser || undefined,
           })
           navigate(`/work/${s.id}`)
         } catch (e) {
@@ -452,6 +456,18 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
               </div>
               <p className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">{HARNESS[harness].blurb}</p>
             </div>
+
+            {browserAdded && (
+              <label className="mt-4 flex max-w-xl cursor-pointer items-start gap-2.5 text-xs">
+                <input type="checkbox" checked={attachBrowser} onChange={(e) => setAttachBrowser(e.target.checked)} className="mt-0.5 size-3.5 accent-[var(--brand)]" />
+                <span>
+                  <span className="font-medium">Attach a browser</span>
+                  <span className="mt-0.5 block leading-5 text-muted-foreground">
+                    Starts the Live browser container for this session. The agent gets its DevTools address in LUCID_BROWSER_CDP and may drive it; you can watch it in Live browser.
+                  </span>
+                </span>
+              </label>
+            )}
 
             <AllowedCommands
               commands={allowed}

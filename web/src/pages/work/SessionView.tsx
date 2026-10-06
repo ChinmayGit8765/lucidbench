@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
+  AppWindow,
   ArrowLeft,
   ChevronRight,
   CircleDollarSign,
@@ -212,6 +213,11 @@ export function SessionView({ id }: { id: string }) {
                 {session.harness === "mine" ? "your harness" : "clean harness"}
                 {session.profile ? ` · ${session.profile}` : ""}
               </Meta>
+              {session.browser && (
+                <Meta icon={AppWindow} title="The agent browser was attached to this session (open Live browser to watch it)">
+                  browser
+                </Meta>
+              )}
               {session.pr_url && session.pr_state && (
                 <Meta icon={GitPullRequest} title={checksLabel(session.pr_checks) || PR_INFO[session.pr_state].label}>
                   <span className={cn(session.pr_state === "merged" && "text-success-fg", session.pr_state === "closed" && "text-danger-fg")}>{PR_INFO[session.pr_state].label}</span>

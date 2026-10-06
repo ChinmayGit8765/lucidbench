@@ -61,7 +61,7 @@ func fakeClaude(mode string) int {
 	in, _ := io.ReadAll(os.Stdin)
 	if log := os.Getenv("LUCID_WORK_LOG"); log != "" {
 		wd, _ := os.Getwd()
-		rec, _ := json.Marshal(m{"args": os.Args[1:], "stdin": string(in), "cwd": wd, "tmp": os.Getenv("TMP"), "temp": os.Getenv("TEMP"), "tmpdir": os.Getenv("TMPDIR")})
+		rec, _ := json.Marshal(m{"args": os.Args[1:], "stdin": string(in), "cwd": wd, "tmp": os.Getenv("TMP"), "temp": os.Getenv("TEMP"), "tmpdir": os.Getenv("TMPDIR"), "cdp": os.Getenv("LUCID_BROWSER_CDP")})
 		_ = os.WriteFile(log, rec, 0o600)
 	}
 	// Scratch files go where the temp variables point.

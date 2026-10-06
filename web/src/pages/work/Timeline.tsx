@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import {
   Bot,
+  Camera,
   ChevronRight,
   CircleCheck,
   CircleX,
@@ -331,6 +332,18 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
             )
           case "done":
             return null
+          case "image":
+            return (
+              <li key={s.key} className="relative py-1.5 pl-9">
+                <span className="absolute left-[7px] top-2.5 z-[1] flex size-[22px] items-center justify-center rounded-full border bg-card text-subtle-foreground">
+                  <Camera className="size-3" />
+                </span>
+                <div className="pt-0.5 text-xs text-muted-foreground">{s.title}</div>
+                <a href={s.src} target="_blank" rel="noreferrer" className="mt-1.5 block max-w-xl overflow-hidden rounded-lg border">
+                  <img src={s.src} alt={s.title} loading="lazy" className="block w-full" />
+                </a>
+              </li>
+            )
         }
       })}
 

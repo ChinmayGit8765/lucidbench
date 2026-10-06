@@ -15,6 +15,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
+	"github.com/ChinmayGit8765/lucidbench/internal/browser"
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/cloud"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
@@ -152,6 +153,11 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		d.Power.AddExtra(dbs.Managers)
 	}
 	databases.Register(mux, dbs)
+	browserSvc := &browser.Service{Docker: docker.Exec, Log: powerLog, ShotsDir: filepath.Join(data, "browser", "shots")}
+	if d.Power != nil {
+		d.Power.AddExtra(browserSvc)
+	}
+	browser.Register(mux, browserSvc)
 	themes.RegisterGenerate(mux, &themes.Generator{
 		InContainer: cluster.InContainer,
 		LookPath:    exec.LookPath,
@@ -184,6 +190,8 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		LookPath:    exec.LookPath,
 		ProfileDir:  func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) },
 	}, vault, projects.Load)
+	workSvc.Browser = browserSvc.Attach
+	browserSvc.Sink = workSvc.AddEvent
 	work.Register(mux, workSvc)
 	ideas.Register(mux, &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault})
 	home, _ := os.UserHomeDir()

@@ -54,6 +54,9 @@ const (
 	KindApproval   = "approval"
 	KindError      = "error"
 	KindDone       = "done"
+	// KindImage is a picture the daemon saved for the session, such as a
+	// browser screenshot; Body is its API path. A CLI never emits it.
+	KindImage = "image"
 )
 
 // Request is one run.

@@ -31,6 +31,7 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   databases.yaml                saved database connections, passwords as env:NAME (internal/databases)
   payments/<project>.yaml       Stripe object ids created for a project, ids only (internal/payments)
   payments/audit.jsonl          every Stripe write: time, mode, action, object ids; no secrets (internal/payments)
+  browser/shots/<id>.png        screenshots taken for a running Work session (internal/browser)
 ```
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault
@@ -60,7 +61,7 @@ type Request struct {
 }
 type Result struct { Text string; Usage Usage; Events []Event }
 type Usage  struct { Provider, Model string; InputTokens, OutputTokens, CacheRead, CacheWrite int64; CostUSD float64; DurationMS int64 }
-type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done */; Title, Body string; Raw json.RawMessage }
+type Event  struct { Time time.Time; Kind string /* text|tool|tool_result|diff|approval|error|done|image */; Title, Body string; Raw json.RawMessage }
 func Run(ctx context.Context, r Request) (*Result, error)
 var ErrCLIMissing, ErrNotSignedIn, ErrTimeout, ErrInContainer error
 ```
