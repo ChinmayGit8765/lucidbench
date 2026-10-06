@@ -1,17 +1,21 @@
 import { lazy } from "react"
-import { Blocks, Image, Minus, Palette, Plus, Settings as SettingsIcon, SunMoon, WandSparkles } from "lucide-react"
+import { Blocks, Image, LayoutDashboard, Lightbulb, Minus, Palette, Plus, Settings as SettingsIcon, SunMoon, WandSparkles } from "lucide-react"
 import { toast } from "sonner"
 
 import type { Command } from "@/components/CommandPalette"
+import { errorMessage, refreshAll, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { usePrefs } from "@/lib/prefs"
+import { addTemplate, CATALOG_PATH, type Catalog } from "@/lib/sections"
 import { DARK_DEFAULT, hasArt, LIGHT_DEFAULT } from "@/lib/theme"
 import { MODULES } from "@/modules"
 import { isAdded, sorted } from "@/modules/registry"
 import type { ModuleDef } from "@/modules/types"
 
-function useSettingsCommands(): Command[] {
+function useSettingsCommands(paletteOpen: boolean): Command[] {
   const { open } = useApp()
+  // The templates are fetched only while the palette is open.
+  const catalog = usePoll<Catalog>(paletteOpen ? CATALOG_PATH : null, 600_000)
   const { prefs, update, themes, active, base } = usePrefs()
   const extensions = sorted(
     MODULES.filter((m) => m.kind === "extension" && m.status !== "soon"),
@@ -54,6 +58,44 @@ function useSettingsCommands(): Command[] {
       icon: WandSparkles,
       keywords: "generate prompt ai theme claude codex grok",
       run: () => open("settings", ["appearance", "describe"]),
+    },
+    {
+      id: "feature-describe",
+      label: "Describe a feature…",
+      group: "Customise",
+      icon: Lightbulb,
+      keywords: "feature request idea lucidbench customise council braindump",
+      run: () => open("settings", ["customise", "feature"]),
+    },
+    {
+      id: "section-describe",
+      label: "Describe a section…",
+      group: "Customise",
+      icon: WandSparkles,
+      keywords: "section widget overview dashboard generate ai",
+      run: () => open("settings", ["sections", "describe"]),
+    },
+    {
+      id: "section-add",
+      label: "Add section…",
+      group: "Customise",
+      icon: LayoutDashboard,
+      keywords: "section widget overview dashboard template",
+      children: (catalog.data?.templates ?? []).map((t) => ({
+        id: `section-add-${t.id}`,
+        label: t.title,
+        group: t.placement === "project" ? "On each project's page" : "On the Overview",
+        icon: LayoutDashboard,
+        hint: t.view,
+        run: () =>
+          void addTemplate(t.id).then(
+            (s) => {
+              toast.success(`${s.title} added`)
+              refreshAll()
+            },
+            (e) => toast.error("Could not add the section", { description: errorMessage(e) }),
+          ),
+      })),
     },
     {
       id: "ext-add",

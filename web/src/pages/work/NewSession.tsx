@@ -31,6 +31,7 @@ import { errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { PROJECTS_POLL_MS, typeInfo, type ProjectList } from "@/lib/projects"
 import { putHandoff, takeHandoff } from "@/lib/prompts"
+import { MODEL_HINTS, SOURCE_LABEL, type WorkBuilder } from "@/lib/team"
 import { cn, isMac } from "@/lib/utils"
 import {
   branchPreview,
@@ -41,6 +42,7 @@ import {
   startSession,
   WORK_PROVIDERS,
   type Harness,
+  type StartRequest,
   type WorkProject,
   type WorkProvider,
 } from "@/lib/work"
@@ -105,6 +107,9 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   // until the user edits the list for this session.
   const [defaults, setDefaults] = useState<string[] | null>(null)
   const [edited, setEdited] = useState<string[] | null>(null)
+  // The project's team builder: its provider and model are the defaults.
+  const [builder, setBuilder] = useState<WorkBuilder | null>(null)
+  const [model, setModel] = useState("")
 
   const all = (projects.data?.projects ?? []) as WorkProject[]
   const usable = all.filter((p) => p.local_path && p.visibility !== "confidential")
@@ -126,10 +131,15 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
   useEffect(() => {
     setEdited(null)
     setDefaults(null)
+    setBuilder(null)
     if (!project) return
     let alive = true
-    getJSON<{ allowed_commands: string[] }>(defaultsPath(project))
-      .then((d) => alive && setDefaults(d.allowed_commands))
+    getJSON<{ allowed_commands: string[]; team?: WorkBuilder | null }>(defaultsPath(project))
+      .then((d) => {
+        if (!alive) return
+        setDefaults(d.allowed_commands)
+        setBuilder(d.team ?? null)
+      })
       .catch(() => alive && setDefaults([]))
     return () => {
       alive = false
@@ -147,9 +157,16 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
     setProfile("")
     if (!harnessTouched) setHarness(defaultHarness(p))
   }
+  // The team's builder sets the agent and its model, until the user picks one.
+  useEffect(() => {
+    if (!builder || providerTouched || !WORK_PROVIDERS.includes(builder.provider as WorkProvider)) return
+    pickProvider(builder.provider as WorkProvider)
+    setModel(builder.model ?? "")
+    if (builder.profile) setProfile(builder.profile)
+  }, [builder]) // only when the builder changes, so a pick sticks
   // Until the user picks one, the agent is the first CLI that is installed and signed in.
   useEffect(() => {
-    if (providerTouched || !accounts.data) return
+    if (providerTouched || !accounts.data || builder) return
     const first = WORK_PROVIDERS.find((p) => installed(p) && signedIn(p))
     if (first && first !== provider) pickProvider(first)
   }, [accounts.data, tools.data, providerTouched]) // not on every provider change, so a pick sticks
@@ -185,7 +202,7 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
       confirmLabel: "Start session",
       run: async () => {
         try {
-          const s = await startSession({
+          const req: StartRequest & { model?: string } = {
             provider,
             profile: profile || undefined,
             harness,
@@ -193,7 +210,9 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
             card: card?.id,
             prompt: prompt.trim() || undefined,
             allowed_commands: edited ?? undefined,
-          })
+            model: model.trim() || undefined,
+          }
+          const s = await startSession(req)
           navigate(`/work/${s.id}`)
         } catch (e) {
           toast.error("Could not start the session", { description: errorMessage(e) })
@@ -420,6 +439,36 @@ export function NewSession({ card: initialCard, project: initialProject }: { car
                 })}
               </div>
             )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <label htmlFor="work-model" className="text-xs font-medium">
+                Model
+              </label>
+              <input
+                id="work-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                list="work-models"
+                placeholder="the CLI's default"
+                className="h-7 w-40 rounded-md border bg-background/60 px-2 font-mono text-xs outline-none focus-visible:border-ring"
+              />
+              <datalist id="work-models">
+                {(MODEL_HINTS[provider as keyof typeof MODEL_HINTS] ?? []).map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+              {builder && (
+                <span className="text-2xs text-subtle-foreground" data-testid="work-team">
+                  team builder: {providerInfo(builder.provider)?.label ?? builder.provider}
+                  {builder.model ? ` · ${builder.model}` : ""} (from {SOURCE_LABEL[builder.source]})
+                </span>
+              )}
+              {builder?.budget_usd !== undefined && (builder.runs ?? 0) > 0 && (builder.avg_usd ?? 0) > builder.budget_usd && (
+                <span className="text-2xs font-medium text-warning-fg">
+                  recent builder runs cost ${(builder.avg_usd ?? 0).toFixed(2)} on average, over the ${builder.budget_usd.toFixed(2)} budget
+                </span>
+              )}
+            </div>
 
             <div className="mt-4">
               <div className="mb-2 flex items-center gap-2">

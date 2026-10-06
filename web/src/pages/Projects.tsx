@@ -18,6 +18,7 @@ import {
   Play,
   Search,
   Share2,
+  Users,
   X,
 } from "lucide-react"
 
@@ -25,6 +26,7 @@ import { AssessSheet } from "@/components/AssessSheet"
 import { CopyCommand } from "@/components/CopyCommand"
 import { DeployRows } from "@/components/Deploys"
 import { GraphLegend, ProjectGraph, graphEdges } from "@/components/ProjectGraph"
+import { ProjectSheet, type ProjectTab } from "@/components/ProjectSheet"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -55,6 +57,7 @@ import {
 } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 import { homeHint } from "@/lib/work"
+import type { ModulePageProps } from "@/modules/types"
 
 type View = "grid" | "graph"
 
@@ -179,6 +182,7 @@ function ProjectCard({
   focused,
   kindName,
   onAssess,
+  onTeam,
   deploys,
   pictures,
 }: {
@@ -188,6 +192,8 @@ function ProjectCard({
   focused: boolean
   kindName?: string
   onAssess: (p: Project) => void
+  /** Opens the project's detail on its Team tab. */
+  onTeam: (p: Project) => void
   /** Live status of p.deploy, by position; null when the Cloud extension is not added. */
   deploys: CloudDeploy[] | undefined | null
   /** How many diagrams and canvases p has; null when the Picture extension is not added. */
@@ -243,7 +249,10 @@ function ProjectCard({
         {p.assessment && p.risk && RISK[p.risk] && (
           <StatusPill tone={RISK[p.risk].tone}>{RISK[p.risk].label}</StatusPill>
         )}
-        <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => onAssess(p)}>
+        <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => onTeam(p)} aria-label={`Team of ${p.name}`}>
+          <Users /> Team
+        </Button>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => onAssess(p)}>
           <ClipboardCheck /> {p.assessment ? "Re-assess" : "Assess"}
         </Button>
       </div>
@@ -544,7 +553,7 @@ function ProjectsSkeleton() {
   )
 }
 
-export default function Projects() {
+export default function Projects({ subpath }: ModulePageProps) {
   const { focus, navigate } = useApp()
   const poll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
   const data = poll.data
@@ -559,6 +568,11 @@ export default function Projects() {
   const [q, setQ] = useState("")
   const [focused, setFocused] = useState<string | null>(null)
   const [assessing, setAssessing] = useState<Project | null>(null)
+  // /projects/<id>/team or /projects/<id>/sections opens that project's detail.
+  const [detail, setDetail] = useState<{ id: string; tab: ProjectTab } | null>(null)
+  useEffect(() => {
+    if (subpath[0]) setDetail({ id: subpath[0], tab: subpath[1] === "sections" ? "sections" : "team" })
+  }, [subpath])
   const kinds = useKinds()
   // Deploy status runs the user's CLIs, so it waits for the Cloud extension to be added.
   const cloudAdded = useCloudAdded()
@@ -837,6 +851,7 @@ export default function Projects() {
                       focused={focused === p.id}
                       kindName={kinds.find((k) => k.id === p.assessment?.kind)?.name}
                       onAssess={setAssessing}
+                      onTeam={(x) => setDetail({ id: x.id, tab: "team" })}
                       pictures={pictureAdded ? (pictureSummary.data?.find((s) => s.project === p.id)?.count ?? 0) : null}
                       deploys={cloudAdded ? (deployPoll.data ? (deployPoll.data.projects[p.id] ?? []) : deployPoll.error ? [] : undefined) : null}
                     />
@@ -846,6 +861,12 @@ export default function Projects() {
             ))}
         </>
       )}
+      <ProjectSheet
+        project={detail ? (byId.get(detail.id) ?? null) : null}
+        tab={detail?.tab ?? "team"}
+        onTab={(t) => setDetail((d) => (d ? { ...d, tab: t } : d))}
+        onClose={() => setDetail(null)}
+      />
       <AssessSheet project={assessing} kinds={kinds} onClose={() => setAssessing(null)} onSaved={poll.refresh} />
     </div>
   )

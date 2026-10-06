@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   Sparkles,
   TriangleAlert,
+  Users,
   Vote,
   WandSparkles,
   type LucideIcon,
@@ -66,6 +67,7 @@ import {
 } from "@/lib/council"
 import { PROJECTS_POLL_MS, type ProjectList } from "@/lib/projects"
 import { putHandoff, takeHandoff } from "@/lib/prompts"
+import { SOURCE_LABEL, teamPath, type TeamView } from "@/lib/team"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
@@ -151,6 +153,7 @@ function Composer() {
   const [critics, setCritics] = useState<CouncilProvider[]>(["codex", "grok"])
   const [rounds, setRounds] = useState(2)
   const [busy, setBusy] = useState(false)
+  const [team, setTeam] = useState<TeamView | null>(null)
   const [err, setErr] = useState<ApiError | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
 
@@ -166,6 +169,28 @@ function Composer() {
     window.addEventListener(COMPOSE_EVENT, onCompose)
     return () => window.removeEventListener(COMPOSE_EVENT, onCompose)
   }, [])
+
+  // A project with a team of its own seats the team's proposer and critics.
+  useEffect(() => {
+    setTeam(null)
+    if (!project) return
+    let alive = true
+    getJSON<TeamView>(teamPath(project)).then(
+      (v) => {
+        if (!alive) return
+        setTeam(v)
+        if (v.source === "builtin") return
+        const isP = (x: string): x is CouncilProvider => (COUNCIL_PROVIDERS as string[]).includes(x)
+        const p = v.team.roles.proposer?.provider
+        if (p && isP(p)) setProposer(p)
+        if (v.team.roles.critic) setCritics(v.team.roles.critic.map((c) => c.provider).filter(isP).filter((c) => c !== p))
+      },
+      () => {},
+    )
+    return () => {
+      alive = false
+    }
+  }, [project])
 
   const chooseProposer = (p: CouncilProvider) => {
     setProposer(p)
@@ -308,6 +333,7 @@ function Composer() {
           </div>
         </div>
       </Card>
+      {team && team.source !== "builtin" && !confidential && <TeamNote team={team} proposer={proposer} critics={critics} />}
       {confidential && (
         <Callout tone="danger" icon={ShieldAlert} title={`${chosen?.name} is confidential`}>
           The council never sends a confidential project to a provider. Pick another project, or none.
@@ -364,6 +390,22 @@ function ProviderChip({
       {label(provider)}
       <span className={cn("size-1.5 rounded-full", SIGN_IN[signIn].dot, signIn === "missing" && "opacity-60")} />
     </button>
+  )
+}
+
+/** Which seats come from the project's team, with their models and any budget recent runs went over. */
+function TeamNote({ team, proposer, critics }: { team: TeamView; proposer: CouncilProvider; critics: CouncilProvider[] }) {
+  const r = team.team.roles
+  const model = (p: string) => (p === proposer && r.proposer?.provider === p ? r.proposer.model : r.critic?.find((c) => c.provider === p)?.model)
+  const seat = (p: string) => `${label(p)}${model(p) ? ` (${model(p)})` : ""}`
+  const over = team.estimates.filter((e) => e.over && (e.role === "proposer" || e.role.startsWith("critic")))
+  return (
+    <Callout tone={over.length ? "warning" : "info"} icon={Users} title={`Team from ${SOURCE_LABEL[team.source]}`}>
+      <span data-testid="council-team">
+        Proposer {seat(proposer)}; {critics.length ? `critics ${critics.map(seat).join(" and ")}` : "self-critique"}.
+        {over.map((e) => ` Recent ${e.role} runs on ${label(e.provider)} cost $${e.avg_usd.toFixed(2)} on average, over the $${(e.budget_usd ?? 0).toFixed(2)} budget.`).join("")}
+      </span>
+    </Callout>
   )
 }
 
