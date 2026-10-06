@@ -3,6 +3,7 @@ package databases
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -93,6 +94,16 @@ ORDER BY t.table_schema, t.table_name, c.ordinal_position`)
 }
 
 func (m *myConn) Query(ctx context.Context, q string) (*Result, error) {
+	res, err := m.query(ctx, q)
+	var me *mysql.MySQLError
+	// 1792: cannot execute in a READ ONLY transaction; 1290: --read-only server option.
+	if errors.As(err, &me) && (me.Number == 1792 || me.Number == 1290) {
+		return nil, fmt.Errorf("%w (the database refused it: %s)", ErrReadOnly, me.Message)
+	}
+	return res, err
+}
+
+func (m *myConn) query(ctx context.Context, q string) (*Result, error) {
 	if err := CheckSQL(q); err != nil {
 		return nil, err
 	}

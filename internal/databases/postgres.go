@@ -2,12 +2,14 @@ package databases
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type pgConn struct{ c *pgx.Conn }
@@ -101,6 +103,16 @@ ORDER BY n.nspname, c.relname, a.attnum`)
 }
 
 func (p *pgConn) Query(ctx context.Context, q string) (*Result, error) {
+	res, err := p.query(ctx, q)
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "25006" {
+		// read_only_sql_transaction: the database itself refused a write.
+		return nil, fmt.Errorf("%w (the database refused it: %s)", ErrReadOnly, pe.Message)
+	}
+	return res, err
+}
+
+func (p *pgConn) query(ctx context.Context, q string) (*Result, error) {
 	if err := CheckSQL(q); err != nil {
 		return nil, err
 	}

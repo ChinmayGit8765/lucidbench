@@ -81,7 +81,7 @@ func CheckRedis(args []string) error {
 	}
 	cmd := strings.ToUpper(args[0])
 	if !redisAllowed[cmd] {
-		return fmt.Errorf("%w (%s is not an allowed command; allowed: %s)", ErrReadOnly, cmd, strings.Join(RedisAllowed(), ", "))
+		return fmt.Errorf("%w (%s is not an allowed command; reads only, such as GET, SCAN, TYPE, TTL, HGETALL, LRANGE)", ErrReadOnly, cmd)
 	}
 	return nil
 }

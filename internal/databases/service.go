@@ -240,18 +240,14 @@ func (s *Service) List(ctx context.Context, withHealth bool) (*Listing, error) {
 	}
 	l := &Listing{Discovered: []Discovered{}, Saved: []Saved{}, Managers: ManagerSpecs(), RedisCommands: RedisAllowed()}
 	l.Limits.Rows, l.Limits.TimeoutSeconds = RowLimit, int(QueryTimeout.Seconds())
-	if ds, err := Discover(ctx, s.Docker); err != nil {
-		l.DockerError = err.Error()
-	} else {
-		MarkSaved(ds, saved)
-		l.Discovered = ds
-	}
 	for _, p := range saved {
 		_, hasMgr := SpecFor(p.Engine)
 		l.Saved = append(l.Saved, Saved{Profile: p, PasswordSet: p.Password == "" || p.Password.Resolve(s.Getenv) != "", HasManager: hasMgr})
 	}
+	// The health checks run while docker lists the containers, which is the
+	// slower of the two on a machine with many.
+	var wg sync.WaitGroup
 	if withHealth {
-		var wg sync.WaitGroup
 		for i := range l.Saved {
 			wg.Add(1)
 			go func(sv *Saved) {
@@ -261,7 +257,13 @@ func (s *Service) List(ctx context.Context, withHealth bool) (*Listing, error) {
 				}
 			}(&l.Saved[i])
 		}
-		wg.Wait()
 	}
+	if ds, err := Discover(ctx, s.Docker); err != nil {
+		l.DockerError = err.Error()
+	} else {
+		MarkSaved(ds, saved)
+		l.Discovered = ds
+	}
+	wg.Wait()
 	return l, nil
 }

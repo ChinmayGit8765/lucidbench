@@ -659,6 +659,8 @@ export default function Databases({ subpath }: ModulePageProps) {
             )}
           </Card>
 
+          {selected && <Detail s={selected} redisCommands={d.redis_commands} />}
+
           <Card className="overflow-hidden">
             <div className="flex items-center gap-2 border-b px-5 py-3">
               <h2 className="text-sm font-semibold">Database containers</h2>
@@ -675,8 +677,6 @@ export default function Databases({ subpath }: ModulePageProps) {
               </ul>
             )}
           </Card>
-
-          {selected && <Detail s={selected} redisCommands={d.redis_commands} />}
         </>
       )}
       <ConnectionDialog seed={dialog} onClose={() => setDialog(null)} onSaved={(id) => open("databases", [id])} />
