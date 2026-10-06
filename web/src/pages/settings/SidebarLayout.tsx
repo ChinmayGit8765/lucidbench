@@ -1,5 +1,7 @@
 import { ArrowDown, ArrowUp, Minus, RotateCcw } from "lucide-react"
 
+import { toast } from "sonner"
+
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app"
 import { usePrefs, type Prefs } from "@/lib/prefs"
@@ -26,8 +28,12 @@ function Group({ title, hint, items, removable }: { title: string; hint?: string
     next.splice(i + d, 0, m)
     update((p) => reorder(p, next))
   }
-  const remove = (m: ModuleDef) =>
-    update((p) => ({ ...p, extensions: { ...p.extensions, [m.id]: { added: false, order: p.extensions[m.id]?.order ?? m.order } } }))
+  const setAdded = (m: ModuleDef, added: boolean) =>
+    update((p) => ({ ...p, extensions: { ...p.extensions, [m.id]: { added, order: p.extensions[m.id]?.order ?? m.order } } }))
+  const remove = (m: ModuleDef) => {
+    setAdded(m, false)
+    toast(`${m.title} removed from the sidebar`, { action: { label: "Undo", onClick: () => setAdded(m, true) } })
+  }
   return (
     <div className="border-t">
       <div className="flex items-baseline gap-2 px-5 pb-1 pt-3">

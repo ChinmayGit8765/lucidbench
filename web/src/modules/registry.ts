@@ -70,10 +70,11 @@ export const pathFor = (m: ModuleDef, sub: string[] = []) =>
 /**
  * Overview's "Needs attention": every module's entries, most urgent first.
  * Each module's hook runs on every render in a fixed order (the rules of
- * hooks); entries of modules that cannot be opened are dropped. Loading
- * stays true until every openable module has answered once.
+ * hooks); entries of modules that cannot be opened are dropped. Entries
+ * show as each module answers: loading is true only until the first one
+ * does, and pending while any is still out.
  */
-export function useAttention(prefs: Prefs): { items: AttentionItem[]; loading: boolean } {
+export function useAttention(prefs: Prefs): { items: AttentionItem[]; loading: boolean; pending: boolean } {
   const per = MODULES.map((m) => ({ m, items: m.useAttention ? m.useAttention() : [] }))
   const live = per.filter(({ m }) => isOpenable(m, prefs))
   const items = live
@@ -81,5 +82,6 @@ export function useAttention(prefs: Prefs): { items: AttentionItem[]; loading: b
     .map((a, i) => ({ a, i }))
     .sort((x, y) => SEVERITY_RANK[x.a.severity] - SEVERITY_RANK[y.a.severity] || x.i - y.i)
     .map(({ a }) => a)
-  return { items, loading: live.some(({ items }) => items === null) }
+  const waiting = live.filter(({ items }) => items === null).length
+  return { items, loading: live.length > 0 && waiting === live.length, pending: waiting > 0 }
 }

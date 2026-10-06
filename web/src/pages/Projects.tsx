@@ -528,7 +528,7 @@ function ProjectsSkeleton() {
 }
 
 export default function Projects() {
-  const { focus } = useApp()
+  const { focus, navigate } = useApp()
   const poll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
   const data = poll.data
   const all = useMemo(() => data?.projects ?? [], [data])
@@ -673,12 +673,16 @@ export default function Projects() {
                 </span>
               ))}
               title="Map what you build"
-              description="List your products, portfolio pieces, private tools, experiments and coursework, what builds into what, and what each one still needs."
-            />
+              description="Start from the git repositories already on this machine: pick a folder, tick the ones to add, and Lucidbench writes them to projects.yaml. Work needs a project to start an agent in."
+            >
+              <Button onClick={() => navigate("/setup/projects")} data-testid="projects-import">
+                <FolderGit2 /> Import from a folder
+              </Button>
+            </EmptyState>
             <div className="space-y-3 border-t bg-muted/30 p-5 @3xl:border-l @3xl:border-t-0">
-              <div className="text-xs font-medium text-muted-foreground">1 · Write the example file</div>
+              <div className="text-xs font-medium text-muted-foreground">Or by hand · 1 · Write the example file</div>
               <CopyCommand command="lucid projects init" />
-              <div className="pt-1 text-xs font-medium text-muted-foreground">2 · Edit it to describe your own projects</div>
+              <div className="pt-1 text-xs font-medium text-muted-foreground">2 · Edit it: products, portfolio pieces, tools, experiments, coursework, and what builds into what</div>
               <div className="flex min-h-9 items-center break-all rounded-lg border bg-background px-3 py-2 font-mono text-xs">{data.path_hint}</div>
               <p className="pt-1 text-xs text-subtle-foreground">
                 The file stays on this machine and is re-read on every refresh. Set <span className="font-mono">LUCID_PROJECTS</span> to keep it

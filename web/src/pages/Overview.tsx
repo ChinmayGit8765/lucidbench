@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { Component, useState, type ReactNode } from "react"
 import {
   ArrowRight,
   Blocks,
@@ -22,7 +22,7 @@ import { PageHeader, RefreshButton } from "@/components/Shell"
 import { SpriteBoard } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/states"
+import { LoadingArt, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { DEFAULT_BOARD, READY_COLUMN, REVIEW_COLUMN, useWorkBoard } from "@/lib/boards"
@@ -52,9 +52,9 @@ const SEVERITY_BAR: Record<AttentionItem["severity"], string> = {
   info: "bg-info",
 }
 
-function AttentionRow({ a }: { a: AttentionItem }) {
+function AttentionRow({ a, i = 0 }: { a: AttentionItem; i?: number }) {
   return (
-    <li className="relative flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-accent/30">
+    <li className="lb-rise relative flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-accent/30" style={{ "--i": i } as React.CSSProperties}>
       <span aria-hidden className={cn("absolute inset-y-2 left-0 w-0.5 rounded-full", SEVERITY_BAR[a.severity])} />
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background/60">{a.icon}</span>
       <div className="min-w-0 flex-1">
@@ -223,7 +223,7 @@ export default function Overview() {
   const jobs = usePoll<Job[]>("/api/jobs", 15000)
   const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
   const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
-  const { items: attention, loading: attentionLoading } = useAttention(prefs)
+  const { items: attention, loading: attentionLoading, pending: attentionPending } = useAttention(prefs)
   const [helloBusy, setHelloBusy] = useState(false)
 
   const all = [cluster, jobs, runners, runsPoll]
@@ -292,7 +292,9 @@ export default function Overview() {
           attentionLoading
             ? "Checking your workspace…"
             : attention.length === 0
-              ? "Everything is running. Nothing needs you right now."
+              ? attentionPending
+                ? "Checking your workspace…"
+                : "Everything is running. Nothing needs you right now."
               : `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention.`
         }
         actions={
@@ -308,9 +310,16 @@ export default function Overview() {
       <TodaysLoop />
 
       <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
-        {tiles.map((m) => {
+        {tiles.map((m, i) => {
           const Tile = m.overviewTile!
-          return <Tile key={m.id} />
+          // Each tile loads, and fails, on its own.
+          return (
+            <div key={m.id} className="lb-rise [&>*]:h-full" style={{ "--i": i } as React.CSSProperties}>
+              <TileBoundary title={m.title}>
+                <Tile />
+              </TileBoundary>
+            </div>
+          )
         })}
       </div>
 
@@ -343,20 +352,27 @@ export default function Overview() {
                 <Skeleton className="h-9" />
                 <Skeleton className="h-9" />
               </div>
+            ) : attention.length === 0 && attentionPending ? (
+              <div className="space-y-2 border-t p-5">
+                <Skeleton className="h-9" />
+              </div>
             ) : attention.length === 0 ? (
               <div className="flex items-center gap-3 border-t px-5 py-5">
                 <span className="flex size-8 items-center justify-center rounded-full bg-success-soft text-success">
                   <CircleCheck className="size-4" />
                 </span>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{label("all_clear", "All clear")}</div>
-                  <div className="text-xs text-muted-foreground">No briefs to approve, diffs to review, usage limits, failed runs or blocked needs.</div>
+                  <div className="text-xs text-muted-foreground">No briefs to approve, diffs to review, usage limits, failed runs or blocked needs. Got an idea? Start the loop with a braindump.</div>
                 </div>
+                <Button size="sm" variant="secondary" onClick={() => newBraindump(open)} title="New braindump (n)">
+                  <PenLine /> Braindump
+                </Button>
               </div>
             ) : (
               <ul className="divide-y border-t">
-                {attention.map((a) => (
-                  <AttentionRow key={a.key} a={a} />
+                {attention.map((a, i) => (
+                  <AttentionRow key={a.key} a={a} i={i} />
                 ))}
               </ul>
             )}
@@ -372,14 +388,10 @@ export default function Overview() {
               )}
             </div>
             {runsPoll.loading && !runsPoll.data ? (
-              <div className="space-y-2 border-t p-5">
-                {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-8" />
-                ))}
-              </div>
+              <LoadingArt label="Reading CI runs and cluster jobs…" className="h-[168px] border-t" />
             ) : activity.length === 0 ? (
               <p className="border-t px-5 py-6 text-center text-sm text-muted-foreground">
-                No runs or jobs yet. Activity from CI and the local cluster shows up here.
+                No runs or jobs yet. CI runs show up here once you add a repository under Runners & CI; cluster jobs once you run one.
               </p>
             ) : (
               <ol className="relative border-t py-1.5">
@@ -517,6 +529,22 @@ export default function Overview() {
       </div>
     </div>
   )
+}
+
+/** Keeps one broken tile from taking the Overview down with it. */
+class TileBoundary extends Component<{ title: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <Card className="flex h-full items-center p-4 text-xs text-muted-foreground">
+        {this.props.title} could not be shown. Reload the page to try again.
+      </Card>
+    )
+  }
 }
 
 function QuickAction({

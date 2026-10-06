@@ -141,7 +141,7 @@ function Board() {
       )}
 
       {issues.data?.truncated && (
-        <p className="text-xs text-warning-fg">Showing the most recent {total} issues. Narrow the filters to see the rest.</p>
+        <p className="text-xs text-warning-fg">Showing the most recent {plural(total, "issue")}. Narrow the filters to see the rest.</p>
       )}
 
       {err && !issues.data ? (

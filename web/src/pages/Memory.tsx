@@ -197,7 +197,20 @@ export default function Memory({ subpath }: ModulePageProps) {
         run: async () => {
           try {
             await memoryApi.trash(e.path)
-            toast.success("Moved to the trash")
+            toast.success("Moved to the trash", {
+              description: e.dir ? e.name : baseName(e.path),
+              action: {
+                label: "Undo",
+                onClick: () =>
+                  void memoryApi
+                    .restore(e.path)
+                    .then(() => {
+                      toast.success("Restored", { description: e.path })
+                      return refresh()
+                    })
+                    .catch((err) => toast.error("Could not restore it", { description: errorMessage(err) })),
+              },
+            })
             if (current && (current === e.path || current.startsWith(`${e.path}/`))) navigate("/memory")
             await refresh()
           } catch (err) {

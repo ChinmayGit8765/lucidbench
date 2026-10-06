@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Container, Layers, Moon, Play, Power as PowerIcon, ServerCog, Ship, Square, TriangleAlert } from "lucide-react"
 
 import { StatTile } from "@/components/StatTile"
+import { StateSprite } from "@/components/StateSprite"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -68,7 +69,9 @@ export function PowerTile() {
           )
         }
         aside={
-          failing.length > 0 ? (
+          items.length > 0 && items.every(isAsleep) ? (
+            <StateSprite state="sleeping" className="-my-3 size-11" label="Everything is asleep" />
+          ) : failing.length > 0 ? (
             <StatusPill tone="danger">{failing.length} failed</StatusPill>
           ) : items.some((it) => it.state === "starting") ? (
             <StatusPill tone="info" pulse>

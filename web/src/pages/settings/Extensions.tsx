@@ -94,6 +94,7 @@ function ExtensionCard({
   return (
     <div
       ref={ref}
+      data-testid={`ext-${m.id}`}
       className={cn(
         "group relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow]",
         soon ? "opacity-70" : "hover:border-border-strong",
@@ -170,8 +171,9 @@ export function Extensions({ focus }: { focus?: string }) {
   const toggle = (m: ModuleDef) => {
     const added = !isAdded(m, prefs)
     update((p) => ({ ...p, extensions: { ...p.extensions, [m.id]: { added, order: p.extensions[m.id]?.order ?? m.order } } }))
+    const restore = () => update((p) => ({ ...p, extensions: { ...p.extensions, [m.id]: { added: !added, order: p.extensions[m.id]?.order ?? m.order } } }))
     toast.success(added ? `${m.title} added to the sidebar` : `${m.title} removed from the sidebar`, {
-      action: added ? { label: "Open", onClick: () => open(m.id) } : undefined,
+      action: added ? { label: "Open", onClick: () => open(m.id) } : { label: "Undo", onClick: restore },
     })
   }
 

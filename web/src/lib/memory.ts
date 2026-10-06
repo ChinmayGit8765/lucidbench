@@ -47,6 +47,8 @@ export const memoryApi = {
     sendJSON<Page>(`/api/memory/page?path=${q(path)}`, "PUT", p),
   trash: (path: string) => sendJSON<null>(`/api/memory/page?path=${q(path)}`, "DELETE"),
   move: (from: string, to: string) => sendJSON<{ path: string }>("/api/memory/move", "POST", { from, to }),
+  /** Brings the newest trashed copy of path back (undo for trash). */
+  restore: (path: string) => sendJSON<{ path: string }>("/api/memory/restore", "POST", { path }),
   search: (text: string, limit = 20) => getJSON<Hit[]>(`/api/memory/search?q=${q(text)}&limit=${limit}`),
   backlinks: (path: string) => getJSON<string[]>(`/api/memory/backlinks?path=${q(path)}`),
 }
