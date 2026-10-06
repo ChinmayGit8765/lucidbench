@@ -13,6 +13,7 @@ import {
   GitPullRequest,
   KanbanSquare,
   ListTree,
+  Play,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -271,6 +272,7 @@ function Changes({
   setConfirm: (c: ConfirmRequest | null) => void
   expanded?: boolean
 }) {
+  const { open } = useApp()
   const d = session.diff!
   const [openFiles, setOpenFiles] = useState<Set<string>>(() => new Set(expanded || d.files.length === 1 ? d.files.map((f) => f.path) : []))
   const toggle = (p: string) =>
@@ -457,9 +459,20 @@ function Changes({
           })}
         </ul>
       ) : (
-        <p className="border-t px-5 py-4 text-sm text-muted-foreground">
-          {d.uncommitted.length > 0 ? "Nothing committed yet." : "The agent changed nothing."}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 border-t px-5 py-4">
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {d.uncommitted.length > 0
+              ? "Nothing committed yet."
+              : session.status === "running"
+                ? "No changes yet."
+                : "The agent changed nothing. If it asked you something, start a new session with your answers in the prompt."}
+          </p>
+          {d.uncommitted.length === 0 && session.status !== "running" && (
+            <Button size="sm" variant="secondary" onClick={() => open("work", session.card ? ["new", session.card] : ["new", "project", session.project])}>
+              <Play /> Answer and start again
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   )

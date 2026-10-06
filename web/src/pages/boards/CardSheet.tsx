@@ -27,7 +27,7 @@ import { boardsApi, DEFAULT_BOARD, labelColor, type Board, type Card, type CardF
 import { baseName, memoryApi, pageRoute, safeName, type Hit } from "@/lib/memory"
 import type { ProjectList } from "@/lib/projects"
 import { cn } from "@/lib/utils"
-import { sessionPath, STATUS_INFO, type WorkSession } from "@/lib/work"
+import { sessionPath, sessionsPath, STATUS_INFO, type WorkSession } from "@/lib/work"
 
 const field =
   "h-8 w-full rounded-md border bg-background/60 px-2.5 text-sm outline-none transition-colors placeholder:text-subtle-foreground hover:border-border-strong focus-visible:border-border-strong focus-visible:ring-2 focus-visible:ring-ring/30"
@@ -66,18 +66,24 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
     }
   }, [])
 
-  // The card's latest Work session: its status, and the PR once there is one.
+  // The card's Work session: its status, and the PR once there is one. Work
+  // writes the session id on the card's work:: line, then the PR URL once a
+  // PR is open; for a URL, the session is the one that opened that PR.
+  const prURL = card.work && /^https?:\/\//.test(card.work) ? card.work : null
   useEffect(() => {
     setSession(null)
     if (!card.work) return
     let cancelled = false
-    getJSON<WorkSession>(sessionPath(card.work))
-      .then((s) => !cancelled && setSession(s))
-      .catch(() => undefined)
+    const found = prURL
+      ? getJSON<WorkSession[]>(sessionsPath).then((l) => l.find((s) => s.card === card.id && s.pr_url === prURL) ?? null)
+      : getJSON<WorkSession>(sessionPath(card.work))
+    found.then((s) => !cancelled && setSession(s)).catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [card.work])
+  }, [card.work, card.id, prURL])
+  const pr = session?.pr_url ?? prURL
+  const workID = session?.id ?? (prURL ? null : card.work)
 
   const save = async (fields: CardFields) => {
     try {
@@ -140,15 +146,15 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
         >
           <FileText /> Open brief
         </Button>
-        {session?.pr_url ? (
+        {pr ? (
           <Button size="sm" asChild>
-            <a href={session.pr_url} target="_blank" rel="noreferrer">
+            <a href={pr} target="_blank" rel="noreferrer">
               <GitPullRequest /> Open PR
             </a>
           </Button>
-        ) : card.work ? (
+        ) : workID ? (
           <>
-            <Button size="sm" onClick={() => open("work", [card.work!])}>
+            <Button size="sm" onClick={() => open("work", [workID])}>
               <SquareTerminal /> Open session
             </Button>
             {session && session.status !== "running" && onWorkBoard && (
@@ -238,29 +244,29 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
           )}
         </Prop>
         <Prop icon={SquareTerminal} label="Work">
-          {card.work ? (
+          {workID ? (
             <LinkRow
               icon={SquareTerminal}
-              onClick={() => open("work", [card.work!])}
+              onClick={() => open("work", [workID])}
               label={session ? `${providerInfo(session.provider)?.label ?? session.provider} session` : "Work session"}
-              detail={session?.branch ?? card.work}
+              detail={session?.branch ?? workID}
               pill={session && <StatusPill tone={STATUS_INFO[session.status].tone}>{STATUS_INFO[session.status].label}</StatusPill>}
             />
           ) : (
-            <span className="text-sm text-subtle-foreground">Not started</span>
+            <span className="text-sm text-subtle-foreground">{pr ? "The session that opened the PR is gone" : "Not started"}</span>
           )}
         </Prop>
-        {session?.pr_url && (
+        {pr && (
           <Prop icon={GitPullRequest} label="Pull request">
             <a
-              href={session.pr_url}
+              href={pr}
               target="_blank"
               rel="noreferrer"
               className="flex min-w-0 items-center gap-2 rounded-md border bg-background/60 px-2.5 py-1.5 text-sm hover:border-border-strong"
             >
               <GitPullRequest className="size-3.5 shrink-0 text-success" />
               <span className="truncate">Draft PR</span>
-              <span className="ml-auto truncate font-mono text-2xs text-subtle-foreground">{session.pr_url.replace(/^https?:\/\/(www\.)?github\.com\//, "")}</span>
+              <span className="ml-auto truncate font-mono text-2xs text-subtle-foreground">{pr.replace(/^https?:\/\/(www\.)?github\.com\//, "")}</span>
               <ExternalLink className="size-3 shrink-0 text-subtle-foreground" />
             </a>
           </Prop>

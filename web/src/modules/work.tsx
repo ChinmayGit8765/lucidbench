@@ -138,7 +138,12 @@ function useWorkAttention(): AttentionItem[] | null {
         icon: failed ? <TriangleAlert className="size-3.5 text-danger" /> : <FileDiff className="size-3.5 text-info" />,
         title: (
           <>
-            {failed ? "Session failed" : "Session finished: review diff"} · {s.title}
+            {failed
+              ? "Session failed"
+              : d && d.files.length === 0 && d.uncommitted.length === 0
+                ? "Session finished without changes: read its answer"
+                : "Session finished: review diff"}{" "}
+            · {s.title}
           </>
         ),
         meta: (
