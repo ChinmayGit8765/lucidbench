@@ -42,12 +42,13 @@ import {
 import { cn, plural } from "@/lib/utils"
 import type { Account } from "@/pages/Accounts"
 import { Row, Section, Segmented, Switch } from "@/pages/settings/controls"
+import { Sprites } from "@/pages/settings/Sprites"
 
 const ACCENTS = ["#4f8ff7", "#8b5cf6", "#ec4899", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#a1a1aa"]
 
 /* ---------- theme gallery ---------- */
 
-function ThemeCard({
+export function ThemeCard({
   theme,
   selected,
   onSelect,
@@ -452,6 +453,24 @@ function freeId(base: string, taken: Theme[]): string {
   }
 }
 
+/** Saves a copy of a theme as a new user theme and returns it, or null on failure. */
+async function duplicateTheme(t: Theme, themes: Theme[], reload: () => Promise<void>): Promise<Theme | null> {
+  try {
+    const b = await getJSON<ThemeBundle>(`/api/themes/${encodeURIComponent(t.id)}/export`)
+    const id = freeId(t.id, themes)
+    const copy = await sendJSON<Theme>("/api/themes", "POST", {
+      theme: { ...b.theme, id, name: `${b.theme.name} copy`.slice(0, 60), builtin: false },
+      assets: b.assets,
+    })
+    await reload()
+    toast.success("Theme duplicated", { description: copy.name })
+    return copy
+  } catch (e) {
+    toast.error("Could not duplicate", { description: errorMessage(e) })
+    return null
+  }
+}
+
 function YourThemes({ apply }: { apply: (id: string) => void }) {
   const { themes, reloadThemes, prefs, update } = usePrefs()
   const mine = themes.filter((t) => !t.builtin)
@@ -466,20 +485,7 @@ function YourThemes({ apply }: { apply: (id: string) => void }) {
       toast.error("Could not export", { description: errorMessage(e) })
     }
   }
-  const duplicate = async (t: Theme) => {
-    try {
-      const b = await getJSON<ThemeBundle>(`/api/themes/${encodeURIComponent(t.id)}/export`)
-      const id = freeId(t.id, themes)
-      const copy = await sendJSON<Theme>("/api/themes", "POST", {
-        theme: { ...b.theme, id, name: `${b.theme.name} copy`.slice(0, 60), builtin: false },
-        assets: b.assets,
-      })
-      await reloadThemes()
-      toast.success("Theme duplicated", { description: copy.name })
-    } catch (e) {
-      toast.error("Could not duplicate", { description: errorMessage(e) })
-    }
-  }
+  const duplicate = (t: Theme) => duplicateTheme(t, themes, reloadThemes).then(() => undefined)
   const remove = (t: Theme) =>
     setConfirm({
       title: `Delete ${t.name}?`,
@@ -610,6 +616,13 @@ export function Appearance({ focus }: { focus?: string }) {
           </Row>
         )}
       </Section>
+
+      <Sprites
+        onDuplicate={async (t) => {
+          const copy = await duplicateTheme(t, themes, reloadThemes)
+          if (copy) apply(copy.id)
+        }}
+      />
 
       <Section
         title="Customise"

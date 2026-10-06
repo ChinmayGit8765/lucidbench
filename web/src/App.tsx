@@ -1,19 +1,26 @@
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { Blocks, Compass, Plus } from "lucide-react"
 import { Toaster as SonnerToaster, toast } from "sonner"
 
+import { CelebrationWatcher, Celebrations } from "@/components/Celebrate"
 import { CommandPalette, useCommandPaletteHotkey, type Command } from "@/components/CommandPalette"
+import { ShortcutSheet, useShortcuts } from "@/components/Shortcuts"
 import { Header, Sidebar } from "@/components/Shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { EmptyState, Skeleton } from "@/components/ui/states"
+import { EmptyState, LoadingArt, Skeleton } from "@/components/ui/states"
+import { getJSON } from "@/lib/api"
 import { AppContext, useApp, type AppValue } from "@/lib/app"
+import { newBraindump } from "@/lib/council"
 import { useHealth } from "@/lib/health"
 import { PrefsProvider, usePrefs } from "@/lib/prefs"
+import { SETUP_PATH, SETUP_ROUTE, type SetupStatus } from "@/lib/setup"
 import { MODULES } from "@/modules"
 import { isAdded, isOpenable, matchPath, moduleById, navOrder, pathFor } from "@/modules/registry"
 import type { ModuleDef } from "@/modules/types"
 import { AddAccountDialog } from "@/pages/Accounts"
+
+const Setup = lazy(() => import("@/pages/Setup"))
 
 /** Only ?theme= survives navigation; page-specific parameters do not. */
 function keptSearch(): string {
@@ -87,8 +94,37 @@ function Workbench() {
   )
 
   useEffect(() => {
-    document.title = `${module?.title ?? "Not found"} · Lucidbench`
-  }, [module])
+    if (!path.startsWith(SETUP_ROUTE)) document.title = `${module?.title ?? "Not found"} · Lucidbench`
+  }, [module, path])
+
+  // First run: no ui.json and no projects.yaml yet opens setup, once, from the Overview.
+  useEffect(() => {
+    if (location.pathname !== "/") return
+    getJSON<SetupStatus>(SETUP_PATH)
+      .then((s) => s.needed && location.pathname === "/" && navigate(SETUP_ROUTE))
+      .catch(() => undefined)
+  }, [navigate])
+
+  const inSetup = path === SETUP_ROUTE || path.startsWith(`${SETUP_ROUTE}/`)
+  const [help, setHelp] = useState(false)
+  useShortcuts({
+    enabled: !inSetup,
+    onHelp: () => setHelp((h) => !h),
+    onSearch: () => setPalette(true),
+    onNew: () => newBraindump(open),
+    onGo: (id) => open(id),
+  })
+
+  if (inSetup) {
+    return (
+      <AppContext.Provider value={app}>
+        <Suspense fallback={<div className="app-backdrop min-h-screen" />}>
+          <Setup subpath={path.split("/").filter(Boolean).slice(1)} />
+        </Suspense>
+        <Toaster theme={base} />
+      </AppContext.Provider>
+    )
+  }
 
   return (
     <AppContext.Provider value={app}>
@@ -107,6 +143,9 @@ function Workbench() {
         </div>
         <AddAccountDialog key={String(adding)} open={adding} onClose={() => setAdding(false)} />
         <Palette open={palette} onClose={() => setPalette(false)} current={module?.id} />
+        <ShortcutSheet open={help} onClose={() => setHelp(false)} />
+        <CelebrationWatcher />
+        <Celebrations />
         <Toaster theme={base} />
       </div>
     </AppContext.Provider>
@@ -128,7 +167,10 @@ function PageSkeleton() {
         <Skeleton className="h-28 rounded-xl" />
         <Skeleton className="h-28 rounded-xl" />
       </div>
-      <Skeleton className="h-64 rounded-xl" />
+      <div className="relative h-64 overflow-hidden rounded-xl">
+        <Skeleton className="absolute inset-0 rounded-xl" />
+        <LoadingArt className="relative h-full" />
+      </div>
     </div>
   )
 }

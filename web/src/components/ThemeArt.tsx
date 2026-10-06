@@ -48,9 +48,9 @@ export function SpriteBoard() {
   )
 }
 
-/** The active theme's empty-state illustration, if it has one. */
+/** The active theme's empty-state illustration (or its "empty" state sprite), if it has one. */
 export function useEmptyArt(): string | null {
   const { active, inlineAssets } = usePrefs()
-  const f = active?.art?.emptyState
+  const f = active?.art?.emptyState ?? active?.art?.sprites?.empty
   return active && f ? assetURL(active, f, inlineAssets(active)) : null
 }
