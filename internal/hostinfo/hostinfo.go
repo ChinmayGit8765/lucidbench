@@ -68,7 +68,7 @@ var CLIs = []string{
 
 // EnvVars are the environment variables extensions may require. Only their
 // presence is reported, never their values.
-var EnvVars = []string{"LINEAR_API_KEY", "TRELLO_API_KEY", "TRELLO_TOKEN"}
+var EnvVars = []string{"LINEAR_API_KEY", "TRELLO_API_KEY", "TRELLO_TOKEN", "STRIPE_API_KEY"}
 
 // Tools is the body of GET /api/host/tools.
 type Tools struct {

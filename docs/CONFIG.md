@@ -75,6 +75,8 @@ is an error that names the file and the key, for example
 | `integrations.trello.key` | `env:TRELLO_API_KEY` | `LUCID_INTEGRATIONS_TRELLO_KEY` | Secret reference for the Trello API key. |
 | `integrations.trello.token` | `env:TRELLO_TOKEN` | `LUCID_INTEGRATIONS_TRELLO_TOKEN` | Secret reference for the Trello token. |
 | `integrations.trello.api_url` | `https://api.trello.com/1` | `LUCID_INTEGRATIONS_TRELLO_API_URL` | Trello REST base URL. Change it only to go through a proxy. |
+| `integrations.stripe.key` | `env:STRIPE_API_KEY` | `LUCID_INTEGRATIONS_STRIPE_KEY` | Secret reference for a Stripe restricted or secret key. See [Payments (Stripe)](#payments-stripe). |
+| `integrations.stripe.api_url` | `https://api.stripe.com` | `LUCID_INTEGRATIONS_STRIPE_API_URL` | Stripe API base URL. Change it only to go through a proxy or a local fake. |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -94,7 +96,7 @@ References only, never values. Nothing personal ever goes in the repo.
   Keep them in your user directories, not in a checkout.
 
 The secret settings are `ci.github.token`, `integrations.linear.token`,
-`integrations.trello.key` and `integrations.trello.token`. The `password` of a connection in
+`integrations.trello.key`, `integrations.trello.token` and `integrations.stripe.key`. The `password` of a connection in
 `databases.yaml` follows the same rule (see [Databases](#databases)).
 
 ## Runners & CI
@@ -169,6 +171,61 @@ messages Lucidbench shows never quote what the remote service answered.
 - Every route that changes something (`POST`, `PUT`) requires the header
   `X-Lucid-Confirm: yes`, which the web UI sends. The `api_url` keys exist for
   proxies and for tests; leave them alone otherwise.
+
+## Payments (Stripe)
+
+The Payments extension (Settings › Extensions, category Business) reads a Stripe
+account and, in test mode only, sets up a project's payments. It needs one key:
+
+```yaml
+integrations:
+  stripe:
+    key: "env:STRIPE_API_KEY"
+```
+
+Export the key as `STRIPE_API_KEY` where the daemon starts and restart it. A Stripe MCP
+server in your AI client is not enough: the page talks to the Stripe API itself. The key
+is sent in an `Authorization` header only; it is never logged, stored, returned or put in
+a URL, and error messages never quote what Stripe answered (only Stripe's short error
+code, such as `permission_error`).
+
+- **Use a restricted key.** In the Stripe Dashboard open Developers › API keys › Create
+  restricted key. For the read side give it **Read** on Account, Balance, PaymentIntents,
+  Products, Prices, Payment Links and Webhook Endpoints. A key missing a permission is
+  answered `403 Stripe refused the request (permission_error)` for that tab only.
+- **The mode comes from the key.** A secret or restricted key says its mode in its second
+  segment (`test` or `live`); Lucidbench reads that on every call and never shows the
+  prefix. A test key is test mode, a live key is live mode, and anything that is not
+  recognisably one of them is treated as live. The page shows a large TEST or LIVE badge.
+- **Reads work in both modes:** account (name, country), balance, recent payments
+  (payment intents: amount, currency, status, date, description), products with their
+  prices, payment links and webhook endpoints. Lists are paged, cached for 60 seconds, and
+  a rate-limited call (HTTP 429) is retried up to three times with a back-off.
+- **Writes are test mode only in this version.** With a live key every write route
+  answers `403 live mode writes are not supported in this version` before any request is
+  sent to Stripe. Lucidbench never issues refunds, payouts or transfers, in any mode: the
+  only calls it can make are creating products, prices, payment links and webhook
+  endpoints.
+- **Set up payments for a project** (Payments › Set up payments). You give a product name,
+  its prices (one-off or recurring: amount, currency, interval), a success URL and,
+  optionally, a webhook URL with events. Lucidbench builds a **plan**, the list of objects
+  to create, and shows it. Nothing is created until you confirm. Each step is sent with an
+  `Idempotency-Key` derived from the plan, so running the same plan again after a failure
+  continues where it stopped without duplicating anything, and a partial failure shows
+  which steps were created, which failed and which were skipped.
+- **The webhook signing secret is shown once**, in the result of the step that created the
+  endpoint. Lucidbench does not store, log or audit it; copy it into your server's
+  environment then, or roll it in the Stripe Dashboard later.
+- **What is written on this machine**, under `<data dir>/payments/`:
+  - `<project>.yaml` links the created object ids (product, prices, payment link and its
+    URL, webhook endpoint) to the project. It holds ids only.
+  - `audit.jsonl` has one line per write: time, mode, action, object ids, project, plan id
+    and result. It holds no keys and no secrets.
+- Routes: `GET /api/payments/status|account|balance|charges|products|links|webhooks|audit`,
+  `GET /api/payments/project/{id}`, `POST /api/payments/plan` (builds a plan, writes
+  nothing) and `POST /api/payments/plan/execute` (needs `X-Lucid-Confirm: yes`). `charges`
+  takes `limit` and `days` (`days` also totals the succeeded payments of that window per
+  currency, which the Overview tile shows as seven-day volume).
 
 ## Projects
 

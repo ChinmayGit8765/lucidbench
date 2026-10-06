@@ -100,3 +100,8 @@ integrations:
   trello:
     key: "env:TRELLO_API_KEY"
     token: "env:TRELLO_TOKEN"
+  # Payments (Stripe): a restricted or secret key. Test-mode keys can also
+  # create products, prices, payment links and webhook endpoints from the
+  # Payments page; live-mode keys are read-only.
+  stripe:
+    key: "env:STRIPE_API_KEY"

@@ -34,6 +34,16 @@ marked `-beta.N`.
   lucidd with a temporary data dir and fake claude, codex, grok, gh and docker, from braindump to
   merged PR, plus setup, Memory, boards, themes, extensions, assessments and Studio. CI runs it on
   every push and pull request.
+- **Payments extension (Stripe):** read your account in test or live mode (mode badge, balance,
+  recent payments, products and prices, payment links, webhook endpoints, seven-day volume on
+  Overview), and "Set up payments for a project": a short form becomes a reviewable plan, and
+  confirming it creates the product, prices, a payment link and an optional webhook endpoint in
+  **test mode only**. A live key is read-only: every write answers 403 before anything is sent to
+  Stripe. Lucidbench never refunds, pays out or transfers. Each step carries an idempotency key, so
+  running a plan again after a failure continues without duplicates; the webhook signing secret is
+  shown once and never stored; created ids are linked in `<data dir>/payments/<project>.yaml` and
+  every write is appended to `payments/audit.jsonl` (no secrets). Needs `STRIPE_API_KEY`
+  (`integrations.stripe.key`); see [Payments](docs/CONFIG.md#payments-stripe).
 
 ## 0.3.0-beta.2 (2026-10-07)
 
