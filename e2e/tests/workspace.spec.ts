@@ -112,8 +112,9 @@ test("Theme: switch from the mascot launcher, and the shortcuts sheet", async ({
   await expect(page).toHaveURL(/\/work/)
   await page.keyboard.press("n")
   await expect(page).toHaveURL(/\/council/)
-  await page.keyboard.press("Escape")
-  await page.locator("main").click({ position: { x: 5, y: 5 } })
+  // n puts the cursor in the composer; typed keys belong to it from then on.
+  await expect(page.getByRole("textbox", { name: "New braindump" })).toBeFocused()
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
   await page.keyboard.press("/")
   await expect(page.getByPlaceholder(/command|search/i).last()).toBeFocused()
 })

@@ -12,8 +12,9 @@ test.beforeAll(async () => {
 })
 test.afterAll(async () => d?.stop())
 
-// A 1x1 PNG, made here so the test needs no binary fixture.
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64")
+// The PNG signature and two bytes: the daemon checks an upload's content by
+// its magic bytes, so this is enough of an image for the test.
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0])
 
 test("Lumi fills a loading area, and the Projects empty state leads to import", async ({ page }) => {
   // Hold the CI runs answer back so Overview's activity card is still loading.
