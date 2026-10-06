@@ -28,8 +28,12 @@ func LockPathIn(configDir, provider, profile string) string {
 	return filepath.Join(configDir, "lucidbench", "locks", provider+"-"+profile+".lock")
 }
 
-// pidAlive is a variable so tests can stub it.
-var pidAlive = processAlive
+// pidAlive is a variable so tests can stub it. An unknown answer counts as
+// dead here, so a lock nobody can vouch for is replaced.
+var pidAlive = func(pid int) bool {
+	alive, _ := processState(pid)
+	return alive
+}
 
 // Acquire creates the lock with O_EXCL. A lock held by a dead PID is replaced.
 func Acquire(path string) (*Lock, error) {
