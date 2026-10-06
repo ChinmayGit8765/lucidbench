@@ -55,12 +55,12 @@ func Register(mux *http.ServeMux, s *Service) {
 		apiutil.WriteJSON(w, http.StatusOK, out)
 	})
 	mux.HandleFunc("GET /api/work/defaults", func(w http.ResponseWriter, r *http.Request) {
-		cmds, err := s.Defaults(r.URL.Query().Get("project"))
+		cmds, team, err := s.Defaults(r.URL.Query().Get("project"))
 		if err != nil {
 			fail(w, err)
 			return
 		}
-		apiutil.WriteJSON(w, http.StatusOK, map[string]any{"allowed_commands": cmds})
+		apiutil.WriteJSON(w, http.StatusOK, map[string]any{"allowed_commands": cmds, "team": team})
 	})
 	mux.HandleFunc("POST /api/work/sessions", func(w http.ResponseWriter, r *http.Request) {
 		if !apiutil.Confirmed(w, r) {

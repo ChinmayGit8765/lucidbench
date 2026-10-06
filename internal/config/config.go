@@ -194,6 +194,11 @@ type Config struct {
 
 	Integrations IntegrationsConfig `json:"integrations"`
 
+	// Team is the default AI team (lucid-team.yaml version 1) as YAML text,
+	// used by a project that has no team of its own; "" means Lucidbench's
+	// defaults. internal/team reads and checks it.
+	Team string `json:"team,omitempty"`
+
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
 	File      string `json:"-"`
@@ -247,7 +252,7 @@ func Keys() []string {
 		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds",
 		"integrations.linear.token", "integrations.linear.api_url",
 		"integrations.trello.key", "integrations.trello.token", "integrations.trello.api_url",
-		"integrations.stripe.key", "integrations.stripe.api_url")
+		"integrations.stripe.key", "integrations.stripe.api_url", "team")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -460,6 +465,8 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 			err = d.power(e)
 		case "integrations":
 			err = d.integrations(e)
+		case "team":
+			err = d.team(e)
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -468,6 +475,24 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 		}
 	}
 	return d.warns, nil
+}
+
+// team keeps the `team:` mapping as YAML text. Its content is checked by
+// internal/team when a project resolves its team, not here.
+func (d *fileDecoder) team(e entry) error {
+	if e.node.Kind == yaml.ScalarNode && e.node.Tag == "!!null" {
+		return nil
+	}
+	if e.node.Kind != yaml.MappingNode {
+		return d.errAt(e.node, "team", "must be a mapping (a lucid-team.yaml document)")
+	}
+	b, err := yaml.Marshal(e.node)
+	if err != nil {
+		return d.errAt(e.node, "team", err.Error())
+	}
+	d.c.Team = string(b)
+	d.c.sources["team"] = "file"
+	return nil
 }
 
 func (d *fileDecoder) stringField(section, name string, dst *string) func(string, *yaml.Node) (bool, error) {
@@ -1028,6 +1053,11 @@ func (c *Config) value(key string) string {
 		return fmt.Sprint(c.Power.RunnerIdleMinutes)
 	case "power.poll_seconds":
 		return fmt.Sprint(c.Power.PollSeconds)
+	case "team":
+		if c.Team == "" {
+			return ""
+		}
+		return "(set)"
 	case "power.stacks":
 		ss := []string{}
 		for _, s := range c.Power.Stacks {

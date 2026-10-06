@@ -94,6 +94,7 @@ func fakeCLI(dir string) int {
 		}
 	}
 	_ = os.WriteFile(filepath.Join(pdir, fmt.Sprintf("call-%d.txt", n)), []byte(prompt), 0o600)
+	_ = os.WriteFile(filepath.Join(pdir, fmt.Sprintf("args-%d.txt", n)), []byte(strings.Join(os.Args[1:], "\n")), 0o600)
 
 	reply, err := os.ReadFile(filepath.Join(pdir, fmt.Sprintf("%d.txt", n)))
 	if err != nil {

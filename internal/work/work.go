@@ -104,8 +104,12 @@ type Session struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
 	Profile  string `json:"profile,omitempty"`
+	Model    string `json:"model,omitempty"`
 	Harness  string `json:"harness"`
 	Project  string `json:"project"`
+	// Team says where the builder defaults came from (a project's team), ""
+	// when the request chose everything itself.
+	Team string `json:"team,omitempty"`
 	// RepoPath is the project's checkout and Worktree the session's; the
 	// hints show them with the home folder as "~".
 	RepoPath     string `json:"repo_path"`
@@ -147,9 +151,10 @@ type Session struct {
 // StartRequest is the body of POST /api/work/sessions.
 type StartRequest struct {
 	// Card is a card id on the work board, or "<board>/<card id>".
-	Card     string `json:"card,omitempty"`
-	Project  string `json:"project,omitempty"`
-	Prompt   string `json:"prompt,omitempty"`
+	Card    string `json:"card,omitempty"`
+	Project string `json:"project,omitempty"`
+	Prompt  string `json:"prompt,omitempty"`
+	// Provider may be empty when the project's team has a builder.
 	Provider string `json:"provider"`
 	Profile  string `json:"profile,omitempty"`
 	// Harness is "mine" (the CLI loads the user's settings, hooks and
@@ -175,6 +180,9 @@ type Service struct {
 	Home string
 	// PRView reads a PR's state and checks; nil asks gh.
 	PRView func(dir, url string) (PRInfo, error)
+	// Team returns a project's builder (see internal/team), or nil when the
+	// project has no team of its own; nil means no teams.
+	Team func(project string) (*Builder, error)
 
 	mu       sync.Mutex
 	loaded   bool
@@ -360,20 +368,44 @@ type task struct {
 	brief   string // vault path of the brief page
 	body    string // the brief's text, or the card title
 	title   string
+	team    *Builder // the project's builder, nil without a team
+}
+
+// Builder is a project's builder role as Work reads it (see internal/team):
+// the defaults a new session on the project starts with.
+type Builder struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
+	Profile  string `json:"profile,omitempty"`
+	// AllowedCommands replaces the stack part of the project's default list,
+	// like projects.yaml work.allowed_commands; nil keeps the defaults.
+	AllowedCommands []string `json:"allowed_commands,omitempty"`
+	// Source is where the team came from (repo, data or config).
+	Source string `json:"source"`
+	// BudgetUSD and the recent average are shown beside the provider.
+	BudgetUSD *float64 `json:"budget_usd,omitempty"`
+	AvgUSD    float64  `json:"avg_usd,omitempty"`
+	Runs      int      `json:"runs,omitempty"`
+}
+
+// builder returns the project's team builder, or nil.
+func (s *Service) builder(project string) *Builder {
+	if s.Team == nil {
+		return nil
+	}
+	b, err := s.Team(project)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // resolve checks a start request and finds its project, card and brief.
 func (s *Service) resolve(req *StartRequest) (*task, error) {
-	if _, ok := agentexec.Logins[req.Provider]; !ok {
+	if _, ok := agentexec.Logins[req.Provider]; !ok && req.Provider != "" {
 		return nil, errf(ErrBadRequest, "provider must be claude, codex or grok")
 	}
-	if req.Harness == "" {
-		req.Harness = agentexec.HarnessClean
-		if req.Provider == "claude" {
-			req.Harness = agentexec.HarnessMine
-		}
-	}
-	if req.Harness != agentexec.HarnessMine && req.Harness != agentexec.HarnessClean {
+	if req.Harness != "" && req.Harness != agentexec.HarnessMine && req.Harness != agentexec.HarnessClean {
 		return nil, errf(ErrBadRequest, "harness must be mine or clean")
 	}
 	t := &task{}
@@ -409,6 +441,29 @@ func (s *Service) resolve(req *StartRequest) (*task, error) {
 	}
 	if t.project.LocalPath == "" {
 		return nil, errf(ErrBadRequest, "%s has no local_path; add `local_path: <its checkout>` to the project in projects.yaml", t.project.Name)
+	}
+	t.team = s.builder(t.project.ID)
+	if b := t.team; b != nil {
+		if req.Provider == "" {
+			req.Provider = b.Provider
+		}
+		if req.Provider == b.Provider {
+			if req.Model == "" {
+				req.Model = b.Model
+			}
+			if req.Profile == "" {
+				req.Profile = b.Profile
+			}
+		}
+	}
+	if req.Provider == "" {
+		return nil, errf(ErrBadRequest, "choose a provider")
+	}
+	if req.Harness == "" {
+		req.Harness = agentexec.HarnessClean
+		if req.Provider == "claude" {
+			req.Harness = agentexec.HarnessMine
+		}
 	}
 	if t.title == "" {
 		t.title = firstLine(taskPart(req.Prompt), 80)
@@ -578,7 +633,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		return Session{}, errf(ErrBadRequest, "%s is not on PATH; install it and sign in with `%s`", req.Provider, agentexec.Logins[req.Provider])
 	}
 
-	allowed, err := sessionAllowed(&req, t.project)
+	allowed, err := sessionAllowed(&req, t.project, teamCommands(t.team))
 	if err != nil {
 		return Session{}, err
 	}
@@ -588,13 +643,16 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		return Session{}, err
 	}
 	se := Session{
-		ID: id, Provider: req.Provider, Profile: req.Profile, Harness: req.Harness, Project: t.project.ID,
+		ID: id, Provider: req.Provider, Profile: req.Profile, Model: req.Model, Harness: req.Harness, Project: t.project.ID,
 		RepoPath: wt.repo, RepoHint: s.hint(wt.repo), Branch: wt.branch, BaseRef: wt.baseRef, BaseSHA: wt.baseSHA,
 		Worktree: wt.path, WorktreeHint: s.hint(wt.path), Title: t.title, Prompt: prompt(t, req.Prompt, allowed),
 		Board: t.board, Brief: t.brief, AllowedCommands: allowed, Status: StatusRunning, Started: time.Now().UTC(),
 	}
 	if t.card != nil {
 		se.Card = t.card.ID
+	}
+	if t.team != nil {
+		se.Team = t.team.Source
 	}
 	e := &entry{s: se, changed: make(chan struct{}), events: []agentexec.Event{}, done: make(chan struct{})}
 	if err := s.save(&e.s); err != nil {

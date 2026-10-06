@@ -28,19 +28,19 @@ func TestProjectAllowedAddsAssessmentChecks(t *testing.T) {
 	bare := t.TempDir()
 
 	// No work block: the stack defaults (none here) plus the assessment's.
-	got := projectAllowed(projects.Project{LocalPath: bare, Assessment: a})
+	got := projectAllowed(projects.Project{LocalPath: bare, Assessment: a}, nil)
 	for _, w := range []string{"go test", "go vet", "gofmt", "git status"} {
 		if !slices.Contains(got, w) {
 			t.Errorf("%q missing from %v", w, got)
 		}
 	}
 	// A work block replaces the stack part, not the assessment's checks.
-	got = projectAllowed(projects.Project{LocalPath: bare, Assessment: a, Work: &projects.WorkConfig{AllowedCommands: []string{"make"}}})
+	got = projectAllowed(projects.Project{LocalPath: bare, Assessment: a, Work: &projects.WorkConfig{AllowedCommands: []string{"make"}}}, nil)
 	if !slices.Contains(got, "make") || !slices.Contains(got, "go test") {
 		t.Errorf("work block + assessment: %v", got)
 	}
 	// Without an assessment nothing is added.
-	if got := projectAllowed(projects.Project{LocalPath: bare}); slices.Contains(got, "go test") {
+	if got := projectAllowed(projects.Project{LocalPath: bare}, nil); slices.Contains(got, "go test") {
 		t.Errorf("unassessed project got %v", got)
 	}
 }

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChinmayGit8765/lucidbench/blob/main/docs/schemas/lucid-team.schema.json",
+  "title": "lucid-team.yaml",
+  "description": "Version 1 of the Lucidbench AI-team spec: which provider fills each role of the loop, and which gates stay with a human. See docs/TEAM-SPEC.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": { "const": 1 },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A missing role means Lucidbench's default for it.",
+      "properties": {
+        "proposer": { "$ref": "#/$defs/role" },
+        "critic": {
+          "description": "One role, or a list of up to two. The council runs them in parallel.",
+          "oneOf": [
+            { "$ref": "#/$defs/role" },
+            { "type": "array", "items": { "$ref": "#/$defs/role" }, "minItems": 1, "maxItems": 2 }
+          ]
+        },
+        "builder": { "$ref": "#/$defs/role" },
+        "reviewer": { "$ref": "#/$defs/role" },
+        "scout": { "$ref": "#/$defs/role" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Version 1 keeps every gate with a human; a missing gate is human.",
+      "properties": {
+        "approve_brief": { "const": "human" },
+        "open_pr": { "const": "human" },
+        "merge": { "const": "human" }
+      }
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": { "enum": ["claude", "codex", "grok"] },
+        "profile": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,64}$",
+          "description": "A host account profile of the provider; omitted or \"default\" is the default profile. Grok has none."
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$",
+          "description": "The provider CLI's model name or alias, for example sonnet, haiku, gpt-5-codex or grok-4."
+        },
+        "mcp_allow": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$" },
+          "description": "MCP server names the role may use, as they appear on the MCP servers page."
+        },
+        "allowed_commands": {
+          "type": "array",
+          "maxItems": 40,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9._+-]+( [A-Za-z0-9._+-]+)*$" },
+          "description": "Builder only: the shell commands a Work session may run without asking (command prefixes). git push, git remote, rm, shells, curl, wget and gh are always refused."
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "What one run of the role should cost at most, in US dollars. Version 1 warns; it never stops a run."
+        }
+      }
+    }
+  }
+}
