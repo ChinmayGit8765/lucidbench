@@ -1,5 +1,6 @@
 /*
- * The end-to-end harness: one lucidd per spec file, on 127.0.0.1:7466, with
+ * The end-to-end harness: one lucidd per spec file, on 127.0.0.1:7466 (or
+ * E2E_PORT, when something else holds that port), with
  * a temporary home, data dir and config, and a PATH that holds only the fake
  * CLIs (e2e/fakecli), git and the OS's own tools. No real provider CLI, gh
  * or docker can run: startDaemon refuses to start unless every outside CLI
@@ -11,8 +12,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const PORT = 7466
+export const PORT = Number(process.env.E2E_PORT) || 7466
 export const BASE = `http://127.0.0.1:${PORT}`
+/** The phone remote's port in the specs that turn it on: the next one up. */
+export const REMOTE_PORT = PORT + 1
 const win = process.platform === "win32"
 const exe = win ? ".exe" : ""
 

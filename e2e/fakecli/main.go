@@ -4,9 +4,12 @@
 // the name it was started as. It never talks to a network or a provider.
 //
 //   - claude: in Work (stream-json) it writes a file and commits it in its
-//     working directory; in the council it answers with a brief, or with an
-//     "ok" critique when the council-critique prompt is in its input; asked
-//     for a section (Settings › Sections), it answers with one.
+//     working directory, reporting a session id; a follow-up (--resume with
+//     that id, or a prompt carrying Work's summary of the earlier turns)
+//     adds a line and commits again. In the council it answers with a
+//     brief, or with an "ok" critique when the council-critique prompt is in
+//     its input; asked for a section (Settings › Sections), it answers with
+//     one.
 //   - codex, grok: critics; they always answer "ok".
 //   - gh: `pr create` prints a PR URL; `pr view` reports the state written
 //     in $LUCID_E2E_STATE/pr-state (OPEN unless a test wrote MERGED).
@@ -113,6 +116,9 @@ const section = `{"id": "briefs-waiting", "title": "Briefs waiting for me", "des
 func claude(args []string) int {
 	in, _ := io.ReadAll(os.Stdin)
 	if has(args, "stream-json") {
+		if resumes(args) || strings.Contains(string(in), "## Follow-up from the user") {
+			return workAgain(string(in), resumes(args))
+		}
 		return work()
 	}
 	text := string(in) + " " + strings.Join(args, " ")
@@ -143,9 +149,70 @@ func has(args []string, s string) bool {
 	return false
 }
 
+// sessionID is the claude session every Work run reports and a follow-up resumes.
+const sessionID = "0e2e0e2e-1111-4222-8333-444455556666"
+
+// resumes reports whether the arguments resume the fake's session.
+func resumes(args []string) bool {
+	for i, a := range args {
+		if a == "--resume" && i+1 < len(args) && args[i+1] == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// git runs git in the working directory, its errors on stderr.
+func git(a ...string) error {
+	cmd := exec.Command("git", a...)
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// workAgain is a follow-up turn: it adds the follow-up to NOTES.md and
+// commits it, saying how it was reached.
+func workAgain(prompt string, resumed bool) int {
+	out(m{"type": "system", "subtype": "init", "session_id": sessionID})
+	how := "from Work's summary of the earlier turns"
+	if resumed {
+		how = "resumed with --resume"
+	}
+	ask := strings.TrimSpace(prompt)
+	if i := strings.LastIndex(ask, "## Follow-up from the user"); i >= 0 {
+		ask = strings.TrimSpace(ask[i+len("## Follow-up from the user"):])
+	}
+	out(m{"type": "assistant", "message": m{"content": []any{
+		m{"type": "text", "text": "Picking up where I left off (" + how + ")."},
+		m{"type": "tool_use", "id": "t3", "name": "Edit", "input": m{"file_path": "NOTES.md", "old_string": "Every project builds.\n", "new_string": "Every project builds.\n\n- " + firstLine(ask) + "\n"}}}}})
+	time.Sleep(1500 * time.Millisecond)
+	b, err := os.ReadFile("NOTES.md")
+	if err != nil {
+		b = []byte("# Build report\n")
+	}
+	if err := os.WriteFile("NOTES.md", append(b, []byte("\n- "+firstLine(ask)+"\n")...), 0o644); err != nil {
+		return 1
+	}
+	out(m{"type": "user", "message": m{"content": []any{m{"type": "tool_result", "tool_use_id": "t3", "content": "File edited"}}}})
+	if err := git("add", "NOTES.md"); err != nil {
+		return 1
+	}
+	if err := git("commit", "-q", "-m", "docs: answer the follow-up"); err != nil {
+		return 1
+	}
+	out(m{"type": "assistant", "message": m{"content": []any{m{"type": "text", "text": "Done: the follow-up is in NOTES.md and committed."}}}})
+	out(m{"type": "result", "is_error": false, "result": "Done again.", "total_cost_usd": 0.03, "session_id": sessionID,
+		"usage": m{"input_tokens": 4, "output_tokens": 40}, "modelUsage": m{"claude-fake": m{}}})
+	return 0
+}
+
+func firstLine(s string) string {
+	l, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return l
+}
+
 // work writes NOTES.md, commits it and reports, the way an agent would.
 func work() int {
-	out(m{"type": "system", "subtype": "init"})
+	out(m{"type": "system", "subtype": "init", "session_id": sessionID})
 	out(m{"type": "assistant", "message": m{"content": []any{
 		m{"type": "text", "text": "I'll add the notes file and commit it."},
 		m{"type": "tool_use", "id": "t1", "name": "Write", "input": m{"file_path": "NOTES.md", "content": "# Build report\n"}}}}})
