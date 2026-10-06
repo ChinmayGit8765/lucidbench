@@ -29,11 +29,13 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
+	"github.com/ChinmayGit8765/lucidbench/internal/payments"
 	"github.com/ChinmayGit8765/lucidbench/internal/picture"
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
 	"github.com/ChinmayGit8765/lucidbench/internal/prompts"
+	"github.com/ChinmayGit8765/lucidbench/internal/stripe"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
@@ -173,6 +175,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	boards.Register(mux, vault)
 	linear.Register(mux, linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") }))
 	trello.Register(mux, trello.New(cfg.Integrations.Trello, vault))
+	payments.Register(mux, &payments.Service{Stripe: stripe.New(cfg.Integrations.Stripe), Dir: filepath.Join(data, "payments"), Projects: projects.Load})
 	councilSvc := council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath})
 	council.Register(mux, councilSvc)
 	workSvc := work.New(filepath.Join(data, "work", "sessions"), &agentexec.Runner{

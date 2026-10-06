@@ -81,8 +81,9 @@ var writePaths = map[string]bool{
 
 // Error is a failed call that Stripe described with a plain error code.
 type Error struct {
-	Err  error
-	Code string
+	Err    error
+	Status int
+	Code   string
 }
 
 func (e *Error) Error() string {
@@ -102,6 +103,15 @@ func Code(err error) string {
 		return e.Code
 	}
 	return ""
+}
+
+// StatusOf returns the HTTP status of a failed call that carried a code, or 0.
+func StatusOf(err error) int {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Status
+	}
+	return 0
 }
 
 var codeRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -126,7 +136,7 @@ func classify(status int, body []byte) error {
 	case status >= 500:
 		base = extapi.ErrRemote
 	}
-	return &Error{Err: base, Code: e.Error.Code}
+	return &Error{Err: base, Code: e.Error.Code, Status: status}
 }
 
 // Service talks to Stripe. Build it with New; tests set the fields directly.
