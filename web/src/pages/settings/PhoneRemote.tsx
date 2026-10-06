@@ -184,7 +184,7 @@ export function PhoneRemote() {
             <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pair.qr_svg)}`} alt="Pairing QR code" className="size-48 rounded-lg bg-white p-1" data-testid="pair-qr" />
             <div className="min-w-0 space-y-2 text-sm">
               <p>
-                Expires in {Math.max(1, Math.ceil((new Date(pair.expires).getTime() - now) / 60000))} min. Or open this address on the phone:
+                Expires in {Math.min(5, Math.max(1, Math.ceil((new Date(pair.expires).getTime() - now) / 60000)))} min. Or open this address on the phone:
               </p>
               <CopyCommand command={pair.url} />
               <Button

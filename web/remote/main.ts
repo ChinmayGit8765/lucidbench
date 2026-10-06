@@ -440,13 +440,21 @@ async function sessionScreen(id: string) {
 /** A brief's Markdown as plain blocks: headings and paragraphs, never parsed as HTML. */
 function briefNodes(md: string): Node[] {
   const out: Node[] = []
-  for (const block of md.split(/\n{2,}/)) {
-    const t = block.trim()
-    if (!t || t.startsWith("---")) continue
-    const m = /^(#{1,4})\s+(.*)$/.exec(t)
-    if (m && !t.includes("\n")) out.push(h(m[1].length <= 1 ? "h2" : "h3", {}, m[2]))
-    else out.push(h("p", { class: "pre" }, t))
+  let para: string[] = []
+  const flush = () => {
+    const t = para.join("\n").trim()
+    if (t) out.push(h("p", { class: "pre" }, t))
+    para = []
   }
+  for (const line of md.split("\n")) {
+    const m = /^(#{1,4})\s+(.*)$/.exec(line.trim())
+    if (m) {
+      flush()
+      out.push(h(m[1].length <= 1 ? "h2" : "h3", {}, m[2]))
+    } else if (line.trim() === "") flush()
+    else para.push(line)
+  }
+  flush()
   return out
 }
 
