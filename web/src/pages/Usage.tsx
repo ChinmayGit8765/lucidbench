@@ -301,7 +301,7 @@ export default function Usage() {
             <div role="group" aria-label="Range" className="flex items-center gap-1">
               {[7, 30].map((n) => (
                 <Button key={n} size="sm" variant={days === n ? "secondary" : "ghost"} aria-pressed={days === n} onClick={() => setDays(n)}>
-                  {n} days
+                  {plural(n, "day")}
                 </Button>
               ))}
             </div>
@@ -332,7 +332,7 @@ export default function Usage() {
           <WindowsCard providers={gauges} title={`${title} windows`} now={now} />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">Tokens, last {s.days} days</h2>
+            <h2 className="text-sm font-semibold">Tokens, last {plural(s.days, "day")}</h2>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" className="size-3.5 accent-[var(--brand)]" checked={withCache} onChange={(e) => setWithCache(e.target.checked)} />
               Include cache reads
