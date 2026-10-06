@@ -3,6 +3,17 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
+## Unreleased
+
+- **Linear extension:** your issues as a board grouped by state, with team, project and "assigned
+  to me" filters, the active cycle, and a link on every card. Promote a native card to a new Linear
+  issue (you pick team and project and confirm) or link an existing issue. Needs a personal API key
+  in `LINEAR_API_KEY`.
+- **Trello extension:** boards as lists of cards, add a card, move a card between lists (each asks
+  first), and link a native card to a Trello card. Needs `TRELLO_API_KEY` and `TRELLO_TOKEN`.
+- Cards store `linear::` and `trello::` links. The remote owns the item; nothing is synced back.
+  Credentials are `env:NAME` references under the new `integrations` config section.
+
 ## 0.3.0-beta.1 (2026-10-06)
 
 The first beta: the core loop works end to end.

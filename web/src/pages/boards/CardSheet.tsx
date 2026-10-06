@@ -13,7 +13,9 @@ import {
   SquareTerminal,
   Tag,
   Vote,
+  Waypoints,
   X,
+  LayoutList,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -24,6 +26,10 @@ import { Sheet } from "@/components/ui/dialog"
 import { errorMessage, getJSON } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { boardsApi, DEFAULT_BOARD, labelColor, type Board, type Card, type CardFields } from "@/lib/boards"
+import { linearApi } from "@/lib/linear"
+import { usePrefs } from "@/lib/prefs"
+import { trelloApi } from "@/lib/trello"
+import { LinkInput, PromoteDialog, RemoteLink } from "@/pages/boards/RemoteLinks"
 import { baseName, memoryApi, pageRoute, safeName, type Hit } from "@/lib/memory"
 import type { ProjectList } from "@/lib/projects"
 import { cn } from "@/lib/utils"
@@ -53,6 +59,10 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
   const [projects, setProjects] = useState<string[]>([])
   const [session, setSession] = useState<WorkSession | null>(null)
   const [linking, setLinking] = useState(false)
+  const { prefs } = usePrefs()
+  const linearOn = prefs.extensions.linear?.added ?? false
+  const trelloOn = prefs.extensions.trello?.added ?? false
+  const [remote, setRemote] = useState<"promote" | "link-linear" | "link-trello" | null>(null)
 
   useEffect(() => setTitle(card.title), [card.title])
 
@@ -256,6 +266,47 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
             <span className="text-sm text-subtle-foreground">{pr ? "The session that opened the PR is gone" : "Not started"}</span>
           )}
         </Prop>
+        {(card.linear || linearOn) && (
+          <Prop icon={Waypoints} label="Linear">
+            {card.linear ? (
+              <RemoteLink label="Linear" id={card.linear} url={card.linear_url} onUnlink={() => void save({ linear: "", linear_url: "" })} />
+            ) : remote === "link-linear" ? (
+              <LinkInput
+                placeholder="ENG-12 or an issue URL"
+                link={async (text) => (await linearApi.link(board.id, card.id, text)).card}
+                onLinked={(c) => (setRemote(null), onSaved(c), toast.success(`Linked ${c.linear}`))}
+                onClose={() => setRemote(null)}
+              />
+            ) : (
+              <div className="flex gap-1.5">
+                <Button size="sm" variant="ghost" onClick={() => setRemote("promote")}>
+                  <Waypoints /> Promote to Linear
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRemote("link-linear")}>
+                  <Link2 /> Link issue
+                </Button>
+              </div>
+            )}
+          </Prop>
+        )}
+        {(card.trello || trelloOn) && (
+          <Prop icon={LayoutList} label="Trello">
+            {card.trello ? (
+              <RemoteLink label="Trello" id={card.trello} url={card.trello_url} onUnlink={() => void save({ trello: "", trello_url: "" })} />
+            ) : remote === "link-trello" ? (
+              <LinkInput
+                placeholder="A Trello card URL or id"
+                link={async (text) => (await trelloApi.link(board.id, card.id, text)).card}
+                onLinked={(c) => (setRemote(null), onSaved(c), toast.success("Linked the Trello card"))}
+                onClose={() => setRemote(null)}
+              />
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setRemote("link-trello")}>
+                <Link2 /> Link Trello card
+              </Button>
+            )}
+          </Prop>
+        )}
         {pr && (
           <Prop icon={GitPullRequest} label="Pull request">
             <a
@@ -272,6 +323,8 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
           </Prop>
         )}
       </dl>
+
+      <PromoteDialog board={board.id} card={card} open={remote === "promote"} onClose={() => setRemote(null)} onDone={onSaved} />
 
       <p className="border-t pt-4 text-xs text-subtle-foreground">
         Saved to <span className="font-mono">Boards/{board.id}.md</span> as an Obsidian Kanban card, with its fields as <span className="font-mono">key:: value</span> lines.

@@ -140,6 +140,36 @@ type PowerConfig struct {
 	PollSeconds        int          `json:"poll_seconds"`
 }
 
+// Defaults for the board connectors.
+const (
+	DefaultLinearToken SecretRef = "env:LINEAR_API_KEY"
+	DefaultLinearAPI             = "https://api.linear.app/graphql"
+	DefaultTrelloKey   SecretRef = "env:TRELLO_API_KEY"
+	DefaultTrelloToken SecretRef = "env:TRELLO_TOKEN"
+	DefaultTrelloAPI             = "https://api.trello.com/1"
+)
+
+// LinearConfig configures the Linear extension. APIURL is the GraphQL
+// endpoint, changed only to go through a proxy.
+type LinearConfig struct {
+	Token  SecretRef `json:"token"`
+	APIURL string    `json:"api_url"`
+}
+
+// TrelloConfig configures the Trello extension.
+type TrelloConfig struct {
+	Key    SecretRef `json:"key"`
+	Token  SecretRef `json:"token"`
+	APIURL string    `json:"api_url"`
+}
+
+// IntegrationsConfig holds the credential references of the board
+// connectors. Like every secret setting they are env:NAME references.
+type IntegrationsConfig struct {
+	Linear LinearConfig `json:"linear"`
+	Trello TrelloConfig `json:"trello"`
+}
+
 // Config is the effective configuration. It holds no secret values.
 type Config struct {
 	Server    ServerConfig              `json:"server"`
@@ -151,6 +181,8 @@ type Config struct {
 	CI        CIConfig                  `json:"ci"`
 	Docker    DockerConfig              `json:"docker"`
 	Power     PowerConfig               `json:"power"`
+
+	Integrations IntegrationsConfig `json:"integrations"`
 
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
@@ -178,6 +210,10 @@ func Default() *Config {
 			Runners: DefaultPowerRunners, RunnerIdleMinutes: DefaultPowerRunnerIdle,
 			Stacks: []PowerStack{}, PollSeconds: DefaultPowerPollSeconds,
 		},
+		Integrations: IntegrationsConfig{
+			Linear: LinearConfig{Token: DefaultLinearToken, APIURL: DefaultLinearAPI},
+			Trello: TrelloConfig{Key: DefaultTrelloKey, Token: DefaultTrelloToken, APIURL: DefaultTrelloAPI},
+		},
 		sources: map[string]string{},
 	}
 	for _, p := range Providers {
@@ -197,7 +233,9 @@ func Keys() []string {
 	}
 	return append(ks, "cluster.name", "agent.image", "vault.path", "ui.theme",
 		"ci.github.repos", "ci.github.token", "ci.runners.compose_project", "ci.runners.image_match", "docker.allowed_projects",
-		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds")
+		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds",
+		"integrations.linear.token", "integrations.linear.api_url",
+		"integrations.trello.key", "integrations.trello.token", "integrations.trello.api_url")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -408,6 +446,8 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 			})
 		case "power":
 			err = d.power(e)
+		case "integrations":
+			err = d.integrations(e)
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -527,6 +567,51 @@ func (d *fileDecoder) ci(e entry) error {
 	})
 }
 
+// integrationFields maps each integrations key to its destination.
+func (c *Config) integrationFields() (secrets map[string]*SecretRef, urls map[string]*string) {
+	i := &c.Integrations
+	return map[string]*SecretRef{
+			"integrations.linear.token": &i.Linear.Token,
+			"integrations.trello.key":   &i.Trello.Key,
+			"integrations.trello.token": &i.Trello.Token,
+		}, map[string]*string{
+			"integrations.linear.api_url": &i.Linear.APIURL,
+			"integrations.trello.api_url": &i.Trello.APIURL,
+		}
+}
+
+func (d *fileDecoder) integrations(e entry) error {
+	secrets, urls := d.c.integrationFields()
+	return d.section(e, func(svc string, sv *yaml.Node) (bool, error) {
+		if svc != "linear" && svc != "trello" {
+			return false, nil
+		}
+		return true, d.section(entry{"integrations." + svc, sv}, func(k string, v *yaml.Node) (bool, error) {
+			key := "integrations." + svc + "." + k
+			if dst, ok := secrets[key]; ok {
+				s, err := d.str(v, key)
+				if err != nil {
+					return true, err
+				}
+				ref, err := ParseSecretRef(s)
+				if err != nil {
+					return true, d.errAt(v, key, err.Error())
+				}
+				*dst = ref
+				d.c.sources[key] = "file"
+				return true, nil
+			}
+			if dst, ok := urls[key]; ok {
+				s, err := d.str(v, key)
+				*dst = s
+				d.c.sources[key] = "file"
+				return true, err
+			}
+			return false, nil
+		})
+	})
+}
+
 func (d *fileDecoder) integer(n *yaml.Node, key string) (int, error) {
 	var i int
 	if n.Kind != yaml.ScalarNode || n.Tag != "!!int" || n.Decode(&i) != nil {
@@ -612,6 +697,12 @@ var envSpecs = map[string][]string{
 	"power.runners": {"LUCID_POWER_RUNNERS"},
 }
 
+// integrationEnv is the environment variable of an integrations key:
+// integrations.linear.api_url is LUCID_INTEGRATIONS_LINEAR_API_URL.
+func integrationEnv(key string) string {
+	return "LUCID_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+}
+
 func providerEnv(p, field string) string {
 	return "LUCID_PROVIDERS_" + strings.ToUpper(p) + "_" + strings.ToUpper(field)
 }
@@ -654,6 +745,25 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 		}
 		c.CI.GitHub.Token = ref
 		c.sources["ci.github.token"] = "env:LUCID_CI_GITHUB_TOKEN"
+	}
+	secrets, urls := c.integrationFields()
+	for key, dst := range secrets {
+		n := integrationEnv(key)
+		if v := getenv(n); v != "" {
+			ref, err := ParseSecretRef(v)
+			if err != nil {
+				return fmt.Errorf("env %s: %s: %w", n, key, err)
+			}
+			*dst = ref
+			c.sources[key] = "env:" + n
+		}
+	}
+	for key, dst := range urls {
+		n := integrationEnv(key)
+		if v := getenv(n); v != "" {
+			*dst = v
+			c.sources[key] = "env:" + n
+		}
 	}
 	for _, p := range Providers {
 		pc := c.Providers[p]
@@ -880,6 +990,16 @@ func (c *Config) value(key string) string {
 		return c.CI.Runners.ImageMatch
 	case "docker.allowed_projects":
 		return "[" + strings.Join(c.Docker.AllowedProjects, ", ") + "]"
+	case "integrations.linear.token":
+		return c.Integrations.Linear.Token.String()
+	case "integrations.linear.api_url":
+		return c.Integrations.Linear.APIURL
+	case "integrations.trello.key":
+		return c.Integrations.Trello.Key.String()
+	case "integrations.trello.token":
+		return c.Integrations.Trello.Token.String()
+	case "integrations.trello.api_url":
+		return c.Integrations.Trello.APIURL
 	case "power.cluster":
 		return c.Power.Cluster
 	case "power.cluster_idle_minutes":

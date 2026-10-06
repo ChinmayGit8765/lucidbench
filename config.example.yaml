@@ -90,3 +90,13 @@ power:
   stacks: []
   # How often the cluster and runners are checked, in seconds (10-3600).
   poll_seconds: 60
+
+integrations:
+  # Board connectors (Settings > Extensions). Each value names an environment
+  # variable; never put a key here. Create a Linear key under Settings > Account
+  # > Security & access; Trello keys are at trello.com/power-ups/admin.
+  linear:
+    token: "env:LINEAR_API_KEY"
+  trello:
+    key: "env:TRELLO_API_KEY"
+    token: "env:TRELLO_TOKEN"

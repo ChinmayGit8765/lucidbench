@@ -73,6 +73,13 @@ type Card struct {
 	Due     string   `json:"due,omitempty"`
 	Labels  []string `json:"labels,omitempty"`
 	Done    bool     `json:"done"`
+	// Linear and Trello link the card to a remote issue or card. The remote
+	// owns it; nothing is synced back. Linear is the issue identifier (ENG-12),
+	// Trello the card id.
+	Linear    string `json:"linear,omitempty"`
+	LinearURL string `json:"linear_url,omitempty"`
+	Trello    string `json:"trello,omitempty"`
+	TrelloURL string `json:"trello_url,omitempty"`
 
 	extra []string // indented lines this package does not know, kept verbatim
 }
@@ -97,7 +104,7 @@ type BoardSummary struct {
 var (
 	idRE     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 	cardRE   = regexp.MustCompile(`^- \[([ xX])\] ?(.*)$`)
-	metaRE   = regexp.MustCompile(`^[ \t]+(id|project|memory|council|work|due|labels):: ?(.*)$`)
+	metaRE   = regexp.MustCompile(`^[ \t]+(id|project|memory|council|work|due|labels|linear|linear_url|trello|trello_url):: ?(.*)$`)
 	headRE   = regexp.MustCompile(`^## +(.+?) *$`)
 	settings = "%% kanban:settings"
 )
@@ -181,6 +188,14 @@ func (c *Card) set(key, val string) {
 		c.Work = val
 	case "due":
 		c.Due = val
+	case "linear":
+		c.Linear = val
+	case "linear_url":
+		c.LinearURL = val
+	case "trello":
+		c.Trello = val
+	case "trello_url":
+		c.TrelloURL = val
 	case "labels":
 		c.Labels = nil
 		for _, p := range strings.Split(val, ",") {
@@ -210,6 +225,7 @@ func (d *doc) body() string {
 			for _, kv := range [][2]string{
 				{"id", c.ID}, {"project", c.Project}, {"memory", c.Memory}, {"council", c.Council},
 				{"work", c.Work}, {"due", c.Due}, {"labels", strings.Join(c.Labels, ", ")},
+				{"linear", c.Linear}, {"linear_url", c.LinearURL}, {"trello", c.Trello}, {"trello_url", c.TrelloURL},
 			} {
 				if kv[1] != "" {
 					lines = append(lines, "\t"+kv[0]+":: "+kv[1])
@@ -436,6 +452,7 @@ func (c *Card) tidy() error {
 		return fmt.Errorf("%w: a card needs a title", ErrBadInput)
 	}
 	c.Project, c.Memory, c.Council, c.Work, c.Due = oneLine(c.Project), oneLine(c.Memory), oneLine(c.Council), oneLine(c.Work), oneLine(c.Due)
+	c.Linear, c.LinearURL, c.Trello, c.TrelloURL = oneLine(c.Linear), oneLine(c.LinearURL), oneLine(c.Trello), oneLine(c.TrelloURL)
 	var labels []string
 	for _, l := range c.Labels {
 		if l = oneLine(strings.ReplaceAll(l, ",", " ")); l != "" {
@@ -470,6 +487,7 @@ func AddCard(v *memory.Vault, board string, c Card) (Card, error) {
 	card := &Card{
 		ID: newID(d), Title: c.Title, Project: c.Project, Memory: c.Memory, Council: c.Council,
 		Work: c.Work, Due: c.Due, Labels: c.Labels, Done: c.Done,
+		Linear: c.Linear, LinearURL: c.LinearURL, Trello: c.Trello, TrelloURL: c.TrelloURL,
 	}
 	col.insert(card, -1)
 	if err := save(v, board, d); err != nil {
@@ -503,6 +521,7 @@ func UpdateCard(v *memory.Vault, board string, c Card) error {
 	}
 	card.Title, card.Project, card.Memory, card.Council, card.Work, card.Due, card.Labels, card.Done =
 		c.Title, c.Project, c.Memory, c.Council, c.Work, c.Due, c.Labels, c.Done
+	card.Linear, card.LinearURL, card.Trello, card.TrelloURL = c.Linear, c.LinearURL, c.Trello, c.TrelloURL
 	if dst != nil {
 		d.remove(col, i)
 		dst.insert(card, -1)
