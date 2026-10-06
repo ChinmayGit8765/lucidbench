@@ -15,8 +15,9 @@ import (
 // MaxRaster is the largest PNG, WebP or GIF asset accepted, in bytes.
 const MaxRaster = 1 << 20
 
-// MaxAssets is the most asset files one theme may carry.
-const MaxAssets = 16
+// MaxAssets is the most asset files one theme may carry: the three single
+// slots, a full sprite board and every state sprite, with room to spare.
+const MaxAssets = 32
 
 // Bundle is a theme with its assets inline: the body of POST /api/themes,
 // the export format, and the preview a generation returns. SVG assets are
