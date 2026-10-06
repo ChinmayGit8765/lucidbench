@@ -22,9 +22,8 @@ service the user may not have (Docker, a cloud CLI, an MCP server).
 
 Today's modules:
 
-- **Workspace (core):** Overview, Work (soon), Projects, Memory (soon),
-  Boards (soon)
-- **AI (core):** Accounts, MCP servers, Council (soon), Usage (soon)
+- **Workspace (core):** Overview, Work, Projects, Ideas, Memory, Boards, Prompt Studio
+- **AI (core):** Accounts, MCP servers, Council, Usage
 - **Bottom (core):** System, Settings
 - **Extensions:** Runners & CI, Containers and Kubernetes (added by default),
   Cloud, Databases, Picture and Live browser (added from the gallery), Linear, Trello and Payments (connectors that need credentials)
