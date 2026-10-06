@@ -40,15 +40,21 @@ function remember(keys: string[]) {
   }
 }
 
+/** Everything this page has celebrated or found already finished. */
+const known = new Set<string>()
+
 /** Celebrates something now, unless it was celebrated before. */
 export function celebrate(c: Celebration) {
-  if (seen().includes(c.key)) return
+  if (known.has(c.key) || seen().includes(c.key)) return
+  known.add(c.key)
   remember([c.key])
   window.dispatchEvent(new CustomEvent<Celebration>(EVENT, { detail: c }))
 }
 
-/** Marks things as already celebrated without a show (first sight of old wins). */
-export const markCelebrated = (keys: string[]) => keys.length && remember(keys)
+/** Things that were already finished when first seen: never celebrated. */
+export function markCelebrated(keys: string[]) {
+  for (const k of keys) known.add(k)
+}
 
 const COLORS = ["var(--brand)", "var(--brand-2)", "var(--success)", "var(--warning)", "var(--info)", "var(--danger)"]
 

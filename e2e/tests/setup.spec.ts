@@ -98,4 +98,11 @@ test("first-run setup: accounts, a new vault, imported projects, a theme, power,
   await page.goto("/settings/general")
   await page.getByTestId("run-setup").click()
   await expect(page).toHaveURL(/\/setup/)
+
+  // The last step opens the sample braindump in the council, without starting it.
+  await page.goto("/setup/try")
+  await page.getByTestId("setup-try").click()
+  await expect(page).toHaveURL(/\/council/)
+  await expect(page.getByRole("textbox").first()).toHaveValue(/side projects still build/)
+  await expect(page.getByRole("button", { name: /Convene council/ })).toBeEnabled()
 })

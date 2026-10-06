@@ -21,7 +21,7 @@ import { sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
 export function useActivity(): { state: SpriteState; detail: string } {
   const work = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 2)
   const council = usePoll<CouncilSummary[]>(SESSIONS_PATH, COUNCIL_POLL_MS)
-  const power = usePower()
+  const power = usePower(30_000)
   const running = work.data?.filter((s) => s.status === "running").length ?? 0
   const thinking = council.data?.filter((s) => s.status === "running").length ?? 0
   const items = allItems(power.data)

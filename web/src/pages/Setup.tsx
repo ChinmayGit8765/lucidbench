@@ -29,10 +29,10 @@ import { StateSprite } from "@/components/StateSprite"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { ErrorState, Skeleton } from "@/components/ui/states"
-import { ApiError, errorMessage, request, usePoll } from "@/lib/api"
+import { ApiError, errorMessage, getJSON, request, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { memoryApi, type VaultInfo } from "@/lib/memory"
-import { usePrefs } from "@/lib/prefs"
+import { usePrefs, type Prefs } from "@/lib/prefs"
 import { putHandoff } from "@/lib/prompts"
 import {
   SAMPLE_BRAINDUMP,
@@ -81,7 +81,9 @@ interface About {
 }
 
 /** Makes sure ui.json exists, so setup does not open by itself again. */
-async function markDone(prefs: unknown) {
+async function markDone(prefs: Prefs, loaded: boolean) {
+  // Before the saved prefs have loaded, save what the daemon has, not the defaults.
+  if (!loaded) prefs = await getJSON<Prefs>("/api/prefs").catch(() => prefs)
   try {
     localStorage.setItem(SETUP_DONE_KEY, "1")
   } catch {
@@ -102,7 +104,7 @@ async function markDone(prefs: unknown) {
  */
 export default function Setup({ subpath }: { subpath: string[] }) {
   const { navigate, open } = useApp()
-  const { prefs } = usePrefs()
+  const { prefs, loaded } = usePrefs()
   const index = Math.max(0, STEPS.findIndex((s) => s.id === subpath[0]))
   const step = STEPS[index]
   const go = (i: number) => navigate(`${SETUP_ROUTE}/${STEPS[Math.min(STEPS.length - 1, Math.max(0, i))].id}`)
@@ -112,7 +114,7 @@ export default function Setup({ subpath }: { subpath: string[] }) {
   }, [step])
 
   const finish = async (then?: () => void) => {
-    await markDone(prefs)
+    await markDone(prefs, loaded)
     if (then) then()
     else {
       navigate("/")
@@ -496,6 +498,7 @@ function ProjectsStep() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [scanning, setScanning] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [result, setResult] = useState<AddResult | null>(null)
   const [refused, setRefused] = useState<NotAppendable | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
@@ -524,14 +527,19 @@ function ProjectsStep() {
   useEffect(() => {
     if (entries.length === 0) {
       setPreview(null)
+      setPreviewError(null)
       return
     }
     let cancelled = false
     const t = setTimeout(() => {
       setupApi
         .preview(entries)
-        .then((r) => !cancelled && setPreview(r.snippet))
-        .catch((e) => !cancelled && setPreview(`# ${errorMessage(e)}`))
+        .then((r) => {
+          if (cancelled) return
+          setPreview(r.snippet)
+          setPreviewError(null)
+        })
+        .catch((e) => !cancelled && setPreviewError(errorMessage(e)))
     }, 250)
     return () => {
       cancelled = true
@@ -704,10 +712,16 @@ function ProjectsStep() {
             entries.length > 0 && (
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">These lines are appended to {status.data?.projects_hint ?? "projects.yaml"}:</div>
-                <pre className="max-h-48 overflow-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs" data-testid="setup-projects-preview">
-                  {preview ?? "…"}
-                </pre>
-                <Button size="sm" onClick={add} data-testid="setup-projects-add">
+                {previewError ? (
+                  <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-fg" role="alert">
+                    {previewError}
+                  </p>
+                ) : (
+                  <pre className="max-h-48 overflow-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs" data-testid="setup-projects-preview">
+                    {preview ?? "…"}
+                  </pre>
+                )}
+                <Button size="sm" onClick={add} disabled={!!previewError || preview === null} data-testid="setup-projects-add">
                   <Check /> Add {plural(entries.length, "project")}
                 </Button>
               </div>
