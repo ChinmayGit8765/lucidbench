@@ -39,8 +39,12 @@ func (c *clock) Add(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// Wait advances the clock instead of sleeping.
-func (c *clock) Wait(_ context.Context, d time.Duration) error {
+// Wait advances the clock instead of sleeping; like a real wait it fails
+// once ctx is done.
+func (c *clock) Wait(ctx context.Context, d time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.Add(d)
 	return nil
 }
@@ -104,7 +108,7 @@ func (f *fakeDocker) run(_ context.Context, args ...string) ([]byte, error) {
 			f.failNext[args[0]]--
 			return nil, fmt.Errorf("docker %s: Error response from daemon: failed to start", args[0])
 		}
-		b := f.find(args[1])
+		b := f.find(args[len(args)-1])
 		if b == nil {
 			return nil, errors.New("no such container")
 		}
@@ -125,7 +129,7 @@ func (f *fakeDocker) acted() []string {
 	var out []string
 	for _, c := range f.calls {
 		if c[0] == "start" || c[0] == "stop" || c[0] == "restart" {
-			out = append(out, c[0]+" "+c[1])
+			out = append(out, strings.Join(c, " "))
 		}
 	}
 	return out

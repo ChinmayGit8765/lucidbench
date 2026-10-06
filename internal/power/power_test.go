@@ -263,6 +263,34 @@ func TestClusterIdleStop(t *testing.T) {
 	}
 }
 
+func TestEnsureSurvivesACancelledRequest(t *testing.T) {
+	r := newRig(t, powerCfg("on-demand", "always"))
+	r.k.readyAfter = 2
+	cctx, cancel := context.WithCancel(ctx)
+	cancel() // the browser went away before the node was ready
+	if err := r.s.EnsureCluster(cctx); err != nil {
+		t.Fatalf("a cancelled request aborted the start: %v", err)
+	}
+	if st := r.s.State(ctx); st.Cluster.State != "running" || st.Cluster.Error != "" {
+		t.Fatalf("state %+v", st.Cluster)
+	}
+}
+
+func TestClusterErrorClearsOnceHealthy(t *testing.T) {
+	r := newRig(t, powerCfg("on-demand", "always"))
+	r.s.StartTimeout = 10 * time.Second
+	r.k.readyAfter = 1000
+	_ = r.s.EnsureCluster(ctx) // fails: never ready
+	if r.s.State(ctx).Cluster.Error == "" {
+		t.Fatal("no error after a failed start")
+	}
+	r.k.readyAfter = 0 // the node came up after all
+	r.s.Tick(ctx)
+	if e := r.s.State(ctx).Cluster.Error; e != "" {
+		t.Fatalf("error stuck after the cluster became healthy: %q", e)
+	}
+}
+
 func TestClusterBusyUnknownIsNotIdle(t *testing.T) {
 	r := newRig(t, powerCfg("on-demand", "always"))
 	_ = r.s.EnsureCluster(ctx)

@@ -246,6 +246,10 @@ func (s *Supervisor) EnsureCluster(ctx context.Context) error {
 		}
 		return nil
 	}
+	// A request that goes away mid-start must not abort the start: the
+	// node would come up anyway and the failure would be a false one.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.startTimeout()+30*time.Second)
+	defer cancel()
 	return s.StartCluster(ctx, true, "a job was submitted")
 }
 
@@ -333,8 +337,13 @@ func (s *Supervisor) StartCluster(ctx context.Context, auto bool, reason string)
 	}
 
 	restarted := false
+	// The kubeconfig is written again after a start (and after the restart
+	// below), not on every probe.
+	refresh := true
 	for {
-		_ = s.Cluster.Refresh()
+		if refresh {
+			refresh = s.Cluster.Refresh() != nil
+		}
 		lastErr := s.Cluster.Ready(ctx)
 		if lastErr == nil {
 			break
@@ -351,6 +360,7 @@ func (s *Supervisor) StartCluster(ctx context.Context, auto bool, reason string)
 					return fail(fmt.Errorf("restart node %s: %w", n.Name, err))
 				}
 			}
+			refresh = true
 		}
 		if err := s.wait(ctx, 2*time.Second); err != nil {
 			return fail(err)
@@ -418,6 +428,10 @@ func (s *Supervisor) StopCluster(ctx context.Context, auto bool, reason string) 
 	began := s.now()
 	e := Entry{Kind: "cluster", Name: s.ClusterName, Action: "stop", Auto: auto, Reason: reason}
 	for _, n := range running {
+		// docker's default grace period. The node gets SIGRTMIN+3 for its
+		// systemd but, measured on Docker Desktop, does not halt within 30
+		// seconds either, so a longer wait only delays the same kill; the
+		// node starts cleanly afterwards.
 		if _, err := s.Docker(ctx, "stop", n); err != nil {
 			e.Error = err.Error()
 			s.record(e)
@@ -451,8 +465,13 @@ func (s *Supervisor) tickCluster(ctx context.Context) {
 	s.mu.Lock()
 	s.cl.busyKnown = err == nil
 	s.cl.pods, s.cl.jobs = pods, jobs
-	if err == nil && pods+jobs > 0 {
-		s.cl.active = s.now()
+	if err == nil {
+		// Up and answering: an earlier failure (a start whose wait was cut
+		// short, a stop that did not go through) is over.
+		s.cl.err, s.cl.errAt = "", time.Time{}
+		if pods+jobs > 0 {
+			s.cl.active = s.now()
+		}
 	}
 	idle := s.now().Sub(s.cl.active)
 	s.mu.Unlock()

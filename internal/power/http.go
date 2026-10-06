@@ -74,7 +74,7 @@ func Register(mux *http.ServeMux, s *Supervisor) {
 				err = s.StopRunner(ctx, name)
 			}
 		case "stack":
-			_, err = s.StackAction(ctx, name, action, false, action+"ed from Lucidbench")
+			_, err = s.StackAction(ctx, name, action, false, map[string]string{"start": "started", "stop": "stopped"}[action]+" from Lucidbench")
 		default:
 			http.Error(w, "kind must be cluster, runner or stack", http.StatusNotFound)
 			return

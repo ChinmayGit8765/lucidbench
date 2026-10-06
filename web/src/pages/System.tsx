@@ -299,15 +299,29 @@ function JobsTable({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) => void }) 
   )
 }
 
-function Sleeping() {
+function Sleeping({ manual }: { manual?: boolean }) {
   return (
     <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-      The cluster is asleep. Running a job starts it first, which usually takes under a minute.
+      {manual
+        ? "The cluster is stopped, and power.cluster is off, so a job does not start it. Start it from the Power card above."
+        : "The cluster is asleep. Running a job starts it first, which usually takes under a minute."}
     </div>
   )
 }
 
-function JobsCard({ jobs, clusterRunning, asleep }: { jobs: Polled<Job[]>; clusterRunning?: boolean; asleep?: boolean }) {
+function JobsCard({
+  jobs,
+  clusterRunning,
+  asleep,
+  stoppedManual,
+}: {
+  jobs: Polled<Job[]>
+  clusterRunning?: boolean
+  /** Stopped, and a job wakes it. */
+  asleep?: boolean
+  /** Stopped in off mode: only Start wakes it. */
+  stoppedManual?: boolean
+}) {
   const { data, error, loading, refresh } = jobs
   const [selected, setSelected] = useState<Job | null>(null)
   const [busy, setBusy] = useState(false)
@@ -318,7 +332,7 @@ function JobsCard({ jobs, clusterRunning, asleep }: { jobs: Polled<Job[]>; clust
     setBusy(false)
   }
 
-  const unavailable = !asleep && (error?.status === 503 || clusterRunning === false)
+  const unavailable = !asleep && !stoppedManual && (error?.status === 503 || clusterRunning === false)
   // Keep the open job's status fresh as polls come in.
   const open = selected ? (data?.find((j) => j.name === selected.name) ?? selected) : null
 
@@ -340,7 +354,7 @@ function JobsCard({ jobs, clusterRunning, asleep }: { jobs: Polled<Job[]>; clust
           <Button variant="ghost" size="icon" onClick={refresh} aria-label="Refresh jobs" title="Refresh jobs">
             <RefreshCw />
           </Button>
-          <Button onClick={runHello} disabled={busy || unavailable}>
+          <Button onClick={runHello} disabled={busy || unavailable || stoppedManual}>
             <Play /> {busy ? (asleep ? "Waking the cluster" : "Submitting") : "Run hello job"}
           </Button>
         </div>
@@ -358,12 +372,12 @@ function JobsCard({ jobs, clusterRunning, asleep }: { jobs: Polled<Job[]>; clust
           <NoCluster />
         </div>
       )}
-      {asleep && (
+      {(asleep || stoppedManual) && (
         <div className="border-t p-5">
-          <Sleeping />
+          <Sleeping manual={stoppedManual} />
         </div>
       )}
-      {!unavailable && !asleep && error && !data && (
+      {!unavailable && !asleep && !stoppedManual && error && !data && (
         <div className="border-t p-5">
           <ErrorState title="Could not load jobs" message={error.message} onRetry={refresh} />
         </div>
@@ -409,7 +423,7 @@ export default function System({ subpath }: ModulePageProps) {
         />
       )}
       <PowerCard focus={focusPower} />
-      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} asleep={asleep} />
+      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} asleep={asleep} stoppedManual={nodeDown && !asleep} />
     </div>
   )
 }

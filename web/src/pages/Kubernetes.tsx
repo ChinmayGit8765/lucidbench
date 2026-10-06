@@ -301,8 +301,12 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
   const [helloBusy, setHelloBusy] = useState(false)
   const tab = subpath[0] === "jobs" || subpath[0] === "events" ? subpath[0] : "pods"
 
-  const power = usePower(3000)
+  const [fastPoll, setFastPoll] = useState(false)
+  // Poll quickly only while the node starts or stops, so the page follows it.
+  const power = usePower(fastPoll ? 3000 : 10000)
   const pc = power.data?.cluster
+  const moving = pc?.state === "starting" || pc?.state === "stopping"
+  useEffect(() => setFastPoll(moving), [moving])
   // A stopped or starting node: the k8s reads fail or hold stale data, so
   // the sleeping card replaces them.
   const asleep = !!pc && (isAsleep(pc) || pc.state === "starting")

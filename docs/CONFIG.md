@@ -324,7 +324,9 @@ the palette) work in every mode.
   awake. A cluster whose pods cannot be read is never stopped.
 - **Runners.** For each runner container, the repository comes from its
   `REPO_URL` (an organisation URL is left alone). When the repository has a
-  queued workflow run, its stopped runner is started. A runner is idle when
+  queued workflow run, its stopped runner is started; any queued run counts,
+  including one waiting for a GitHub-hosted runner, so such a run can wake
+  the runner for one idle period. A runner is idle when
   GitHub reports it not busy and its repository has no queued or in-progress
   run; after `power.runner_idle_minutes` of that it is stopped, after asking
   GitHub again, without the cache, that it is not busy. A busy runner is
