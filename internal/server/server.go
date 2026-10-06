@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
+	"github.com/ChinmayGit8765/lucidbench/internal/picture"
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
 	"github.com/ChinmayGit8765/lucidbench/internal/prefs"
 	"github.com/ChinmayGit8765/lucidbench/internal/projects"
@@ -153,6 +155,18 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	// that never uses them creates no folder.
 	vault := memory.LazyOpener(cfg)
 	memory.Register(mux, vault)
+	picture.Register(mux, &picture.Service{
+		Projects: projects.Load,
+		Store:    &picture.Store{Vault: vault},
+		Runner:   &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath},
+		Containers: func(ctx context.Context) ([]docker.Container, error) {
+			return docker.List(ctx, docker.Exec, docker.Policy{})
+		},
+		Databases: func(ctx context.Context) ([]databases.Discovered, error) { return databases.Discover(ctx, docker.Exec) },
+		Runners: func(ctx context.Context) ([]ci.Container, error) {
+			return ci.ListContainers(ctx, ci.ExecDocker, runners)
+		},
+	})
 	boards.Register(mux, vault)
 	linear.Register(mux, linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") }))
 	trello.Register(mux, trello.New(cfg.Integrations.Trello, vault))
