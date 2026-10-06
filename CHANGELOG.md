@@ -3,7 +3,7 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
-## Unreleased
+## 0.3.0-beta.3 (2026-10-07)
 
 - **Phone remote extension** (off by default): Settings › Phone remote (and **Pair phone** in the
   mascot launcher) turns on a second listener bound to one chosen LAN interface address or, in

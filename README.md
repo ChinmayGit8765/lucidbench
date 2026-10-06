@@ -2,7 +2,7 @@
 
 Lucidbench is an open-source, all-in-one AI workspace for building things with the AI accounts you already pay for (Claude, ChatGPT/Codex, Grok and Cursor). It turns a messy idea into clear, reviewed work and runs agents on it, from one desktop app.
 
-**Status: beta (0.3.0-beta.1).** Expect rough edges. Report them in [issues](https://github.com/ChinmayGit8765/lucidbench/issues).
+**Status: beta (0.3.0-beta.3).** Expect rough edges. Report them in [issues](https://github.com/ChinmayGit8765/lucidbench/issues).
 
 ### The core loop
 
