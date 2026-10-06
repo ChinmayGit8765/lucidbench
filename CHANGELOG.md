@@ -5,6 +5,15 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Databases extension:** finds Postgres, MySQL, MariaDB, Redis and Mongo containers, running or
+  stopped, with their published ports and default database and user names (passwords are never
+  read). Save one as a connection (`databases.yaml`, password as an `env:NAME` reference), then see
+  its health and latency, version, size, tables with row estimates and columns, and run read-only
+  queries: a read-only transaction with a 10 s timeout and a 500 row cap for SQL, an allowlist for
+  Redis, a limited `find` for Mongo. Writes are not supported yet. "Open in pgweb" (MIT) or, for
+  MySQL, Adminer runs as an on-demand container on 127.0.0.1 in a frame and stops when idle; the
+  images are pulled at run time. Overview gets a healthy-versus-down tile and an unreachable
+  connection shows under Needs attention. The daemon grows by about 9 MB for the four drivers.
 - **Linear extension:** your issues as a board grouped by state, with team, project and "assigned
   to me" filters, the active cycle, and a link on every card. Promote a native card to a new Linear
   issue (you pick team and project and confirm) or link an existing issue. Needs a personal API key

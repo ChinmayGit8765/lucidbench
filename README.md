@@ -18,7 +18,8 @@ braindump ─► Council ─► brief in Memory ─► card on a Board ─► Wo
 - **Also here:** account detection (several accounts per provider), the MCP access matrix, a projects map, Runners & CI for self-hosted GitHub Actions runners, Containers, Kubernetes (local kind), themes you can describe in words, and a Windows desktop app.
 - **Extensions you add:** **Linear** (your issues as a board by state, promote a card to a new issue or link an existing one) and **Trello** (boards as lists of cards, add and move cards, link a card). Each needs credentials from your environment; see [Board connectors](docs/CONFIG.md#board-connectors-linear-and-trello). The remote owns the item: there is no two-way sync.
 - **Cloud:** a read-only inventory of your Google Cloud Run services, Cloudflare Pages and Workers and Vercel projects (plus Azure and AWS sign-ins) through the CLIs you are already signed in to. Lucidbench stores no cloud credentials, and a project's card shows its live deploy status.
-- **Not yet:** Databases, Payments, Picture and Live browser are visible as "soon" extensions.
+- **Databases:** finds Postgres, MySQL, MariaDB, Redis and Mongo containers (running or stopped), keeps connection profiles with `env:` passwords, and reads them read-only: health, tables and columns, and a query box. An optional pgweb (or Adminer for MySQL) opens in a frame and stops when idle. See [Databases](docs/CONFIG.md#databases).
+- **Not yet:** Payments, Picture and Live browser are visible as "soon" extensions.
 
 **Safety in this beta:**
 - Work agents run as you on your machine. They are told to stay in their worktree, but this is not sandboxed yet.

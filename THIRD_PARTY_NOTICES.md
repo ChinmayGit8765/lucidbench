@@ -46,7 +46,24 @@ Compiled into the `lucidd` and `lucid` binaries (direct dependencies; transitive
 | `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery` | Apache-2.0 |
 | `go.yaml.in/yaml/v3` | MIT and Apache-2.0 |
 | `github.com/BurntSushi/toml` | MIT |
+| `github.com/jackc/pgx/v5` (the Databases extension's Postgres driver) | MIT |
+| `github.com/go-sql-driver/mysql` (MySQL and MariaDB) | MPL-2.0, used unmodified as a library |
+| `github.com/redis/go-redis/v9` (Redis) | BSD-2-Clause |
+| `go.mongodb.org/mongo-driver/v2` (MongoDB) | Apache-2.0 |
 | `golang.org/x/sys` and other `golang.org/x/*` modules (Copyright The Go Authors) | BSD-3-Clause |
+
+## Images pulled at run time
+
+The Databases extension can start a database manager as a container. The image is pulled from its
+registry the first time you open it, runs on your machine bound to 127.0.0.1, and is not part of
+Lucidbench or redistributed with it. Lucidbench only runs the unmodified image.
+
+| Image | Licence |
+|---|---|
+| `sosedoff/pgweb` ([pgweb](https://github.com/sosedoff/pgweb), Copyright Dan Sosedoff) | MIT |
+| `adminer` ([Adminer](https://www.adminer.org), Jakub Vrana) | Apache-2.0 or GPL-2.0 (the choice is the user's; Lucidbench does not link or modify it, and it is used under Apache-2.0) |
+
+RedisInsight is not offered because it is not under a permissive licence.
 
 ## Desktop app
 

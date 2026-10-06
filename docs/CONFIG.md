@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `ui.json`, `themes/`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -94,7 +94,8 @@ References only, never values. Nothing personal ever goes in the repo.
   Keep them in your user directories, not in a checkout.
 
 The secret settings are `ci.github.token`, `integrations.linear.token`,
-`integrations.trello.key` and `integrations.trello.token`.
+`integrations.trello.key` and `integrations.trello.token`. The `password` of a connection in
+`databases.yaml` follows the same rule (see [Databases](#databases)).
 
 ## Runners & CI
 
@@ -486,6 +487,80 @@ attention on Overview.
 
 API: `GET /api/cloud` (every provider), `GET /api/cloud/{provider}` and `GET /api/cloud/deploys`
 (project entries matched to the inventory). Add `?refresh=1` to skip the cache.
+
+## Databases
+
+The Databases extension finds database containers on your Docker engine, keeps connection profiles
+for the ones you choose, and reads them through their own Go drivers: PostgreSQL (pgx), MySQL and
+MariaDB (go-sql-driver), Redis (go-redis) and MongoDB (the official driver). It only reads. Add it
+from Settings › Extensions; Docker is needed for discovery and for the embedded managers, and the
+native view works against any reachable host once a connection is saved.
+
+**Discovery** lists containers whose image is `postgres` (also `postgresql`, `postgis`,
+`timescaledb`, `pgvector`), `mysql`, `mariadb`, `redis` (also `valkey`), or `mongo`, running or
+stopped, with the port each publishes on this machine. It reads only the names of the default
+database and user (`POSTGRES_DB`, `POSTGRES_USER`, `MYSQL_DATABASE`, `MYSQL_USER` and the
+`MARIADB_` pair): the filter runs inside `docker inspect`, so no other environment value, a
+password above all, reaches Lucidbench. A stopped container that lets Docker pick its port shows
+no port until it runs.
+
+**Connections** are saved in `<data dir>/databases.yaml`. The file is written by the app (comments
+are not kept), but you can also edit it:
+
+```yaml
+connections:
+  - id: shop                       # lowercase letters, digits, - and _
+    label: Shop (local)
+    engine: postgres               # postgres | mysql | redis | mongo
+    host: 127.0.0.1
+    port: 5432                     # the engine's default when omitted
+    database: shopdb               # for Redis, the database number
+    user: shop
+    password: env:SHOP_DB_PASSWORD # a reference, never the value
+    readonly: true
+    prod: false                    # a prod connection is always read-only
+```
+
+`password` follows the [secrets policy](#secrets-policy): only `env:NAME` is accepted, a literal
+value is rejected (and never echoed), and the variable must be set in the environment Lucidbench
+starts from. A saved connection whose variable is unset shows the variable's name, not a value. API
+responses show the `env:NAME` reference and nothing else. **Save as connection** on a discovered
+container prefills host, port, database and user; you add the variable's name.
+
+**Reading.** Per connection: health (connect and ping, with latency), version, size, the tables
+(or collections, or Redis keys) with row estimates, and each table's columns. The query box is
+read-only in every engine:
+
+| Engine | What runs |
+|---|---|
+| PostgreSQL, MySQL, MariaDB | one `SELECT`, `WITH`, `SHOW`, `EXPLAIN`, `VALUES`, `TABLE` or `DESCRIBE` statement, inside a `READ ONLY` transaction that is always rolled back, with a 10 second statement timeout and at most 500 rows. Anything else is refused before it reaches the database; a write hidden in a statement (for example a data-modifying `WITH`) is refused by the transaction. |
+| Redis | an allowlist of read commands: `GET`, `MGET`, `SCAN`, `HSCAN`, `SSCAN`, `ZSCAN`, `TYPE`, `TTL`, `PTTL`, `EXISTS`, `STRLEN`, `HGET`, `HGETALL`, `HKEYS`, `HVALS`, `HLEN`, `HMGET`, `LRANGE`, `LLEN`, `LINDEX`, `SMEMBERS`, `SCARD`, `SISMEMBER`, `SRANDMEMBER`, `ZRANGE`, `ZCARD`, `ZSCORE`, `ZRANK`, `ZCOUNT`, `DBSIZE`, `INFO`, `PING`, `EXPIRETIME`. `KEYS` is left out because it blocks the server. |
+| MongoDB | a `find` with a limit of at most 500 documents: `db.users.find({"a": 1})` or `{"find": "users", "filter": {}, "limit": 20}`. Filters that run JavaScript (`$where`, `$function`, `$accumulator`) are refused. |
+
+Writes are not supported in this version, and the page says so. TLS: PostgreSQL asks for TLS and
+falls back only if the server has none, and MySQL prefers it, so point a non-local connection at a
+server you trust.
+
+**Embedded managers (optional).** "Open in pgweb" runs [pgweb](https://github.com/sosedoff/pgweb)
+(MIT, image `sosedoff/pgweb`) as a container bound to `127.0.0.1` on a free port, connected to that
+database in its own read-only mode, and shows it in a frame. MySQL and MariaDB can open
+[Adminer](https://www.adminer.org) (Apache-2.0 or GPL-2.0, used under Apache-2.0; official image
+`adminer`) the same way: Adminer asks for the password itself, has no read-only mode, and is
+therefore not offered for a read-only or prod connection. Redis and Mongo have the native view only
+(RedisInsight is not under a permissive licence, so it is not offered). The images are pulled the
+first time you open a manager and are not redistributed with Lucidbench. A manager is an on-demand
+thing like those in [On-demand infrastructure](#on-demand-infrastructure): it stops by itself 10
+minutes after you last had its page open, "Sleep everything idle" stops it, and every start and
+stop shows in the power activity log. The connection string reaches pgweb through a short-lived env
+file, not the command line; `docker inspect` on a running pgweb container shows it, as it would for
+any container started with a database URL.
+
+API (every request that changes something or reaches a database needs `X-Lucid-Confirm: yes`):
+`GET /api/databases[?health=1]`, `POST /api/databases` (save), `DELETE /api/databases/{id}`,
+`GET /api/databases/{id}/health`, `GET /api/databases/{id}/schema`,
+`POST /api/databases/{id}/query` with `{"query": "..."}`, `GET /api/databases/{id}/manager` and
+`POST /api/databases/{id}/manager/start` or `stop`. Discovered containers (`docker:<name>`) have no
+password and cannot be read until they are saved.
 
 ## Containers
 
