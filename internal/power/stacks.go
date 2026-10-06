@@ -124,5 +124,8 @@ func (s *Supervisor) SleepIdle(ctx context.Context) []Outcome {
 			out = append(out, Outcome{Kind: "stack", Name: st.Project, Stopped: true, Reason: fmt.Sprintf("stopped %d container(s)", len(done))})
 		}
 	}
+	for _, e := range s.extraList() {
+		out = append(out, e.Sleep(ctx)...)
+	}
 	return out
 }

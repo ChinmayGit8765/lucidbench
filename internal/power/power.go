@@ -67,6 +67,7 @@ type Supervisor struct {
 	StartTimeout time.Duration
 
 	clusterMu sync.Mutex // one cluster start or stop at a time
+	extras    extras
 
 	mu        sync.Mutex // guards the fields below
 	begun     bool
@@ -179,6 +180,9 @@ func (s *Supervisor) Tick(ctx context.Context) {
 	s.mu.Unlock()
 	s.tickCluster(ctx)
 	s.tickRunners(ctx)
+	for _, e := range s.extraList() {
+		e.Tick(ctx)
+	}
 	// Warm the memory sample so GET /api/power never waits for docker stats.
 	s.memory(ctx)
 }

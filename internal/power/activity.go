@@ -14,7 +14,7 @@ import (
 // Entry is one start or stop, automatic or from a button.
 type Entry struct {
 	At     time.Time `json:"at"`
-	Kind   string    `json:"kind"` // cluster | runner | stack
+	Kind   string    `json:"kind"` // cluster | runner | stack | manager
 	Name   string    `json:"name"`
 	Action string    `json:"action"` // start | stop
 	Auto   bool      `json:"auto"`
