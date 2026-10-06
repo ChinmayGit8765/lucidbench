@@ -3,7 +3,7 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
-## Unreleased
+## 0.3.0-beta.4 (2026-10-07)
 
 - **Follow-ups in Work sessions:** a session no longer ends when the agent's turn does. It goes to
   **waiting** and keeps its worktree, branch, settings and attached browser; you reply from a
