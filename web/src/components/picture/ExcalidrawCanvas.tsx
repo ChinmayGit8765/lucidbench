@@ -13,6 +13,8 @@ export interface CanvasHandle {
   serialize: () => string
   /** The canvas as a PNG. */
   png: () => Promise<Blob>
+  /** Treats the canvas as it is now as the saved version. */
+  markSaved: () => void
 }
 
 /** The saved JSON, or an empty canvas when the text is not one. */
@@ -28,6 +30,8 @@ function initial(json: string): ExcalidrawInitialDataState | null {
   }
 }
 
+const signature = (elements: readonly { id: string; version: number }[]) => elements.map((e) => `${e.id}:${e.version}`).join(",")
+
 /**
  * Excalidraw, lazy-loaded as its own chunk. The parent keeps the handle and
  * asks for the JSON or a PNG when the user saves or exports; onDirty fires
@@ -35,12 +39,14 @@ function initial(json: string): ExcalidrawInitialDataState | null {
  */
 export default function ExcalidrawCanvas({ json, onDirty, handle }: { json: string; onDirty: () => void; handle: Ref<CanvasHandle> }) {
   const api = useRef<ExcalidrawImperativeAPI | null>(null)
-  const loaded = useRef(false)
+  // The scene as loaded or last saved. Excalidraw calls onChange for scrolling
+  // and selecting too, so only a change to an element counts as an edit.
+  const base = useRef<string | null>(null)
   const seed = useMemo(() => initial(json), [json])
   const dark = document.documentElement.classList.contains("dark")
 
   useEffect(() => {
-    loaded.current = false
+    base.current = null
   }, [json])
 
   useImperativeHandle(
@@ -50,6 +56,9 @@ export default function ExcalidrawCanvas({ json, onDirty, handle }: { json: stri
         const a = api.current
         if (!a) return json
         return serializeAsJSON(a.getSceneElements(), a.getAppState(), a.getFiles(), "local")
+      },
+      markSaved: () => {
+        if (api.current) base.current = signature(api.current.getSceneElements())
       },
       png: async () => {
         const a = api.current
@@ -65,14 +74,15 @@ export default function ExcalidrawCanvas({ json, onDirty, handle }: { json: stri
     [json],
   )
 
-  const onChange = useCallback(() => {
-    // The first onChange after mounting is the load itself.
-    if (!loaded.current) {
-      loaded.current = true
-      return
-    }
-    onDirty()
-  }, [onDirty])
+  const onChange = useCallback(
+    (elements: readonly { id: string; version: number }[]) => {
+      const sig = signature(elements)
+      // The first onChange after mounting is the load itself.
+      if (base.current === null) base.current = sig
+      else if (sig !== base.current) onDirty()
+    },
+    [onDirty],
+  )
 
   return (
     <div className="h-[34rem] overflow-hidden rounded-lg border" data-testid="excalidraw">

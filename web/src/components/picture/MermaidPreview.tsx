@@ -13,7 +13,7 @@ let counter = 0
  * of the diagram; the last good drawing is not kept, so the preview is never
  * out of step with the text.
  */
-export function MermaidPreview({ source, className }: { source: string; className?: string }) {
+export function MermaidPreview({ source, className, actualSize }: { source: string; className?: string; actualSize?: boolean }) {
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,5 +65,15 @@ export function MermaidPreview({ source, className }: { source: string; classNam
   if (loading && !svg) return <Skeleton className="h-40 w-full" />
   if (!svg) return <p className="text-sm text-muted-foreground">Nothing to draw yet.</p>
   // The SVG is mermaid's own output from strict mode, never the raw source.
-  return <div data-testid="mermaid-svg" className={className} dangerouslySetInnerHTML={{ __html: svg }} />
+  // Actual size pins the drawing to its natural width, so a wide diagram
+  // scrolls instead of shrinking past reading.
+  const natural = actualSize ? Number(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+) /.exec(svg)?.[1]) : NaN
+  return (
+    <div
+      data-testid="mermaid-svg"
+      className={className}
+      style={Number.isFinite(natural) ? { width: `${Math.ceil(natural)}px`, maxWidth: "none" } : undefined}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  )
 }

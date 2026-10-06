@@ -75,6 +75,7 @@ export default function Picture({ subpath }: ModulePageProps) {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [drafting, setDrafting] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  const [actualSize, setActualSize] = useState(false)
   const canvas = useRef<CanvasHandle>(null)
 
   // Another project is another set of pictures.
@@ -150,6 +151,7 @@ export default function Picture({ subpath }: ModulePageProps) {
         try {
           await pictureApi.write(projectId, name, doc.kind, text)
           toast.success(`Saved ${name}`)
+          canvas.current?.markSaved()
           setDoc((d) => (d && d.key === doc.key ? { ...d, name, text: d.kind === "excalidraw" ? d.text : text, exists: true, dirty: false, note: undefined } : d))
           listPoll.refresh()
           summary.refresh()
@@ -302,8 +304,11 @@ export default function Picture({ subpath }: ModulePageProps) {
                       value={doc.text}
                       onChange={(e) => setText(e.target.value)}
                     />
-                    <Card className="h-[34rem] overflow-auto p-4">
-                      <MermaidPreview source={doc.text} className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full" />
+                    <Card className="relative h-[34rem] overflow-auto p-4">
+                      <Button variant="ghost" size="sm" className="sticky top-0 float-right z-10 h-6 px-2 text-xs" onClick={() => setActualSize((v) => !v)}>
+                        {actualSize ? "Fit to width" : "Actual size"}
+                      </Button>
+                      <MermaidPreview source={doc.text} actualSize={actualSize} className={actualSize ? "[&_svg]:h-auto" : "[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"} />
                     </Card>
                   </div>
                 ) : (
