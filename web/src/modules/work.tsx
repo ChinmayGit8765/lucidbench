@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { useNow } from "@/lib/time"
+import { plural } from "@/lib/utils"
 import { elapsedOf, formatElapsed, needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
 
@@ -28,14 +29,14 @@ function WorkTile() {
       value={running.length}
       aside={
         review.length > 0 ? (
-          <StatusPill tone="warning">{review.length} to review</StatusPill>
+          <StatusPill tone="warning">{plural(review.length, "diff")} to review</StatusPill>
         ) : running.length > 0 ? (
           <StatusPill tone="info" pulse>
             working
           </StatusPill>
         ) : undefined
       }
-      sub={list.length === 0 ? "No sessions yet" : `${list.length} ${list.length === 1 ? "session" : "sessions"} · agents in their own worktrees`}
+      sub={list.length === 0 ? "No sessions yet" : `${plural(list.length, "session")} · agents in their own worktrees`}
       footer={
         running.length > 0 ? (
           <div className="space-y-1">
@@ -142,7 +143,7 @@ function useWorkAttention(): AttentionItem[] | null {
               ? "Session failed"
               : d && d.files.length === 0 && d.uncommitted.length === 0
                 ? "Session finished without changes: read its answer"
-                : "Session finished: review diff"}{" "}
+                : "Session finished: review the diff"}{" "}
             · {s.title}
           </>
         ),

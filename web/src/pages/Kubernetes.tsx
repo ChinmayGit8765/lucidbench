@@ -28,7 +28,7 @@ import {
   type K8sPod,
 } from "@/lib/k8s"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
 
 const ALL = ""
@@ -58,7 +58,7 @@ function NodeCard({ n, now }: { n: K8sNode; now: number }) {
       </div>
       <dl className="relative mt-4 grid grid-cols-4 gap-2 text-xs">
         {[
-          ["CPU", `${n.cpu} cores`],
+          ["CPU", plural(Number(n.cpu), "core")],
           ["Memory", friendlyMemory(n.memory)],
           ["Pods", String(n.pods)],
           ["Age", age(n.created_at, now)],

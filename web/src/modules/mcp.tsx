@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/badge"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { MCP_POLL_MS, type McpMatrix } from "@/lib/mcp"
+import { plural } from "@/lib/utils"
 import type { ModuleDef } from "@/modules/types"
 
 function McpTile() {
@@ -28,7 +29,7 @@ function McpTile() {
       footer={
         <div className="flex flex-wrap gap-1.5">
           {(m?.clients ?? []).map((c) => (
-            <span key={c.provider} className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground" title={`${c.servers.length} servers`}>
+            <span key={c.provider} className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground" title={plural(c.servers.length, "server")}>
               <ProviderTile provider={c.provider} size="sm" muted={!c.config_found || c.servers.length === 0} />
               {c.servers.length}
             </span>

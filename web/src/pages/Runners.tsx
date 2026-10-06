@@ -41,7 +41,7 @@ import {
   type SourceError,
 } from "@/lib/ci"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 
 const CONFIG_SNIPPET = `ci:
   github:
@@ -104,7 +104,7 @@ function SummaryStrip({ s, runs, now }: { s: CISummary | null; runs: CIRun[]; no
         <Cell
           label="Pass · 24h"
           value={rate === null ? "-" : `${Math.round(rate * 100)}%`}
-          sub={`${s.runs_24h.total} runs${s.runs_24h.in_progress ? ` · ${s.runs_24h.in_progress} active` : ""}`}
+          sub={`${plural(s.runs_24h.total, "run")}${s.runs_24h.in_progress ? ` · ${s.runs_24h.in_progress} active` : ""}`}
           tone={rate !== null && rate < 0.8 ? "text-danger-fg" : undefined}
         />
       ) : (
@@ -454,7 +454,7 @@ function RunsTable({ runs, now, onRerun }: { runs: CIRun[]; now: number; onRerun
           })}
         </tbody>
       </table>
-      <span className="sr-only">{runs.length} runs. Result shown by icon: {Object.values(RUN_STATE).map((s) => s.label).join(", ")}.</span>
+      <span className="sr-only">{plural(runs.length, "run")}. Result shown by icon: {Object.values(RUN_STATE).map((s) => s.label).join(", ")}.</span>
     </div>
   )
 }

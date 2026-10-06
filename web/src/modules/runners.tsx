@@ -34,7 +34,7 @@ import {
   type CISummary,
 } from "@/lib/ci"
 import { relativeTime, useNow } from "@/lib/time"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function RunnersTile() {
@@ -75,7 +75,7 @@ function RunnersTile() {
       }
       sub={
         s
-          ? `${s.runners.online}/${s.runners.total} runners online · ${rate24 !== null ? "last 24h" : `last ${recent.length} runs`}`
+          ? `${s.runners.online}/${s.runners.total} runners online · ${rate24 !== null ? "last 24h" : `last ${plural(recent.length, "run")}`}`
           : (summary.error?.message ?? "not configured")
       }
       footer={<RunBars runs={runs} slots={24} now={now} className="h-6" />}

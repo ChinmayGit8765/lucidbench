@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 
 import { categoryColor, categoryInfo, NEED, STATUS, type NeedStatus, type Project } from "@/lib/projects"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 
 /*
  * "What needs what": a layered left-to-right graph. A project sits one
@@ -173,7 +173,7 @@ export function ProjectGraph({ projects, onOpen }: { projects: Project[]; onOpen
         height={g.height}
         viewBox={`0 0 ${g.width} ${g.height}`}
         role="img"
-        aria-label={`Dependency graph of ${linked.length} projects`}
+        aria-label={`Dependency graph of ${plural(linked.length, "project")}`}
         style={{ maxWidth: "100%", height: "auto" }}
         className="block font-sans"
       >
