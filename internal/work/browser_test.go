@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 // attachFake is a Browser func that records what it was asked and what was
 // let go.
 type attachFake struct {
+	mu       sync.Mutex
 	sessions []string
 	released int
 	err      error
@@ -24,8 +26,32 @@ func (a *attachFake) attach(_ context.Context, session string) (string, func(), 
 	if a.err != nil {
 		return "", nil, a.err
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.sessions = append(a.sessions, session)
-	return "ws://127.0.0.1:49555/devtools/browser/abc", func() { a.released++ }, nil
+	return "ws://127.0.0.1:49555/devtools/browser/abc", func() {
+		a.mu.Lock()
+		a.released++
+		a.mu.Unlock()
+	}, nil
+}
+
+func (a *attachFake) counts() (attached, released int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.sessions), a.released
+}
+
+// waitReleased waits up to d for n releases.
+func (a *attachFake) waitReleased(n int, d time.Duration) int {
+	deadline := time.Now().Add(d)
+	for {
+		_, r := a.counts()
+		if r >= n || time.Now().After(deadline) {
+			return r
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestBrowserAttachedToASession(t *testing.T) {
@@ -41,7 +67,7 @@ func TestBrowserAttachedToASession(t *testing.T) {
 		t.Errorf("session = browser %v, prompt %q", se.Browser, se.Prompt)
 	}
 	se = wait(t, f.svc, se.ID)
-	if se.Status != StatusDone {
+	if se.Status != StatusWaiting {
 		t.Fatalf("%+v", se)
 	}
 	data, _ := os.ReadFile(claudeLog)
@@ -56,13 +82,93 @@ func TestBrowserAttachedToASession(t *testing.T) {
 	if len(a.sessions) != 1 || a.sessions[0] != se.ID {
 		t.Errorf("attached for %v, want the session %s", a.sessions, se.ID)
 	}
-	// Released once the run has ended; the daemon never keeps it awake after.
-	deadline := time.Now().Add(5 * time.Second)
-	for a.released == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	// The waiting session keeps the browser; ending it lets go at once.
+	if _, r := a.counts(); r != 0 {
+		t.Errorf("released %d times while waiting", r)
 	}
-	if a.released != 1 {
-		t.Errorf("released %d times", a.released)
+	if _, err := f.svc.End(se.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r := a.waitReleased(1, 5*time.Second); r != 1 {
+		t.Errorf("released %d times", r)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, r := a.counts(); r != 1 {
+		t.Errorf("released %d times after the end", r)
+	}
+}
+
+// A waiting session lets go of the browser after the idle time; a follow-up
+// attaches it again, with the address the CLI gets.
+func TestBrowserHoldReleasedAfterIdle(t *testing.T) {
+	f := newFixture(t, newRepo(t, false))
+	claudeLog, _ := installFakes(t, "edit")
+	a := &attachFake{}
+	f.svc.Browser = a.attach
+	f.svc.HoldIdle = 400 * time.Millisecond
+	se, err := f.svc.Start(StartRequest{Project: "demo", Prompt: "Check the page", Provider: "claude", Harness: "clean", Browser: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	se = wait(t, f.svc, se.ID)
+	if _, r := a.counts(); se.Status != StatusWaiting || r != 0 {
+		t.Fatalf("%s, released %d at once", se.Status, r)
+	}
+	if r := a.waitReleased(1, 5*time.Second); r != 1 {
+		t.Fatalf("released %d times after the idle time", r)
+	}
+	if _, err := f.svc.FollowUp(se.ID, "Look again"); err != nil {
+		t.Fatal(err)
+	}
+	got := wait(t, f.svc, se.ID)
+	if n, _ := a.counts(); n != 2 || got.Status != StatusWaiting {
+		t.Errorf("attached %d times, status %s", n, got.Status)
+	}
+	data, _ := os.ReadFile(claudeLog)
+	var call struct{ Cdp, Stdin string }
+	_ = json.Unmarshal(data, &call)
+	if call.Cdp == "" || !strings.Contains(call.Stdin, BrowserEnv) {
+		t.Errorf("turn 2 saw %+v", call)
+	}
+	// Held again through the second wait, then let go once more.
+	if r := a.waitReleased(2, 5*time.Second); r != 2 {
+		t.Errorf("released %d times after the second wait", r)
+	}
+	if _, err := f.svc.End(se.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, r := a.counts(); r != 2 {
+		t.Errorf("released %d times; End must not let go twice", r)
+	}
+}
+
+// A follow-up that starts before the idle time ends keeps the hold through
+// the turn, and does not let go of the old one early.
+func TestBrowserHoldKeptThroughAFollowUp(t *testing.T) {
+	f := newFixture(t, newRepo(t, false))
+	installFakes(t, "edit")
+	a := &attachFake{}
+	f.svc.Browser = a.attach
+	f.svc.HoldIdle = time.Hour
+	se, err := f.svc.Start(StartRequest{Project: "demo", Prompt: "Check the page", Provider: "claude", Harness: "clean", Browser: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait(t, f.svc, se.ID)
+	if _, err := f.svc.FollowUp(se.ID, "Look again"); err != nil {
+		t.Fatal(err)
+	}
+	wait(t, f.svc, se.ID)
+	// Re-attached for the new turn, the first hold let go: one still held.
+	if n, r := a.counts(); n != 2 || r != 1 {
+		t.Errorf("attached %d, released %d", n, r)
+	}
+	if _, err := f.svc.End(se.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r := a.waitReleased(2, 5*time.Second); r != 2 {
+		t.Errorf("released %d after the end", r)
 	}
 }
 

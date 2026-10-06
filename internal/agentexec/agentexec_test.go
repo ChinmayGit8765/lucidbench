@@ -50,7 +50,7 @@ func fakeCLI(mode string) int {
 		out(m{"type": "result", "is_error": true, "result": "Not logged in · Please run /login"})
 		return 1
 	case "claude-stream":
-		out(m{"type": "system", "subtype": "init"})
+		out(m{"type": "system", "subtype": "init", "session_id": "5f0c2a1e-1111-4222-8333-944455556666"})
 		out(m{"type": "assistant", "message": m{"content": []any{
 			m{"type": "text", "text": "Reading the file."},
 			m{"type": "tool_use", "id": "t1", "name": "Read", "input": m{"file_path": "a.txt"}}}}})
@@ -329,8 +329,8 @@ func TestToolsEditStreams(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := readCall(t, log)
-		i, j, k := indexOf(c.Args, "--allowedTools"), indexOf(c.Args, "--disallowedTools"), indexOf(c.Args, "--no-session-persistence")
-		if i < 0 || j != i+3 || k != j+2 {
+		i, j := indexOf(c.Args, "--allowedTools"), indexOf(c.Args, "--disallowedTools")
+		if i < 0 || j != i+3 || len(c.Args) != j+2 {
 			t.Fatalf("want --allowedTools <2 rules> --disallowedTools <1 rule> last, got %v", c.Args)
 		}
 		if got := strings.Join(c.Args[i+1:i+3], " | "); got != "Bash(go:*) | Bash(git status:*)" {
@@ -412,6 +412,98 @@ func TestToolsEditStreams(t *testing.T) {
 		u := res.Usage
 		if res.Text != "done" || u.InputTokens != 35476 || u.OutputTokens != 736 || u.CacheRead != 147200 || u.CostUSD != 0.05 || u.Model != "grok-x" {
 			t.Errorf("result = %q %+v", res.Text, u)
+		}
+	})
+}
+
+// An editing run keeps its session and reports its id; a later run resumes
+// it with each CLI's own flags.
+func TestResume(t *testing.T) {
+	ctx := context.Background()
+	work := t.TempDir()
+	const claudeID = "5f0c2a1e-1111-4222-8333-944455556666"
+	const grokID = "0b7f3c9d-aaaa-4bbb-8ccc-dddd0000eeee"
+
+	t.Run("claude", func(t *testing.T) {
+		log := installFake(t, "claude", "claude-stream")
+		var told []string
+		res, err := Run(ctx, Request{Provider: "claude", Prompt: "edit", Dir: work, Tools: ToolsEdit, OnSession: func(id string) { told = append(told, id) }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.SessionID != claudeID || len(told) != 1 || told[0] != claudeID {
+			t.Errorf("session id %q, told %v", res.SessionID, told)
+		}
+		if c := readCall(t, log); has(c.Args, "--no-session-persistence") || has(c.Args, "--resume") {
+			t.Errorf("a first editing run must keep its session: %v", c.Args)
+		}
+		if _, err := Run(ctx, Request{Provider: "claude", Prompt: "and the tests", Dir: work, Tools: ToolsEdit, Resume: claudeID, Allow: []string{"go"}}); err != nil {
+			t.Fatal(err)
+		}
+		c := readCall(t, log)
+		if !has(c.Args, "--resume", claudeID) || c.Stdin != "and the tests" || !has(c.Args, "--output-format", "stream-json") {
+			t.Errorf("resume args %v stdin %q", c.Args, c.Stdin)
+		}
+		// The allow list runs to the end of the arguments, so --resume comes first.
+		if indexOf(c.Args, "--resume") > indexOf(c.Args, "--allowedTools") {
+			t.Errorf("--resume after the allow list: %v", c.Args)
+		}
+	})
+	t.Run("codex", func(t *testing.T) {
+		log := installFake(t, "codex", "codex-stream")
+		res, err := Run(ctx, Request{Provider: "codex", Prompt: "edit", Dir: work, Tools: ToolsEdit})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.SessionID != "x" {
+			t.Errorf("thread id %q", res.SessionID)
+		}
+		if c := readCall(t, log); has(c.Args, "--ephemeral") {
+			t.Errorf("a first editing run must keep its session: %v", c.Args)
+		}
+		if _, err := Run(ctx, Request{Provider: "codex", Prompt: "more", Dir: work, Tools: ToolsEdit, Resume: "thread-123"}); err != nil {
+			t.Fatal(err)
+		}
+		c := readCall(t, log)
+		n := len(c.Args)
+		if n < 4 || c.Args[0] != "exec" || c.Args[1] != "resume" || c.Args[n-2] != "thread-123" || c.Args[n-1] != "-" || c.Stdin != "more" {
+			t.Fatalf("resume args %v stdin %q", c.Args, c.Stdin)
+		}
+		if !has(c.Args, "-c", `sandbox_mode="workspace-write"`) || !has(c.Args, "-c", "sandbox_workspace_write.network_access=false") || !has(c.Args, "--json") || !has(c.Args, "--ignore-user-config") {
+			t.Errorf("resume must keep the sandbox, the network off and the clean harness: %v", c.Args)
+		}
+		// Neither flag exists on `codex exec resume`.
+		if has(c.Args, "--sandbox") || has(c.Args, "--color") || has(c.Args, "--ephemeral") {
+			t.Errorf("flags codex exec resume does not take: %v", c.Args)
+		}
+	})
+	t.Run("grok", func(t *testing.T) {
+		log := installFake(t, "grok", "grok-stream")
+		res, err := Run(ctx, Request{Provider: "grok", Prompt: "edit", Dir: work, Tools: ToolsEdit, NewSession: grokID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := readCall(t, log); !has(c.Args, "--session-id", grokID) || has(c.Args, "--resume") || res.SessionID != grokID {
+			t.Errorf("new session args %v, id %q", c.Args, res.SessionID)
+		}
+		res, err = Run(ctx, Request{Provider: "grok", Prompt: "more", Dir: work, Tools: ToolsEdit, Resume: grokID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := readCall(t, log); !has(c.Args, "--resume", grokID) || has(c.Args, "--session-id") || res.SessionID != grokID {
+			t.Errorf("resume args %v, id %q", c.Args, res.SessionID)
+		}
+	})
+	t.Run("refused", func(t *testing.T) {
+		installFake(t, "claude", "claude-stream")
+		for _, r := range []Request{
+			{Provider: "claude", Prompt: "x", Resume: claudeID},                                    // an answer has no session
+			{Provider: "claude", Prompt: "x", Dir: work, Tools: ToolsEdit, Resume: "--evil"},       // not an id
+			{Provider: "grok", Prompt: "x", Dir: work, Tools: ToolsEdit, NewSession: "not-a-uuid"}, // grok wants a UUID
+		} {
+			if _, err := Run(ctx, r); !errors.Is(err, ErrBadRequest) {
+				t.Errorf("%+v: %v", r, err)
+			}
 		}
 	})
 }

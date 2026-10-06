@@ -354,6 +354,8 @@ func statusOf(stage string, sess *council.Session, c *cardRef, ses []work.Sessio
 		switch last.Status {
 		case work.StatusRunning:
 			return "Agent working"
+		case work.StatusWaiting:
+			return "Agent waiting for you"
 		case work.StatusDone:
 			return "Diff to review"
 		case work.StatusStopped:
@@ -571,7 +573,16 @@ func cardView(sess *council.Session, c *cardRef, ses []work.Session) *CardView {
 	for _, se := range ses {
 		by := "work session " + se.ID
 		v.History = append(v.History, Move{Time: se.Started, Column: work.ColumnInProgress, By: by})
-		if se.Status == work.StatusDone && se.Ended != nil {
+		// The card went to Review when a turn first ended cleanly.
+		review := false
+		for _, t := range se.Turns {
+			if t.Status == work.StatusDone && t.Ended != nil {
+				v.History = append(v.History, Move{Time: *t.Ended, Column: work.ColumnReview, By: by})
+				review = true
+				break
+			}
+		}
+		if !review && se.Status == work.StatusDone && se.Ended != nil {
 			v.History = append(v.History, Move{Time: *se.Ended, Column: work.ColumnReview, By: by})
 		}
 		if se.CardDone && !se.PRChecked.IsZero() {

@@ -108,6 +108,14 @@ func ghPRView(dir, url string) (PRInfo, error) {
 // stays small; the full record is GET /api/work/sessions/{id}.
 func (se Session) Summary() Session {
 	se.Prompt, se.Answer = "", ""
+	if len(se.Turns) > 0 {
+		turns := make([]Turn, len(se.Turns))
+		for i, t := range se.Turns {
+			t.Prompt, t.Answer = "", ""
+			turns[i] = t
+		}
+		se.Turns = turns
+	}
 	if se.Diff != nil {
 		d := *se.Diff
 		d.Files = make([]FileChange, len(se.Diff.Files))

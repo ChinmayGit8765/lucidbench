@@ -32,6 +32,8 @@ func TestMain(m *testing.M) {
 		switch name {
 		case "claude":
 			os.Exit(fakeClaude(mode))
+		case "codex", "grok":
+			os.Exit(fakeOther(name))
 		case "gh":
 			os.Exit(fakeGH())
 		}
@@ -66,7 +68,23 @@ func fakeClaude(mode string) int {
 	}
 	// Scratch files go where the temp variables point.
 	_ = os.WriteFile(filepath.Join(os.Getenv("TEMP"), "scratch.txt"), []byte("x"), 0o600)
-	out(m{"type": "system", "subtype": "init"})
+	if mode == "fail" {
+		out(m{"type": "result", "is_error": true, "result": "No conversation found with that session ID"})
+		return 1
+	}
+	resumed := false
+	for i, a := range os.Args {
+		resumed = resumed || (a == "--resume" && i+1 < len(os.Args) && os.Args[i+1] == fakeSessionID)
+	}
+	if resumed || strings.Contains(string(in), "## Follow-up from the user") {
+		return fakeClaudeAgain(mode, resumed)
+	}
+	if mode == "nosession" {
+		// A CLI that never tells its session id: follow-ups fall back.
+		out(m{"type": "system", "subtype": "init"})
+	} else {
+		out(m{"type": "system", "subtype": "init", "session_id": fakeSessionID})
+	}
 	out(m{"type": "assistant", "message": m{"content": []any{
 		m{"type": "text", "text": "I'll add the line."},
 		m{"type": "tool_use", "id": "t1", "name": "Write", "input": m{"file_path": "README.md", "content": "hello\n"}}}}})
@@ -78,7 +96,7 @@ func fakeClaude(mode string) int {
 		return 1
 	}
 	out(m{"type": "user", "message": m{"content": []any{m{"type": "tool_result", "tool_use_id": "t1", "content": "File written"}}}})
-	if mode == "edit" {
+	if mode == "edit" || mode == "nosession" {
 		out(m{"type": "assistant", "message": m{"content": []any{
 			m{"type": "tool_use", "id": "t2", "name": "Bash", "input": m{"command": "git commit -am 'docs: say hello'"}}}}})
 		for _, a := range [][]string{{"add", "README.md"}, {"commit", "-q", "-m", "docs: say hello"}} {
@@ -91,6 +109,66 @@ func fakeClaude(mode string) int {
 	out(m{"type": "assistant", "message": m{"content": []any{m{"type": "text", "text": "Done."}}}})
 	out(m{"type": "result", "is_error": false, "result": "Done.", "total_cost_usd": 0.04,
 		"usage": m{"input_tokens": 6, "output_tokens": 70}, "modelUsage": m{"claude-x": m{}}})
+	return 0
+}
+
+// fakeSessionID is the session id the fake claude reports and resumes.
+const fakeSessionID = "11111111-2222-4333-8444-555555555555"
+
+// fakeClaudeAgain is a follow-up turn: it adds a line, commits it and says
+// how it was reached, resumed or from a summary.
+func fakeClaudeAgain(mode string, resumed bool) int {
+	init := m{"type": "system", "subtype": "init"}
+	if mode != "nosession" {
+		init["session_id"] = fakeSessionID
+	}
+	out(init)
+	how := "from the summary"
+	if resumed {
+		how = "resumed"
+	}
+	out(m{"type": "assistant", "message": m{"content": []any{
+		m{"type": "text", "text": "Turn two, " + how + "."},
+		m{"type": "tool_use", "id": "t3", "name": "Edit", "input": m{"file_path": "README.md", "old_string": "hello\n", "new_string": "hello\nagain\n"}}}}})
+	if err := os.WriteFile("README.md", []byte("hello\nagain\n"), 0o644); err != nil {
+		return 1
+	}
+	for _, a := range [][]string{{"add", "README.md"}, {"commit", "-q", "-m", "docs: say it again"}} {
+		if err := exec.Command("git", a...).Run(); err != nil {
+			return 1
+		}
+	}
+	out(m{"type": "user", "message": m{"content": []any{m{"type": "tool_result", "tool_use_id": "t3", "content": "edited"}}}})
+	out(m{"type": "assistant", "message": m{"content": []any{m{"type": "text", "text": "Done again."}}}})
+	out(m{"type": "result", "is_error": false, "result": "Done again.", "total_cost_usd": 0.02,
+		"usage": m{"input_tokens": 3, "output_tokens": 30}, "modelUsage": m{"claude-x": m{}}})
+	return 0
+}
+
+// fakeOther is codex or grok in Work: it records its call and answers in
+// its own stream format, "Done." on a first run and "Done again." on a resume.
+func fakeOther(name string) int {
+	in, _ := io.ReadAll(os.Stdin)
+	if log := os.Getenv("LUCID_WORK_LOG"); log != "" {
+		rec, _ := json.Marshal(m{"args": os.Args[1:], "stdin": string(in)})
+		_ = os.WriteFile(log, rec, 0o600)
+	}
+	resumed := false
+	for _, a := range os.Args[1:] {
+		resumed = resumed || a == "resume" || a == "--resume"
+	}
+	text := "Done."
+	if resumed {
+		text = "Done again."
+	}
+	if name == "codex" {
+		out(m{"type": "thread.started", "thread_id": "codex-thread-1"})
+		out(m{"type": "item.completed", "item": m{"id": "i1", "type": "agent_message", "text": text}})
+		out(m{"type": "turn.completed", "usage": m{"input_tokens": 10, "cached_input_tokens": 0, "output_tokens": 5}})
+		return 0
+	}
+	out(m{"type": "text", "data": text})
+	out(m{"type": "end", "stopReason": "end_turn", "total_cost_usd": 0.01, "usage": m{"input_tokens": 10, "output_tokens": 5}})
 	return 0
 }
 
@@ -108,7 +186,7 @@ func fakeGH() int {
 func installFakes(t *testing.T, mode string) (claudeLog, ghLog string) {
 	t.Helper()
 	dir := fakeDir
-	for _, n := range []string{"claude", "gh"} {
+	for _, n := range []string{"claude", "codex", "grok", "gh"} {
 		dst := filepath.Join(dir, n)
 		if runtime.GOOS == "windows" {
 			dst += ".exe"
@@ -269,8 +347,12 @@ func TestSessionOnCard(t *testing.T) {
 	f := newFixture(t, newRepo(t, true))
 	se, c, claudeLog := startCardSession(t, f)
 
-	if se.Status != StatusDone {
+	// A turn that ends cleanly leaves the session waiting for the user.
+	if se.Status != StatusWaiting || se.Ended == nil {
 		t.Fatalf("status %s (%s)", se.Status, se.Error)
+	}
+	if len(se.Turns) != 1 || se.Turns[0].Mode != TurnFirst || se.Turns[0].Status != StatusDone || se.Turns[0].Answer != "Done." || se.ResumeID != fakeSessionID {
+		t.Errorf("turns %+v, resume id %q", se.Turns, se.ResumeID)
 	}
 	// Worktree next to the checkout, on a lucid/ branch from main.
 	if want := filepath.Join(filepath.Dir(canon(f.repo)), "demo-lucid-"+se.ID); !strings.EqualFold(canon(se.Worktree), want) {
@@ -312,10 +394,10 @@ func TestSessionOnCard(t *testing.T) {
 		t.Errorf("harness mine ran clean: %v", rec.Args)
 	}
 
-	// Events persisted and streamed in order.
-	evs, running, _, err := f.svc.Events(se.ID, 0)
-	if err != nil || running {
-		t.Fatal(err, running)
+	// Events persisted and streamed in order; a waiting session stays open.
+	evs, open, _, err := f.svc.Events(se.ID, 0)
+	if err != nil || !open {
+		t.Fatal(err, open)
 	}
 	kinds := []string{}
 	for _, e := range evs {
@@ -345,10 +427,27 @@ func TestSessionOnCard(t *testing.T) {
 	if got := f.card(t, c.ID); got.Column != ColumnReview || got.Work != se.ID {
 		t.Errorf("card %+v", got)
 	}
-	// A new service over the same folder reads the session back.
+	// A new service over the same folder reads the session back, waiting.
 	again := New(f.svc.Dir, &agentexec.Runner{}, nil, nil)
-	if l := again.List(); len(l) != 1 || l[0].ID != se.ID || l[0].Status != StatusDone {
+	if l := again.List(); len(l) != 1 || l[0].ID != se.ID || l[0].Status != StatusWaiting {
 		t.Errorf("reloaded %+v", l)
+	}
+	// End finishes it; the stream then ends too.
+	got, err := f.svc.End(se.ID)
+	if err != nil || got.Status != StatusDone {
+		t.Fatalf("end: %v %+v", err, got)
+	}
+	if _, open, _, _ := f.svc.Events(se.ID, 0); open {
+		t.Error("an ended session is still open")
+	}
+	if _, err := f.svc.End(se.ID); !errors.Is(err, ErrConflict) {
+		t.Errorf("second end: %v", err)
+	}
+	if _, err := f.svc.FollowUp(se.ID, "more"); !errors.Is(err, ErrConflict) {
+		t.Errorf("follow-up after end: %v", err)
+	}
+	if got := f.card(t, c.ID); got.Column != ColumnReview {
+		t.Errorf("card after end %+v", got)
 	}
 }
 
@@ -360,7 +459,7 @@ func TestFreePromptAndHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 	se = wait(t, f.svc, se.ID)
-	if se.Status != StatusDone || se.Harness != "clean" || se.Title != "Say hello in the README" {
+	if se.Status != StatusWaiting || se.Harness != "clean" || se.Title != "Say hello in the README" {
 		t.Errorf("%+v", se)
 	}
 	data, _ := os.ReadFile(claudeLog)
@@ -433,19 +532,213 @@ func TestStop(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	// A follow-up cannot start while the turn runs.
+	if _, err := f.svc.FollowUp(se.ID, "hurry up"); !errors.Is(err, ErrConflict) {
+		t.Errorf("follow-up while running: %v", err)
+	}
 	start := time.Now()
 	got, err := f.svc.Stop(se.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != StatusStopped || got.Ended == nil || time.Since(start) > 14*time.Second {
+	// Stop ends the turn, not the session: it waits for the user again.
+	if got.Status != StatusWaiting || got.Ended == nil || time.Since(start) > 14*time.Second {
 		t.Errorf("after stop: %s in %s", got.Status, time.Since(start))
 	}
+	if len(got.Turns) != 1 || got.Turns[0].Status != StatusStopped {
+		t.Errorf("turns %+v", got.Turns)
+	}
 	if got.Usage == nil || !strings.Contains(got.Usage.Note, "stopped before the CLI reported its final cost") {
-		t.Errorf("a stopped session needs a usage note: %+v", got.Usage)
+		t.Errorf("a stopped turn needs a usage note: %+v", got.Usage)
+	}
+	evs, _, _, _ := f.svc.Events(se.ID, 0)
+	if last := evs[len(evs)-1]; last.Kind != agentexec.KindNote || last.Title != "stopped" {
+		t.Errorf("last event %+v", last)
 	}
 	if _, err := f.svc.Stop(se.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("second stop: %v", err)
+	}
+	// The CLI told its session id before it was stopped: the follow-up resumes it.
+	if _, err := f.svc.FollowUp(se.ID, "carry on"); err != nil {
+		t.Fatal(err)
+	}
+	got = wait(t, f.svc, se.ID)
+	if got.Status != StatusWaiting || len(got.Turns) != 2 || got.Turns[1].Mode != TurnResume || got.Turns[1].Status != StatusDone {
+		t.Errorf("after the follow-up: %s %+v", got.Status, got.Turns)
+	}
+}
+
+// A follow-up resumes the CLI's own session in the same worktree: a second
+// turn with its own events, usage and commits.
+func TestFollowUpResumes(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	se, _, claudeLog := startCardSession(t, f)
+	if _, err := f.svc.FollowUp(se.ID, "   "); !errors.Is(err, ErrBadRequest) {
+		t.Errorf("empty follow-up: %v", err)
+	}
+	before := se.Events
+	if _, err := f.svc.FollowUp(se.ID, "Say it again"); err != nil {
+		t.Fatal(err)
+	}
+	got := wait(t, f.svc, se.ID)
+
+	var rec struct {
+		Args  []string `json:"args"`
+		Stdin string   `json:"stdin"`
+		Cwd   string   `json:"cwd"`
+	}
+	data, _ := os.ReadFile(claudeLog)
+	_ = json.Unmarshal(data, &rec)
+	args := strings.Join(rec.Args, " ")
+	if !strings.Contains(args, "--resume "+fakeSessionID) || rec.Stdin != "Say it again" || !strings.EqualFold(canon(rec.Cwd), canon(se.Worktree)) {
+		t.Errorf("turn 2 ran %v in %s with %q", rec.Args, rec.Cwd, rec.Stdin)
+	}
+	// The same harness and allow list every turn.
+	if strings.Contains(args, "--safe-mode") || !strings.Contains(args, "Bash(git status:*)") {
+		t.Errorf("turn 2 lost the session's settings: %v", rec.Args)
+	}
+	if got.Status != StatusWaiting || len(got.Turns) != 2 || got.Answer != "Done again." {
+		t.Fatalf("%s %+v", got.Status, got.Turns)
+	}
+	t2 := got.Turns[1]
+	if t2.N != 2 || t2.Mode != TurnResume || t2.Status != StatusDone || t2.Prompt != "Say it again" || t2.Event != before || t2.Usage == nil || t2.Usage.CostUSD != 0.02 {
+		t.Errorf("turn 2 %+v", t2)
+	}
+	// Usage adds up across the turns.
+	if u := got.Usage; u == nil || u.CostUSD < 0.0599 || u.CostUSD > 0.0601 || u.OutputTokens != 100 || u.InputTokens != 9 {
+		t.Errorf("total usage %+v", got.Usage)
+	}
+	evs, _, _, _ := f.svc.Events(se.ID, 0)
+	if sep := evs[before]; sep.Kind != agentexec.KindTurn || !strings.HasPrefix(sep.Title, "Turn 2 · ") || !strings.Contains(sep.Title, "claude --resume") || sep.Body != "Say it again" {
+		t.Errorf("turn separator %+v", sep)
+	}
+	if evs[len(evs)-1].Kind != agentexec.KindDone || got.Events != len(evs) {
+		t.Errorf("turn 2 events end with %+v (%d of %d)", evs[len(evs)-1], got.Events, len(evs))
+	}
+	if d := got.Diff; d == nil || len(d.Commits) != 2 || !strings.Contains(d.Files[0].Patch, "+again") {
+		t.Errorf("diff after turn 2 %+v", got.Diff)
+	}
+	// A summary of the list carries the turns without their text.
+	if sum := got.Summary(); len(sum.Turns) != 2 || sum.Turns[1].Prompt != "" || sum.Turns[0].Answer != "" {
+		t.Errorf("summary turns %+v", sum.Turns)
+	}
+	// A PR can open while the session waits, and it keeps waiting.
+	installFakes(t, "edit")
+	if pr, err := f.svc.OpenPR(se.ID); err != nil || pr.PR == "" || pr.Status != StatusWaiting {
+		t.Errorf("pr while waiting: %v %+v", err, pr.Status)
+	}
+}
+
+// A CLI that never told its session id gets a fresh run whose prompt carries
+// the session's prompt, a summary of the earlier turns and the follow-up.
+func TestFollowUpFallsBackToASummary(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	claudeLog, _ := installFakes(t, "nosession")
+	se, err := f.svc.Start(StartRequest{Project: "demo", Prompt: "Say hello in the README", Provider: "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	se = wait(t, f.svc, se.ID)
+	if se.Status != StatusWaiting || se.ResumeID != "" {
+		t.Fatalf("%s resume %q", se.Status, se.ResumeID)
+	}
+	if _, err := f.svc.FollowUp(se.ID, "Now say it again"); err != nil {
+		t.Fatal(err)
+	}
+	got := wait(t, f.svc, se.ID)
+	var rec struct {
+		Args  []string `json:"args"`
+		Stdin string   `json:"stdin"`
+	}
+	data, _ := os.ReadFile(claudeLog)
+	_ = json.Unmarshal(data, &rec)
+	if strings.Contains(strings.Join(rec.Args, " "), "--resume") {
+		t.Errorf("no session to resume, but %v", rec.Args)
+	}
+	for _, want := range []string{Preamble, "Say hello in the README", "## Earlier in this session", "### Turn 1", "> Done.", "README.md (+1 −0)", "commit: docs: say hello", "## Follow-up from the user\n\nNow say it again"} {
+		if !strings.Contains(rec.Stdin, want) {
+			t.Errorf("summary prompt lacks %q:\n%s", want, rec.Stdin)
+		}
+	}
+	if len(got.Turns) != 2 || got.Turns[1].Mode != TurnSummary || got.Turns[1].Status != StatusDone || got.Answer != "Done again." {
+		t.Errorf("turns %+v", got.Turns)
+	}
+	evs, _, _, _ := f.svc.Events(se.ID, 0)
+	if sep := evs[got.Turns[1].Event]; sep.Kind != agentexec.KindTurn || !strings.Contains(sep.Title, "summary") {
+		t.Errorf("turn separator %+v", sep)
+	}
+}
+
+// Codex and grok resume natively too, each with its own flags.
+func TestFollowUpOtherProviders(t *testing.T) {
+	for _, p := range []string{"codex", "grok"} {
+		t.Run(p, func(t *testing.T) {
+			f := newFixture(t, newRepo(t, true))
+			log, _ := installFakes(t, "edit")
+			// Never the real CLI: the name must resolve to the fake.
+			if bin, err := exec.LookPath(p); err != nil || !strings.EqualFold(canon(filepath.Dir(bin)), canon(fakeDir)) {
+				t.Fatalf("%s resolves to %q (%v), not the fake in %s", p, bin, err, fakeDir)
+			}
+			f.svc.Runner.LookPath = exec.LookPath
+			se, err := f.svc.Start(StartRequest{Project: "demo", Prompt: "Say hello", Provider: p})
+			if err != nil {
+				t.Fatal(err)
+			}
+			se = wait(t, f.svc, se.ID)
+			if se.Status != StatusWaiting || se.ResumeID == "" || se.Answer != "Done." {
+				t.Fatalf("%s resume %q answer %q (%s)", se.Status, se.ResumeID, se.Answer, se.Error)
+			}
+			var rec struct{ Args []string }
+			data, _ := os.ReadFile(log)
+			_ = json.Unmarshal(data, &rec)
+			first := strings.Join(rec.Args, " ")
+			if p == "grok" && !strings.Contains(first, "--session-id "+se.ResumeID) {
+				t.Errorf("grok was not given its session id: %v", rec.Args)
+			}
+			if _, err := f.svc.FollowUp(se.ID, "again"); err != nil {
+				t.Fatal(err)
+			}
+			got := wait(t, f.svc, se.ID)
+			data, _ = os.ReadFile(log)
+			_ = json.Unmarshal(data, &rec)
+			args := strings.Join(rec.Args, " ")
+			want := "exec resume"
+			if p == "grok" {
+				want = "--resume " + se.ResumeID
+			}
+			if !strings.Contains(args, want) || (p == "codex" && !strings.HasSuffix(args, "codex-thread-1 -")) {
+				t.Errorf("turn 2 args %v, want %q", rec.Args, want)
+			}
+			if got.Answer != "Done again." || got.Turns[1].Mode != TurnResume || got.Turns[1].Status != StatusDone {
+				t.Errorf("%+v", got.Turns)
+			}
+			evs, _, _, _ := f.svc.Events(se.ID, 0)
+			if sep := evs[got.Turns[1].Event]; !strings.Contains(sep.Title, p) {
+				t.Errorf("separator %+v", sep)
+			}
+		})
+	}
+}
+
+// A follow-up whose native resume fails leaves the session waiting, and the
+// next one falls back to a summary.
+func TestFailedResumeFallsBack(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	se, _, _ := startCardSession(t, f)
+	installFakes(t, "fail")
+	if _, err := f.svc.FollowUp(se.ID, "break"); err != nil {
+		t.Fatal(err)
+	}
+	got := wait(t, f.svc, se.ID)
+	if got.Status != StatusWaiting || got.Turns[1].Status != StatusFailed || got.Turns[1].Error == "" || got.ResumeID != "" {
+		t.Fatalf("%s %+v resume %q", got.Status, got.Turns, got.ResumeID)
+	}
+	installFakes(t, "edit")
+	if _, err := f.svc.FollowUp(se.ID, "try again"); err != nil {
+		t.Fatal(err)
+	}
+	if got = wait(t, f.svc, se.ID); got.Turns[2].Mode != TurnSummary || got.Turns[2].Status != StatusDone {
+		t.Errorf("%+v", got.Turns)
 	}
 }
 
@@ -495,10 +788,11 @@ func TestOpenPRAndRemove(t *testing.T) {
 	if again, err := f.svc.OpenPR(se.ID); err != nil || again.PR != got.PR {
 		t.Errorf("again: %v", err)
 	}
-	// Pushed, so the worktree goes without a discard; the branch stays.
+	// Pushed, so the worktree goes without a discard; the branch stays, and
+	// the waiting session ends with its worktree.
 	got, err = f.svc.Remove(se.ID, false)
-	if err != nil || !got.Removed {
-		t.Fatal(err)
+	if err != nil || !got.Removed || got.Status != StatusDone {
+		t.Fatal(err, got.Status)
 	}
 	if _, err := os.Stat(se.Worktree); !os.IsNotExist(err) {
 		t.Errorf("worktree still there: %v", err)
@@ -571,15 +865,63 @@ func TestRefusals(t *testing.T) {
 	}
 }
 
-func TestInterruptedSessionIsFailed(t *testing.T) {
+// A session whose turn was running when the daemon stopped waits for the
+// user again, its turn marked interrupted, and can be followed up.
+func TestRestartLeavesSessionsWaiting(t *testing.T) {
 	dir := t.TempDir()
-	se := Session{ID: "0123abcd", Status: StatusRunning, Started: time.Now()}
-	if err := (&Service{Dir: dir}).save(&se); err != nil {
+	now := time.Now().UTC()
+	// One saved before turns existed, one in its second turn.
+	old := Session{ID: "0123abcd", Status: StatusRunning, Started: now}
+	cur := Session{ID: "4567cdef", Status: StatusRunning, Started: now, ResumeID: fakeSessionID,
+		Turns: []Turn{{N: 1, Mode: TurnFirst, Status: StatusDone, Started: now, Ended: &now}, {N: 2, Mode: TurnResume, Status: StatusRunning, Started: now, Event: 3}}}
+	waiting := Session{ID: "89abcdef", Status: StatusWaiting, Started: now, Ended: &now, Turns: []Turn{{N: 1, Mode: TurnFirst, Status: StatusDone, Started: now}}}
+	for _, se := range []*Session{&old, &cur, &waiting} {
+		if err := (&Service{Dir: dir}).save(se); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc := New(dir, nil, nil, nil)
+	for _, id := range []string{old.ID, cur.ID} {
+		got, err := svc.Get(id)
+		if err != nil || got.Status != StatusWaiting || got.Error != "" || got.Ended == nil {
+			t.Fatalf("%s: %+v %v", id, got, err)
+		}
+		last := got.Turns[len(got.Turns)-1]
+		if last.Status != TurnInterrupted || last.Ended == nil {
+			t.Errorf("%s: last turn %+v", id, last)
+		}
+		evs, open, _, _ := svc.Events(id, 0)
+		if !open || len(evs) != 1 || evs[0].Kind != agentexec.KindNote || evs[0].Title != TurnInterrupted || got.Events != 1 {
+			t.Errorf("%s: events %+v open %v", id, evs, open)
+		}
+		// Saved: a second restart finds it waiting, with the note once.
+		if b, _ := os.ReadFile(filepath.Join(dir, id, "events.jsonl")); strings.Count(string(b), "\n") != 1 {
+			t.Errorf("%s: events.jsonl %q", id, b)
+		}
+	}
+	if got, _ := New(dir, nil, nil, nil).Get(cur.ID); got.Status != StatusWaiting || got.ResumeID != fakeSessionID || len(got.Turns) != 2 {
+		t.Errorf("after a second restart %+v", got)
+	}
+	if got, _ := svc.Get(waiting.ID); got.Status != StatusWaiting || got.Turns[0].Status != StatusDone {
+		t.Errorf("a waiting session changed on load: %+v", got)
+	}
+}
+
+// After a restart the follow-up picks up from the events on disk.
+func TestFollowUpAfterRestart(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	se, _, _ := startCardSession(t, f)
+	again := New(f.svc.Dir, f.svc.Runner, f.svc.Vault, f.svc.Projects)
+	if _, err := again.FollowUp(se.ID, "after the restart"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := New(dir, nil, nil, nil).Get(se.ID)
-	if err != nil || got.Status != StatusFailed || got.Error == "" {
-		t.Errorf("%+v %v", got, err)
+	got := wait(t, again, se.ID)
+	if got.Status != StatusWaiting || got.Turns[1].Event != se.Events || got.Turns[1].Mode != TurnResume {
+		t.Fatalf("%s %+v", got.Status, got.Turns)
+	}
+	evs, _, _, _ := again.Events(se.ID, 0)
+	if len(evs) != got.Events || evs[0].Kind != "text" || evs[se.Events].Kind != agentexec.KindTurn {
+		t.Errorf("events after the restart: %d (record %d)", len(evs), got.Events)
 	}
 }
 
@@ -616,8 +958,36 @@ func TestRoutes(t *testing.T) {
 	}
 	var se Session
 	_ = json.NewDecoder(res.Body).Decode(&se)
+	wait(t, f.svc, se.ID)
 
-	// The event stream replays everything, then ends with the final record.
+	// A follow-up needs the confirm header, a prompt, and a waiting session.
+	followup := "/api/work/sessions/" + se.ID + "/followup"
+	if r := post(followup, `{"prompt":"again"}`, false); r.StatusCode != http.StatusForbidden {
+		t.Errorf("follow-up without confirm: %d", r.StatusCode)
+	}
+	if r := post(followup, `{"prompt":""}`, true); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("empty follow-up: %d", r.StatusCode)
+	}
+	if r := post(followup, `{"text":"again"}`, true); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("unknown field: %d", r.StatusCode)
+	}
+	if r := post(followup, `{"prompt":"Say it again"}`, true); r.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(r.Body)
+		t.Fatalf("follow-up: %d %s", r.StatusCode, b)
+	}
+	wait(t, f.svc, se.ID)
+	if r := post("/api/work/sessions/"+se.ID+"/end", "", true); r.StatusCode != http.StatusOK {
+		t.Errorf("end: %d", r.StatusCode)
+	}
+	if r := post(followup, `{"prompt":"more"}`, true); r.StatusCode != http.StatusConflict {
+		t.Errorf("follow-up after end: %d", r.StatusCode)
+	}
+	if r := post("/api/work/sessions/"+se.ID+"/end", "", true); r.StatusCode != http.StatusConflict {
+		t.Errorf("second end: %d", r.StatusCode)
+	}
+	ended, _ := f.svc.Get(se.ID)
+
+	// The event stream replays both turns, then ends with the final record.
 	sse, err := http.Get(srv.URL + "/api/work/sessions/" + se.ID + "/events")
 	if err != nil {
 		t.Fatal(err)
@@ -638,8 +1008,8 @@ func TestRoutes(t *testing.T) {
 			data = append(data, l)
 		}
 	}
-	if len(data) != 8 || len(events) < 2 || events[len(events)-1] != "end" || events[len(events)-2] != "session" {
-		t.Errorf("stream: %d events, %v", len(data), events)
+	if len(data) != ended.Events || ended.Events != 15 || len(events) < 2 || events[len(events)-1] != "end" || events[len(events)-2] != "session" {
+		t.Errorf("stream: %d events of %d, %v", len(data), ended.Events, events)
 	}
 	// Resume after the fifth event.
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/work/sessions/"+se.ID+"/events", nil)
@@ -647,7 +1017,7 @@ func TestRoutes(t *testing.T) {
 	if r2, err := http.DefaultClient.Do(req); err == nil {
 		b, _ := io.ReadAll(r2.Body)
 		r2.Body.Close()
-		if n := strings.Count(string(b), "data: {\"time\""); n != 3 {
+		if n := strings.Count(string(b), "data: {\"time\""); n != ended.Events-5 {
 			t.Errorf("resumed with %d events", n)
 		}
 	}
