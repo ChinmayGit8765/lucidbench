@@ -1204,7 +1204,11 @@ function Aside({ s }: { s: CouncilSession }) {
           </Row>
           <Row k="Project">{s.project ? <span className="font-mono text-xs">{s.project}</span> : <span className="text-muted-foreground">none</span>}</Row>
           <Row k="Rounds">
-            {s.rounds.length} of {s.max_rounds}
+            {s.rounds.length > s.max_rounds ? (
+              <span title={`The automatic loop stops at ${s.max_rounds}; each Ask again adds a round.`}>{roundsLabel({ rounds: s.rounds.length, max_rounds: s.max_rounds })}</span>
+            ) : (
+              `${s.rounds.length} of ${s.max_rounds}`
+            )}
           </Row>
           <Row k="Started">
             <span title={absoluteTime(s.created)}>{relativeTime(s.created, now)}</span>

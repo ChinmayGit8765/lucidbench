@@ -127,7 +127,7 @@ function TodaysLoop() {
       icon: SquareKanban,
       count: ready && ready.length,
       yours: true,
-      hint: "cards to start",
+      hint: ready?.length === 1 ? "card to start" : "cards to start",
       go: one(ready, (c) => open("boards", [DEFAULT_BOARD, c.id]), () => open("boards", [DEFAULT_BOARD])),
     },
     {
@@ -135,7 +135,7 @@ function TodaysLoop() {
       label: "In progress",
       icon: SquareTerminal,
       count: working && working.length,
-      hint: "agents working",
+      hint: working?.length === 1 ? "agent working" : "agents working",
       go: one(working, (s) => open("work", [s.id]), () => open("work")),
     },
     {
@@ -144,7 +144,7 @@ function TodaysLoop() {
       icon: FileDiff,
       count: review && review.length,
       yours: true,
-      hint: "cards in review",
+      hint: review?.length === 1 ? "card in review" : "cards in review",
       go: one(review, (c) => open("boards", [DEFAULT_BOARD, c.id]), () => open("boards", [DEFAULT_BOARD])),
     },
     {
