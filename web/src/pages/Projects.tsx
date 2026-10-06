@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   Lock,
   OctagonAlert,
+  PenTool,
   Play,
   Search,
   Share2,
@@ -28,6 +29,7 @@ import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { usePictureAdded, usePictureSummary } from "@/lib/picture"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
@@ -178,6 +180,7 @@ function ProjectCard({
   kindName,
   onAssess,
   deploys,
+  pictures,
 }: {
   p: Project
   byId: Map<string, Project>
@@ -187,6 +190,8 @@ function ProjectCard({
   onAssess: (p: Project) => void
   /** Live status of p.deploy, by position; null when the Cloud extension is not added. */
   deploys: CloudDeploy[] | undefined | null
+  /** How many diagrams and canvases p has; null when the Picture extension is not added. */
+  pictures: number | null
 }) {
   const { open } = useApp()
   const st = STATUS[p.status] ?? { tone: "neutral" as const, label: p.status }
@@ -256,6 +261,18 @@ function ProjectCard({
               <Play /> Start work
             </Button>
           )}
+        </div>
+      )}
+
+      {pictures !== null && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-muted-foreground">
+            <PenTool className="size-3 shrink-0 text-subtle-foreground" />
+            {pictures === 0 ? "No diagrams or canvases" : `${pictures} ${pictures === 1 ? "diagram or canvas" : "diagrams and canvases"}`}
+          </span>
+          <Button variant="ghost" size="sm" className="h-6 shrink-0 px-2 text-xs" onClick={() => open("picture", [p.id])}>
+            <PenTool /> Picture
+          </Button>
         </div>
       )}
 
@@ -546,6 +563,9 @@ export default function Projects() {
   // Deploy status runs the user's CLIs, so it waits for the Cloud extension to be added.
   const cloudAdded = useCloudAdded()
   const deployPoll = useCloudDeploys(cloudAdded && all.some((p) => (p.deploy?.length ?? 0) > 0))
+  // Diagram counts come from one list, and only once the Picture extension is added.
+  const pictureAdded = usePictureAdded()
+  const pictureSummary = usePictureSummary(pictureAdded)
   const timer = useRef<number | undefined>(undefined)
 
   const setView = (v: View) => {
@@ -813,6 +833,7 @@ export default function Projects() {
                       focused={focused === p.id}
                       kindName={kinds.find((k) => k.id === p.assessment?.kind)?.name}
                       onAssess={setAssessing}
+                      pictures={pictureAdded ? (pictureSummary.data?.find((s) => s.project === p.id)?.count ?? 0) : null}
                       deploys={cloudAdded ? (deployPoll.data ? (deployPoll.data.projects[p.id] ?? []) : deployPoll.error ? [] : undefined) : null}
                     />
                   ))}
