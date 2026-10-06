@@ -24,9 +24,15 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/lucidd"],
+    "resources": {
+      "../../LICENSE": "LICENSE",
+      "../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../../web/public/licenses/": "licenses/"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "licenseFile": "../../LICENSE",
         "installerHooks": "installer/hooks.nsh"
       }
     }

@@ -34,6 +34,8 @@ Lucidbench is an independent project and is not affiliated with, sponsored by or
 
 Build-time only (not shipped): Vite (MIT), TypeScript (Apache-2.0), lightningcss (MPL-2.0).
 
+The editor's optional sanitiser `dompurify` (MPL-2.0 or Apache-2.0, used under Apache-2.0) and its unused CodeMirror, Lezer and Vue dependencies (MIT) are not part of the built bundle.
+
 ## Go modules
 
 Compiled into the `lucidd` and `lucid` binaries (direct dependencies; transitive ones are permissively licensed, see `go.sum`):
@@ -43,10 +45,25 @@ Compiled into the `lucidd` and `lucid` binaries (direct dependencies; transitive
 | `sigs.k8s.io/kind` | Apache-2.0 |
 | `k8s.io/client-go`, `k8s.io/api`, `k8s.io/apimachinery` | Apache-2.0 |
 | `go.yaml.in/yaml/v3` | MIT and Apache-2.0 |
+| `github.com/BurntSushi/toml` | MIT |
+| `golang.org/x/sys` and other `golang.org/x/*` modules (Copyright The Go Authors) | BSD-3-Clause |
 
 ## Desktop app
 
-The Windows desktop app (`desktop/`) is built with [Tauri](https://tauri.app) 2 and its plugins (MIT or Apache-2.0) and ships the `lucidd` binary described above. It renders the UI with the system WebView2 runtime, which is not redistributed.
+The Windows desktop app (`desktop/`) ships the `lucidd` binary described above and renders the UI with the system WebView2 runtime, which is not redistributed. The installer includes this file, `LICENSE` and the font licence texts.
+
+It is built with [Tauri](https://tauri.app) 2 and Rust crates from crates.io:
+
+| Crates | Licence |
+|---|---|
+| `tauri`, `tauri-plugin-single-instance`, `tauri-plugin-window-state`, `windows-sys`, `serde`, `serde_json` and most of the dependency tree | MIT or Apache-2.0 |
+| `cssparser`, `cssparser-macros`, `selectors`, `dtoa-short`, `option-ext` | MPL-2.0 (used unmodified as libraries) |
+| `brotli`, `brotli-decompressor`, `alloc-no-stdlib`, `alloc-stdlib` | BSD-3-Clause (brotli: BSD-3-Clause and MIT) |
+| `unicode-ident` and other Unicode data crates | Unicode-3.0 (with MIT or Apache-2.0 where offered) |
+| `zlib-rs`, `foldhash`, `miniz_oxide` | Zlib (miniz_oxide: MIT, Zlib or Apache-2.0) |
+| several small crates | Unlicense or MIT, CC0-1.0 / MIT-0 / Apache-2.0 |
+
+The exact set is pinned in `desktop/src-tauri/Cargo.lock`; `cargo about` or `cargo-license` lists every crate with its licence.
 
 ## Agent image
 
