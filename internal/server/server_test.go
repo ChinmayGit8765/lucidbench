@@ -103,6 +103,31 @@ func TestWorkRoutes(t *testing.T) {
 	}
 }
 
+func TestPromptsRoutes(t *testing.T) {
+	data := filepath.Join(t.TempDir(), "data")
+	t.Setenv("LUCID_DATA_DIR", data)
+	t.Setenv("LUCID_PROJECTS", filepath.Join(t.TempDir(), "projects.yaml"))
+	h := New()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/prompts/templates", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"builder"`) {
+		t.Errorf("templates: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/prompts/render", strings.NewReader(`{"sections":[{"id":"task","body":"x"}],"target":"copy"}`)))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"tokens_note"`) {
+		t.Errorf("render: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/prompts/improve", strings.NewReader(`{"text":"x"}`)))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("improve without confirm: %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(data, "prompts")); err == nil {
+		t.Error("reading templates created the prompts folder")
+	}
+}
+
 func TestUnknownAPIIs404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nope", nil))
