@@ -19,6 +19,19 @@ var authFiles = map[string][]string{
 	"grok":   {"auth.json"},
 }
 
+// ownerFile is the record in each run folder naming the process that owns
+// the run and the lock file it holds.
+const ownerFile = "owner"
+
+// ownerRecord is the owner file's content: the owner's PID, then the name of
+// the lock file it holds (if any), one per line.
+func ownerRecord(pid int, lockName string) []byte {
+	if lockName == "" {
+		return []byte(fmt.Sprintf("%d\n", pid))
+	}
+	return []byte(fmt.Sprintf("%d\n%s\n", pid, lockName))
+}
+
 // Staged is a per-run, throwaway config dir holding only auth material.
 //
 // Privacy: the auth files are copied between the host config dir and a temp
@@ -37,6 +50,13 @@ type Staged struct {
 // Stage creates runs/<id> under dataDir and copies the provider's auth files
 // from hostDir into it. It fails if none of the auth files exist.
 func Stage(dataDir, provider, hostDir string) (*Staged, error) {
+	return stage(dataDir, provider, hostDir, "")
+}
+
+// stage is Stage for a run holding the lock file named lockName (empty if
+// none). The owner record is written before any auth file, so Sweep can tell
+// a crashed run from a live one even if staging dies halfway.
+func stage(dataDir, provider, hostDir, lockName string) (*Staged, error) {
 	names, ok := authFiles[provider]
 	if !ok {
 		return nil, fmt.Errorf("unknown provider %q", provider)
@@ -53,6 +73,13 @@ func Stage(dataDir, provider, hostDir string) (*Staged, error) {
 		hostDir:   hostDir,
 		before:    map[string][]byte{},
 		hostAt:    map[string][]byte{},
+	}
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(runDir, ownerFile), ownerRecord(os.Getpid(), lockName), 0o600); err != nil {
+		os.RemoveAll(runDir)
+		return nil, err
 	}
 	for _, d := range []string{st.ConfigDir, st.WorkDir} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -161,7 +188,7 @@ func Run(o Options, exec Exec) (code int, refreshed []string, err error) {
 	defer lock.Release()
 	var st *Staged
 	if o.Profile == HostProfile {
-		if st, err = Stage(o.DataDir, o.Provider, HostDir(o.Home, o.Provider)); err != nil {
+		if st, err = stage(o.DataDir, o.Provider, HostDir(o.Home, o.Provider), filepath.Base(o.LockPath)); err != nil {
 			return 1, nil, err
 		}
 	}

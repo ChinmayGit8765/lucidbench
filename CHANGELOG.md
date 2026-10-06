@@ -19,6 +19,8 @@ The first beta: the core loop works end to end.
   draft PR on request.
 - **Usage:** local token use and Codex rate-limit windows, plus what Lucidbench's own runs cost.
 - **Agent runs:** each run gets a clean, minimal config; refreshed logins are copied back safely.
+  Run folders a crash left behind (with their auth copy) are swept at lucidd startup and by
+  `lucid runs sweep`, but only when the run is provably dead and past a 10 minute grace period.
 
 ## 0.2.0
 

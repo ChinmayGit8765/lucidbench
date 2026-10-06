@@ -25,6 +25,7 @@ func main() {
 	}
 	cluster.Name = cfg.Cluster.Name
 	runner.Image = cfg.Agent.Image
+	sweepRuns()
 	addr := cfg.Server.Addr
 	// Reading the CLI logs the first time takes a while on a busy machine;
 	// do it now so Overview's usage tile and the Usage page open warm.
@@ -47,5 +48,23 @@ func main() {
 	log.Printf("lucidd %s listening on %s", version.Version, addr)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
+	}
+}
+
+// sweepRuns deletes run folders left behind by a crash. A failure is logged
+// and retried at the next start or `lucid runs sweep`; it never stops lucidd.
+func sweepRuns() {
+	data, err := config.DataDir()
+	if err != nil {
+		log.Printf("runs sweep: %v", err)
+		return
+	}
+	res, err := runner.Sweep(data, runner.SweepGrace)
+	if err != nil {
+		log.Printf("runs sweep: %v", err)
+		return
+	}
+	for _, l := range res.Lines() {
+		log.Printf("runs sweep: %s", l)
 	}
 }
