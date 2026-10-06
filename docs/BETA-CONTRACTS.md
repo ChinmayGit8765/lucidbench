@@ -177,6 +177,7 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/memory/tree?dir=` | GET | folder listing |
 | `/api/memory/page?path=` | GET / PUT / DELETE | read / write / trash a page |
 | `/api/memory/move` | POST | `{from,to}` |
+| `/api/memory/restore` | POST | `{path}` moves the newest trashed copy of `path` back (undo); `409` when something is at `path` again |
 | `/api/memory/search?q=&limit=` | GET | full-text hits |
 | `/api/memory/backlinks?path=` | GET | pages that link to a page |
 | `/api/memory/info` | GET | `{root, pages}`: the vault folder and its page count (folder notes and boards excluded) |
@@ -196,6 +197,7 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/work/sessions/{id}/stop` | POST | stop (kills the CLI's whole process tree) |
 | `/api/work/sessions/{id}/remove` | POST | `{discard}` removes the worktree; unpushed or uncommitted work needs `discard: true` |
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
+| `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once |
 | `/api/usage/summary?days=` | GET | per provider: tokens, cost, windows |
 
 ## Web modules (ids are fixed)
@@ -284,3 +286,16 @@ func Approve(id string, project string) (*boards.Card, error)
 |---|---|---|
 | `/api/ideas` | GET | `[{id, title, stage, status, project, created, updated, cost_usd, council, card, sessions, pr_url, pr_state}]`, newest first; `cost_usd` sums what the council and Work runs reported |
 | `/api/ideas/{id...}` | GET | the summary plus `council_session`, `brief {path, title, status, body, exists, confidential}`, `card_view {…card, board, history, history_note}`, `work` (session summaries with diff stat, cost, `pr_url`, `pr_state`, `pr_checks`), `links` (pages that link the brief), `timeline`, `costs` (by provider and part) and `missing` (pieces that could not be read) |
+
+**First-run setup** (`internal/setup`, the `/setup` view; not a module)
+- Opens by itself on `/` when the data dir has neither `ui.json` nor `projects.yaml`, and from Settings › General › Run setup again. Six steps, each skippable: accounts, Memory vault, projects, theme, power modes, a sample braindump. Finishing or skipping writes `ui.json`.
+- The vault step creates the default vault (`GET /api/memory/info`) or shows the `vault:` snippet for a folder the user picks; the power step shows the `power:` snippet. `config.yaml` is never written.
+- Projects are appended to `projects.yaml` only: backup first, then the old bytes plus the new entries, proven by parsing before writing. Routes are in docs/CONFIG.md, Projects.
+
+**State sprites and the launcher**
+- Theme `art.sprites` slots: `loading`, `working`, `thinking`, `success`, `failure`, `sleeping`, `empty`, `celebrate`. An empty slot shows Lumi, the built-in placeholder (`web/src/components/StateSprite.tsx`).
+- The sidebar mascot (and the logo) open the quick-actions launcher: New braindump, Start work, Add card, New prompt, Sleep idle (asks first), Switch theme. The mascot shows `working` while a Work session runs, `thinking` while a council runs, and `sleeping` when every managed thing is asleep.
+- A card reaching Done or a PR first seen merged is celebrated once per browser (`localStorage` `lucidbench.celebrated`).
+
+**End-to-end tests** (`e2e/`)
+- Playwright, headless Chromium, one lucidd on 127.0.0.1:7466 per spec file with a temporary home and data dir. PATH holds only `e2e/fakecli` (as claude, codex, grok, gh, docker) and git; the harness refuses to start when any of those names resolves elsewhere.

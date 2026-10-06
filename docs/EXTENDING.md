@@ -112,6 +112,37 @@ tokens in `web/src/index.css` (listed in `internal/themes/theme.go`), and each
 value is checked as a colour, shadow, length or font stack. See
 [CONFIG.md](CONFIG.md#themes-and-ui-prefs).
 
+A page that loads, works, thinks or celebrates should show
+`<StateSprite state="…" />` from `@/components/StateSprite`: the active
+theme's picture for that state, or Lumi when it has none
+([state sprites](CONFIG.md#state-sprites)). `LoadingArt` from
+`@/components/ui/states` is a loading area with the sprite and a line of text,
+and `celebrate({key, title, detail})` from `@/components/Celebrate` celebrates
+something once.
+
+## Shortcuts and undo
+
+Single-key shortcuts live in `web/src/components/Shortcuts.tsx` (`?` lists
+them). They are ignored while the user types in an input, a textarea or the
+Memory editor, and while a dialog is open. A reversible action should act at
+once and offer Undo in its toast (sonner's `action`) rather than ask first.
+
+## End-to-end tests
+
+```sh
+cd e2e
+npm ci
+npx playwright install chromium   # once
+npm run e2e                       # builds lucidd and the fake CLIs, then runs the suite
+```
+
+The suite needs Go, Node and git, and port 7466 free. It builds `web/dist` only
+when it is missing; rebuild the web UI after changing it. `E2E_SKIP_BUILD=1`
+reuses the last lucidd (which embeds the web UI as it was when built), and
+`E2E_KEEP=1` keeps each run's temporary folder. Screenshots a test takes go to
+`e2e/shots/` (not committed). Add a fake answer to `e2e/fakecli/main.go`
+rather than ever letting a real CLI run.
+
 ## Not supported yet: third-party extensions
 
 Every extension ships inside Lucidbench and is reviewed with it. Installing

@@ -235,6 +235,35 @@ which. A need's `from` names the project that supplies it. Lucidbench derives
 the reverse links (`built_by`, `needed_by`) and each project's need progress.
 Confidential projects are marked as never sent to AI providers.
 
+### Importing projects (first-run setup)
+
+The first-run setup's Projects step (also reachable from the Projects page when
+the file does not exist yet) lists the git repositories in a folder you pick
+and up to two levels below it, with a type guessed from their files
+(`project.godot` is a game, `src-tauri` a desktop app, a `package.json` with
+React or Vite a web app, `go.mod` plus `main.go` a CLI, and so on). Only the
+folder names and those few top-level files are read. The ones you tick are
+added as `category: experiment`, `status: active`, `visibility: private`
+entries with their `local_path`; edit the file to change any of it.
+
+Setup only ever appends: an existing `projects.yaml` is copied to
+`projects.yaml.bak-<date>-<time>` first, the new entries are added after its
+last byte, and the result is parsed to prove every existing entry is unchanged
+before it is written. If the `projects:` list is not the last thing in the file
+(so appending would change its meaning), nothing is written and setup shows the
+lines to paste instead.
+
+| Route | What |
+|---|---|
+| `GET /api/setup` | `{needed, ui, projects, projects_hint}`: setup opens by itself when neither `ui.json` nor `projects.yaml` exists |
+| `GET /api/setup/dirs?path=` | the folders in `path` (your home when empty), names only, with `git: true` on repositories |
+| `POST /api/setup/scan` | `{root}` → `{root, repos: [{id, name, local_path, type, why, existing?}]}` |
+| `POST /api/setup/projects/preview` | `{entries: [{id, name, local_path, type?}]}` → the YAML that would be appended |
+| `POST /api/setup/projects` | the same body; appends (needs `X-Lucid-Confirm`), or `409` with `{error, snippet}` |
+
+The vault and power steps never write `config.yaml`: they show the `vault:` or
+`power:` block to paste, as Settings does.
+
 A missing file is not an error: the page shows how to create one. Duplicate
 ids, unknown values and references to unknown ids are reported with the
 project id and the field, and the rest of the file still loads. The file is
@@ -334,9 +363,9 @@ description?, tokens, fonts?, art?, labels? }`:
   web fonts.
 - `art` names files in the theme's folder for the header banner
   (`headerImage`), the sidebar mascot (`sidebarMascot`), empty states
-  (`emptyState`) and the Overview sprite board (`spriteBoard`: up to 12
-  `{file, caption}`). Files are lowercase `.svg`, `.png`, `.webp` or `.gif`
-  names. SVGs are sanitised on save: scripts, event handlers, external
+  (`emptyState`), the Overview sprite board (`spriteBoard`: up to 12
+  `{file, caption}`) and the state sprites (`sprites`, below). Files are
+  lowercase `.svg`, `.png`, `.webp` or `.gif` names, at most 32 per theme. SVGs are sanitised on save: scripts, event handlers, external
   references, `<image>`, `<foreignObject>`, animations and DOCTYPEs are
   removed. PNG, WebP and GIF files are checked by content. Art is served
   only from inside the theme's folder, with `nosniff` and a locked-down CSP.
@@ -345,6 +374,51 @@ description?, tokens, fonts?, art?, labels? }`:
 
 Every `POST`, `PUT` and `DELETE` here needs the `X-Lucid-Confirm: yes`
 header, which the UI sends.
+
+### State sprites
+
+A theme can give the app a picture for what it is doing. `art.sprites` maps a
+slot to a file in the theme's folder:
+
+| Slot | Shown |
+|---|---|
+| `loading` | in loading areas |
+| `working` | while a Work session runs, on its page and as the sidebar mascot |
+| `thinking` | while the council deliberates |
+| `success`, `failure` | on Runners & CI when the latest runs pass or fail |
+| `sleeping` | on the Power tile when everything is asleep, and as the mascot |
+| `empty` | on empty boards and lists (when the theme has no `emptyState`) |
+| `celebrate` | when a card reaches Done or a PR is merged |
+
+```json
+"art": {
+  "sidebarMascot": "fox.png",
+  "sprites": { "working": "fox-typing.gif", "celebrate": "fox-party.webp", "sleeping": "fox-nap.png" }
+}
+```
+
+A slot left out shows Lumi, Lucidbench's own placeholder (a small lens-bot
+drawn in the theme's colours), so the built-in themes always have every state.
+Unknown slots are refused when a theme is saved and dropped from a generated
+one.
+
+To use your own pictures:
+
+- **From the app:** Settings › Appearance › Sprites lists the eight slots with
+  what each one shows now. On a theme of your own, Upload takes a PNG, GIF,
+  WebP (up to 1 MB) or SVG (up to 256 KB) and saves it as
+  `sprite-<slot>.<ext>` in the theme's folder; the trash button clears the
+  slot. A built-in theme cannot change, so "Make an editable copy" saves a copy
+  you can change and switches to it.
+- **By hand:** put the files in `<data dir>/themes/<id>/`, add `art.sprites` to
+  that folder's `theme.json`, and reload the page. Files go through the same
+  checks as any theme art: SVGs are sanitised (scripts, event handlers and
+  external references removed), and PNG, WebP and GIF files must really be
+  those formats. Animated GIF and WebP files animate; under the OS's
+  reduced-motion setting Lumi stands still.
+
+Use art you made or have the rights to; Lucidbench ships none from other
+games, films or brands.
 
 ### Describe a theme
 
