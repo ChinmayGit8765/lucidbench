@@ -43,6 +43,7 @@ const (
 const (
 	ColumnInProgress = "In progress"
 	ColumnReview     = "Review"
+	ColumnDone       = "Done"
 )
 
 // Errors, each mapped to an HTTP status by the routes.
@@ -110,11 +111,20 @@ type Session struct {
 	Ended   *time.Time       `json:"ended,omitempty"`
 	Usage   *agentexec.Usage `json:"usage,omitempty"`
 	Answer  string           `json:"answer,omitempty"`
-	Events  int              `json:"events"`
-	Diff    *Diff            `json:"diff,omitempty"`
-	PR      string           `json:"pr_url,omitempty"`
-	Pushed  bool             `json:"pushed,omitempty"`
-	Removed bool             `json:"removed,omitempty"`
+	// AllowedCommands are the shell commands the agent may run without asking.
+	AllowedCommands []string `json:"allowed_commands,omitempty"`
+	Events          int      `json:"events"`
+	Diff            *Diff    `json:"diff,omitempty"`
+	PR              string   `json:"pr_url,omitempty"`
+	// PRState is draft, open, merged or closed as GitHub last said, "" when
+	// it is not known (no gh, or not asked yet); PRChecks counts the PR's
+	// status checks and PRChecked is when both were read.
+	PRState   string    `json:"pr_state,omitempty"`
+	PRChecks  *PRChecks `json:"pr_checks,omitempty"`
+	PRChecked time.Time `json:"pr_checked,omitzero"`
+	CardDone  bool      `json:"card_done,omitempty"` // the card was moved to Done after the merge
+	Pushed    bool      `json:"pushed,omitempty"`
+	Removed   bool      `json:"removed,omitempty"`
 }
 
 // StartRequest is the body of POST /api/work/sessions.
@@ -129,6 +139,10 @@ type StartRequest struct {
 	// skills) or "clean". Empty means mine for claude, clean for the others.
 	Harness string `json:"harness,omitempty"`
 	Model   string `json:"model,omitempty"`
+	// AllowedCommands replaces the project's default list for this session:
+	// plain command prefixes such as "go" or "git status". Nil means the
+	// default (see DefaultAllowed); an empty list allows no command at all.
+	AllowedCommands []string `json:"allowed_commands,omitempty"`
 }
 
 // Service runs and keeps the sessions.
@@ -142,6 +156,8 @@ type Service struct {
 	Projects func() (*projects.List, error)
 	// Home is shown as "~" in path hints.
 	Home string
+	// PRView reads a PR's state and checks; nil asks gh.
+	PRView func(dir, url string) (PRInfo, error)
 
 	mu       sync.Mutex
 	loaded   bool
@@ -156,6 +172,7 @@ type entry struct {
 	changed  chan struct{}     // closed and replaced on every change
 	cancel   context.CancelFunc
 	stopping bool
+	polling  bool          // a PR state refresh is in flight
 	done     chan struct{} // closed when the run has ended; nil when not running here
 	eventsF  *os.File
 	rawF     *os.File
@@ -468,6 +485,10 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		return Session{}, errf(ErrBadRequest, "%s is not on PATH; install it and sign in with `%s`", req.Provider, agentexec.Logins[req.Provider])
 	}
 
+	allowed, err := sessionAllowed(&req, t.project)
+	if err != nil {
+		return Session{}, err
+	}
 	id := newID()
 	wt, err := createWorktree(t.project.LocalPath, id, slug(t.title))
 	if err != nil {
@@ -477,7 +498,7 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 		ID: id, Provider: req.Provider, Profile: req.Profile, Harness: req.Harness, Project: t.project.ID,
 		RepoPath: wt.repo, RepoHint: s.hint(wt.repo), Branch: wt.branch, BaseRef: wt.baseRef, BaseSHA: wt.baseSHA,
 		Worktree: wt.path, WorktreeHint: s.hint(wt.path), Title: t.title, Prompt: prompt(t, req.Prompt),
-		Board: t.board, Brief: t.brief, Status: StatusRunning, Started: time.Now().UTC(),
+		Board: t.board, Brief: t.brief, AllowedCommands: allowed, Status: StatusRunning, Started: time.Now().UTC(),
 	}
 	if t.card != nil {
 		se.Card = t.card.ID
@@ -499,13 +520,14 @@ func (s *Service) Start(req StartRequest) (Session, error) {
 	s.mu.Unlock()
 
 	if t.card != nil {
-		s.moveCard(t.board, t.card.ID, ColumnInProgress, id)
+		s.moveCard(t.board, t.card.ID, ColumnInProgress, id, false)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel = cancel
 	areq := agentexec.Request{
 		Provider: req.Provider, Profile: req.Profile, Prompt: se.Prompt, Dir: wt.path,
 		Tools: agentexec.ToolsEdit, Model: req.Model, Harness: req.Harness,
+		Allow: allowed, Deny: denyRules(),
 		Env:     agentTempEnv(wt.path),
 		OnEvent: func(ev agentexec.Event) { s.record(e, ev) },
 	}
@@ -618,13 +640,13 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request) {
 	e.mu.Unlock()
 
 	if card != "" && status == StatusDone {
-		s.moveCard(board, card, ColumnReview, id)
+		s.moveCard(board, card, ColumnReview, id, false)
 	}
 }
 
 // moveCard puts a card in column and links the session (or a PR URL) on its
 // work:: line. A board without that column only gets the link.
-func (s *Service) moveCard(board, cardID, column, work string) {
+func (s *Service) moveCard(board, cardID, column, work string, done bool) {
 	if s.Vault == nil {
 		return
 	}
@@ -642,6 +664,7 @@ func (s *Service) moveCard(board, cardID, column, work string) {
 		}
 		c.Work = work
 		c.Column = column
+		c.Done = c.Done || done
 		if column == "" || boards.UpdateCard(v, board, c) != nil {
 			c.Column = ""
 			_ = boards.UpdateCard(v, board, c)

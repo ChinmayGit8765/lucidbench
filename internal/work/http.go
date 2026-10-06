@@ -31,7 +31,9 @@ func fail(w http.ResponseWriter, err error) {
 
 // Register adds the work routes to mux:
 //
-//	GET  /api/work/sessions               every session, newest first
+//	GET  /api/work/defaults?project=<id>  the commands a new session may run without asking
+//	GET  /api/work/sessions               every session, newest first, without prompt, answer or patches
+//	                                      (the PR state of each is refreshed from gh in the background)
 //	POST /api/work/sessions               start {card?, project, prompt?, provider, profile?, harness}
 //	GET  /api/work/sessions/{id}          one session with its diff summary (?refresh=1 reads it again)
 //	GET  /api/work/sessions/{id}/events   server-sent events: each normalised event, then "end"
@@ -43,7 +45,21 @@ func fail(w http.ResponseWriter, err error) {
 // Every POST needs X-Lucid-Confirm.
 func Register(mux *http.ServeMux, s *Service) {
 	mux.HandleFunc("GET /api/work/sessions", func(w http.ResponseWriter, r *http.Request) {
-		apiutil.WriteJSON(w, http.StatusOK, s.List())
+		s.PollPRs()
+		all := s.List()
+		out := make([]Session, len(all))
+		for i, se := range all {
+			out[i] = se.Summary()
+		}
+		apiutil.WriteJSON(w, http.StatusOK, out)
+	})
+	mux.HandleFunc("GET /api/work/defaults", func(w http.ResponseWriter, r *http.Request) {
+		cmds, err := s.Defaults(r.URL.Query().Get("project"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		apiutil.WriteJSON(w, http.StatusOK, map[string]any{"allowed_commands": cmds})
 	})
 	mux.HandleFunc("POST /api/work/sessions", func(w http.ResponseWriter, r *http.Request) {
 		if !apiutil.Confirmed(w, r) {
@@ -64,6 +80,7 @@ func Register(mux *http.ServeMux, s *Service) {
 		apiutil.WriteJSON(w, http.StatusCreated, se)
 	})
 	mux.HandleFunc("GET /api/work/sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
+		s.PollPRs()
 		get := s.Get
 		if r.URL.Query().Get("refresh") == "1" {
 			get = s.Refresh // reads the worktree's diff again

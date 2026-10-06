@@ -137,6 +137,15 @@ func installFakes(t *testing.T, mode string) (claudeLog, ghLog string) {
 	return claudeLog, ghLog
 }
 
+// canon is one spelling of a path for comparing: symlinks resolved and, on
+// Windows, 8.3 short names (t.TempDir() can be a RUNNER~1 style name on CI) expanded.
+func canon(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		p = r
+	}
+	return longPath(filepath.Clean(p))
+}
+
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	o, err := git(dir, args...)
@@ -264,7 +273,7 @@ func TestSessionOnCard(t *testing.T) {
 		t.Fatalf("status %s (%s)", se.Status, se.Error)
 	}
 	// Worktree next to the checkout, on a lucid/ branch from main.
-	if want := filepath.Join(filepath.Dir(f.repo), "demo-lucid-"+se.ID); !strings.EqualFold(se.Worktree, want) {
+	if want := filepath.Join(filepath.Dir(canon(f.repo)), "demo-lucid-"+se.ID); !strings.EqualFold(canon(se.Worktree), want) {
 		t.Errorf("worktree %s, want %s", se.Worktree, want)
 	}
 	if !regexp.MustCompile(`^lucid/[a-f0-9]{8}-add-a-readme-greeting$`).MatchString(se.Branch) || !strings.Contains(se.Branch, se.ID) {
@@ -294,7 +303,7 @@ func TestSessionOnCard(t *testing.T) {
 		!strings.Contains(rec.Stdin, "Done when README.md says hello.") {
 		t.Errorf("prompt:\n%s", rec.Stdin)
 	}
-	if !strings.EqualFold(filepath.Clean(rec.Cwd), se.Worktree) {
+	if !strings.EqualFold(canon(rec.Cwd), canon(se.Worktree)) {
 		t.Errorf("ran in %s", rec.Cwd)
 	}
 	if strings.Contains(strings.Join(rec.Args, " "), "--safe-mode") {

@@ -1,7 +1,7 @@
 import { CircleCheck, CircleDashed, CircleSlash, CircleX, LoaderCircle, type LucideIcon } from "lucide-react"
 
 import { formatDuration, RUN_STATE, runDuration, runState, type CIRun, type RunState } from "@/lib/ci"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 
 const ICON: Record<RunState, { icon: LucideIcon; className: string }> = {
   success: { icon: CircleCheck, className: "text-success" },
@@ -52,7 +52,7 @@ export function RunBars({
   return (
     <div
       role="img"
-      aria-label={`Last ${recent.length} runs: ${recent.filter((r) => runState(r) === "success").length} passed, ${recent.filter((r) => runState(r) === "failure").length} failed`}
+      aria-label={`Last ${plural(recent.length, "run")}: ${recent.filter((r) => runState(r) === "success").length} passed, ${recent.filter((r) => runState(r) === "failure").length} failed`}
       className={cn("flex h-8 items-end gap-[3px]", className)}
     >
       {Array.from({ length: pad }, (_, i) => (

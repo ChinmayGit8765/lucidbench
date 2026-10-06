@@ -34,6 +34,7 @@ export interface BoardSummary {
 
 export const DEFAULT_BOARD = "work"
 export const READY_COLUMN = "Ready"
+export const REVIEW_COLUMN = "Review"
 export const BOARDS_POLL_MS = 20000
 
 const q = encodeURIComponent

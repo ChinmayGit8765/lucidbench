@@ -18,6 +18,7 @@ import {
   ScrollText,
   ShieldCheck,
   Square,
+  Terminal,
   Timer,
   Trash2,
   TriangleAlert,
@@ -37,13 +38,15 @@ import { ApiError, errorMessage, getJSON, request } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { DEFAULT_BOARD } from "@/lib/boards"
 import { useNow } from "@/lib/time"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import {
   buildSteps,
+  checksLabel,
   elapsedOf,
   formatCost,
   formatElapsed,
   openPR,
+  PR_INFO,
   removeWorktree,
   SANDBOX_NOTICE,
   sessionPath,
@@ -111,6 +114,19 @@ export function SessionView({ id }: { id: string }) {
   const steps = useMemo(() => buildSteps(events, session?.worktree ?? ""), [events, session?.worktree])
   const end = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+
+  // A PR that is not merged yet: ask again now and then, so its state and
+  // checks follow GitHub. The server asks gh at most once a minute.
+  const prWatched = !!session?.pr_url && session.pr_state !== "merged" && !session.removed
+  useEffect(() => {
+    if (!prWatched) return
+    const t = setInterval(() => {
+      getJSON<WorkSession>(sessionPath(id))
+        .then(setSession)
+        .catch(() => undefined)
+    }, 30000)
+    return () => clearInterval(t)
+  }, [prWatched, id, setSession])
 
   // While the agent runs, stay at the bottom unless the user scrolled up.
   useEffect(() => {
@@ -191,6 +207,12 @@ export function SessionView({ id }: { id: string }) {
                 {session.harness === "mine" ? "your harness" : "clean harness"}
                 {session.profile ? ` · ${session.profile}` : ""}
               </Meta>
+              {session.pr_url && session.pr_state && (
+                <Meta icon={GitPullRequest} title={checksLabel(session.pr_checks) || PR_INFO[session.pr_state].label}>
+                  <span className={cn(session.pr_state === "merged" && "text-success-fg", session.pr_state === "closed" && "text-danger-fg")}>{PR_INFO[session.pr_state].label}</span>
+                  {session.pr_checks && session.pr_state !== "merged" && <span className="font-mono">· {checksLabel(session.pr_checks)}</span>}
+                </Meta>
+              )}
               {session.card && (
                 <Meta icon={KanbanSquare} title="Open the card" onClick={() => open("boards", [session.board || DEFAULT_BOARD, session.card!])}>
                   card
@@ -203,6 +225,21 @@ export function SessionView({ id }: { id: string }) {
               )}
             </div>
             <p className="mt-1 max-w-3xl text-2xs leading-4 text-subtle-foreground">{SANDBOX_NOTICE}</p>
+            {session.allowed_commands && session.allowed_commands.length > 0 && (
+              <details className="group mt-1 max-w-3xl text-2xs text-subtle-foreground">
+                <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 hover:text-foreground">
+                  <Terminal className="size-3" />
+                  May run without asking: {plural(session.allowed_commands.length, "command")}
+                </summary>
+                <ul aria-label="Allowed commands" className="mt-1.5 flex flex-wrap gap-1">
+                  {session.allowed_commands.map((c) => (
+                    <li key={c} className="rounded-full border bg-background/60 px-2 py-0.5 font-mono text-muted-foreground">
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             <div className="flex items-center gap-2">
@@ -385,9 +422,25 @@ function Changes({
       </div>
 
       {session.pr_url && (
-        <div className="mx-5 mb-3 flex items-center gap-2 rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-xs text-success-fg">
+        <div
+          className={cn(
+            "mx-5 mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+            session.pr_state === "closed" ? "border-danger/30 bg-danger-soft text-danger-fg" : "border-success/30 bg-success-soft text-success-fg",
+          )}
+        >
           <GitPullRequest className="size-3.5" />
-          Draft PR opened. Merging is your call on GitHub.
+          {session.pr_state === "merged"
+            ? "PR merged. The card is in Done."
+            : session.pr_state === "closed"
+              ? "PR closed without merging."
+              : session.pr_state === "open"
+                ? "PR open. Merging is your call on GitHub."
+                : "Draft PR opened. Merging is your call on GitHub."}
+          {session.pr_checks && session.pr_state !== "merged" && (
+            <span className="font-mono opacity-90" title="Status checks on the PR">
+              · {checksLabel(session.pr_checks)}
+            </span>
+          )}
           <a href={session.pr_url} target="_blank" rel="noreferrer" className="ml-auto truncate font-mono underline-offset-2 hover:underline">
             {session.pr_url.replace(/^https?:\/\/(www\.)?github\.com\//, "")}
           </a>

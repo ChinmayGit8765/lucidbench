@@ -23,7 +23,7 @@ func fail(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, ErrNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, ErrBusy), errors.Is(err, ErrApproved):
+	case errors.Is(err, ErrBusy), errors.Is(err, ErrApproved), errors.Is(err, ErrBlockers):
 		http.Error(w, err.Error(), http.StatusConflict)
 	default:
 		memory.Fail(w, err)
@@ -46,7 +46,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 //	POST /api/council/sessions                 start {input, project?, proposer?, critics?, rounds?}
 //	GET  /api/council/sessions/{id}            one session (poll)
 //	GET  /api/council/sessions/{id}/events     live snapshots (SSE)
-//	POST /api/council/sessions/{id}/approve    {project?}; returns the new card
+//	POST /api/council/sessions/{id}/approve    {project?, approved_with_blockers?}; returns the new card (409 when a blocker is open and not accepted)
 //	POST /api/council/sessions/{id}/again      {notes}; one more round with the notes
 //
 // POST needs X-Lucid-Confirm. A start or an "again" answers at once with the
@@ -92,11 +92,14 @@ func Register(mux *http.ServeMux, s *Service) {
 		}
 		var in struct {
 			Project string `json:"project"`
+			// ApprovedWithBlockers accepts a blocker in the latest critiques;
+			// without it such a brief is refused with 409.
+			ApprovedWithBlockers bool `json:"approved_with_blockers"`
 		}
 		if r.ContentLength != 0 && !decode(w, r, &in) {
 			return
 		}
-		card, err := s.Approve(r.PathValue("id"), in.Project)
+		card, err := s.ApproveChecked(r.PathValue("id"), in.Project, in.ApprovedWithBlockers)
 		if err != nil {
 			fail(w, err)
 			return

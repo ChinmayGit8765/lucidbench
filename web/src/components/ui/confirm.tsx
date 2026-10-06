@@ -6,6 +6,8 @@ import { Dialog } from "@/components/ui/dialog"
 export interface ConfirmRequest {
   title: string
   description: string
+  /** Extra content between the description and the buttons. */
+  body?: React.ReactNode
   confirmLabel: string
   danger?: boolean
   run: () => Promise<unknown>
@@ -32,6 +34,7 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | 
   }
   return (
     <Dialog open onClose={busy ? () => {} : onClose} title={request.title} description={request.description}>
+      {request.body && <div className="mb-4">{request.body}</div>}
       <div className="flex justify-end gap-2">
         <Button ref={cancel} variant="secondary" onClick={onClose} disabled={busy}>
           Cancel

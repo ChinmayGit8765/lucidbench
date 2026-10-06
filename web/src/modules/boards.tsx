@@ -14,6 +14,7 @@ import {
   type Board,
   type BoardSummary,
 } from "@/lib/boards"
+import { plural } from "@/lib/utils"
 import type { ModuleDef } from "@/modules/types"
 
 /**
@@ -46,7 +47,7 @@ function ReadyTile() {
       loading={list.loading && !list.data && !list.error}
       value={has ? ready.length : <span className="text-base font-medium text-muted-foreground">No board yet</span>}
       aside={doing > 0 ? <StatusPill tone="info">{doing} in progress</StatusPill> : undefined}
-      sub={has ? `on ${board?.title ?? "Work"} · ${cards.filter((c) => !c.done).length} open cards` : list.error ? list.error.message : "Add a card to start the work board"}
+      sub={has ? `on ${board?.title ?? "Work"} · ${plural(cards.filter((c) => !c.done).length, "open card")}` : list.error ? list.error.message : "Add a card to start the work board"}
       footer={
         ready.length > 0 ? (
           <ul className="space-y-1">
@@ -102,7 +103,7 @@ function useBoardCommands(paletteOpen: boolean): Command[] {
         label: b.title,
         group: "Boards",
         icon: SquareKanban,
-        hint: `${b.cards} ${b.cards === 1 ? "card" : "cards"}`,
+        hint: plural(b.cards, "card"),
         keywords: b.id,
         run: () => open("boards", [b.id]),
       })),

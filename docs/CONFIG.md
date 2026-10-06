@@ -153,6 +153,8 @@ projects:
     local_path: <absolute path to your checkout>   # optional, absolute; Work sessions need it
     linear: APP-1              # optional, free text
     summary: One line.         # optional
+    work:                      # optional: tune Work sessions on this project
+      allowed_commands: [make, go, gofmt]   # replaces the stack defaults below
     builds_into: [other-id]    # optional
     needs:                     # optional; status todo | doing | done | blocked
       - { what: "Release pipeline", from: build-tools, status: doing }
@@ -162,6 +164,20 @@ projects:
 an absolute path when set; whether the folder exists is checked when something
 uses it (Work refuses a project without one). `lucid projects show` prints it
 and `GET /api/projects` returns it as `local_path`.
+
+A Work session cannot answer a permission prompt, so the commands it may run
+without asking are fixed when it starts. By default that is read-only git
+(`git status`, `diff`, `log`, `show`, `ls-files`, `branch`), `git add`,
+`commit` and `restore`, plus `ls`, `cat`, `grep` and `find`, and the build tools
+of the stack found at the checkout's root: `go` and `gofmt` for `go.mod`,
+`npm`, `node` and `npx` for `package.json`, `cargo` for `Cargo.toml`. A project's
+`work.allowed_commands` replaces the stack part, and the New Session form lets
+you edit the whole list for one session. An entry is a command prefix (`go`
+allows every `go ...`; `git status` only that). `git push`, `git remote`,
+`rm`, `sudo`, `curl`, `wget`, `gh` and shells are never allowed, and the CLI is
+also told to refuse `git push` and `rm -rf`. Claude and Grok get the list as
+permission rules; Codex has no per-command list and runs in its workspace
+sandbox with the network off.
 
 A `tool` is a private project that builds other projects; `builds_into` says
 which. A need's `from` names the project that supplies it. Lucidbench derives

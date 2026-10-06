@@ -39,7 +39,7 @@ import {
   type Theme,
   type ThemeBundle,
 } from "@/lib/theme"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import type { Account } from "@/pages/Accounts"
 import { Row, Section, Segmented, Switch } from "@/pages/settings/controls"
 
@@ -604,7 +604,7 @@ export function Appearance({ focus }: { focus?: string }) {
         {active && hasArt(active) && (
           <Row
             label="Sprite board"
-            hint={sprites > 0 ? `Show ${active.name}'s ${sprites} sprites as a card on the Overview.` : `${active.name} has art but no sprites.`}
+            hint={sprites > 0 ? `Show ${active.name}'s ${plural(sprites, "sprite")} as a card on the Overview.` : `${active.name} has art but no sprites.`}
           >
             <Switch label="Show the sprite board" checked={prefs.sprite_board && sprites > 0} onChange={(v) => update((p) => ({ ...p, sprite_board: v }))} />
           </Row>

@@ -24,7 +24,7 @@ import {
   type UsageSummary,
   type UsageWindow,
 } from "@/lib/usage"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 
 /** The stacked series, bottom to top. Colours come from the theme's status tokens. */
 const SERIES = [
@@ -119,7 +119,7 @@ function DailyBars({ daily, keys, name }: { daily: UsageDay[]; keys: SeriesKey[]
   const max = Math.max(1, ...daily.map(sum))
   const every = daily.length > 14 ? 5 : 1
   return (
-    <div role="img" aria-label={`${name}: tokens per day over the last ${daily.length} days`}>
+    <div role="img" aria-label={`${name}: tokens per day over the last ${plural(daily.length, "day")}`}>
       <div className="flex h-36 items-end gap-[3px]">
         {daily.map((d) => {
           const total = sum(d)

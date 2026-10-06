@@ -25,14 +25,14 @@ import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { DEFAULT_BOARD, READY_COLUMN, useWorkBoard } from "@/lib/boards"
+import { DEFAULT_BOARD, READY_COLUMN, REVIEW_COLUMN, useWorkBoard } from "@/lib/boards"
 import { CI_POLL_MS, formatDuration, runDuration, runState, shortRepo, type CIRunners, type CIRuns } from "@/lib/ci"
 import { COUNCIL_POLL_MS, newBraindump, SESSIONS_PATH, type CouncilSummary } from "@/lib/council"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
 import { usePrefs } from "@/lib/prefs"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
-import { needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
+import { prIsOpen, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
 import { isOpenable, moduleById, navOrder, useAttention } from "@/modules/registry"
 import type { AttentionItem } from "@/modules/types"
 
@@ -96,8 +96,10 @@ function TodaysLoop() {
   const drafts = council?.filter((s) => s.status === "draft") ?? null
   const ready = cards?.filter((c) => c.column === READY_COLUMN) ?? null
   const working = sessions?.filter((s) => s.status === "running") ?? null
-  const review = sessions?.filter(needsReview) ?? null
-  const prs = sessions?.filter((s) => s.pr_url && !s.removed) ?? null
+  // "Review" is the board's Review column, so this strip and the Board agree.
+  const review = cards?.filter((c) => c.column === REVIEW_COLUMN) ?? null
+  // Only PRs still open on GitHub (draft or open), not merged or closed ones.
+  const prs = sessions?.filter(prIsOpen) ?? null
   // One item: go straight to it; several: to the list.
   const one = <T,>(xs: T[] | null, to: (x: T) => void, all: () => void) => () => (xs && xs.length === 1 ? to(xs[0]) : all())
 
@@ -125,7 +127,7 @@ function TodaysLoop() {
       icon: SquareKanban,
       count: ready && ready.length,
       yours: true,
-      hint: "cards to start",
+      hint: ready?.length === 1 ? "card to start" : "cards to start",
       go: one(ready, (c) => open("boards", [DEFAULT_BOARD, c.id]), () => open("boards", [DEFAULT_BOARD])),
     },
     {
@@ -133,7 +135,7 @@ function TodaysLoop() {
       label: "In progress",
       icon: SquareTerminal,
       count: working && working.length,
-      hint: "agents working",
+      hint: working?.length === 1 ? "agent working" : "agents working",
       go: one(working, (s) => open("work", [s.id]), () => open("work")),
     },
     {
@@ -142,15 +144,15 @@ function TodaysLoop() {
       icon: FileDiff,
       count: review && review.length,
       yours: true,
-      hint: "diffs to review",
-      go: one(review, (s) => open("work", [s.id]), () => open("work")),
+      hint: review?.length === 1 ? "card in review" : "cards in review",
+      go: one(review, (c) => open("boards", [DEFAULT_BOARD, c.id]), () => open("boards", [DEFAULT_BOARD])),
     },
     {
       key: "prs",
       label: "PRs open",
       icon: GitPullRequest,
       count: prs && prs.length,
-      hint: "drafts on GitHub",
+      hint: "not yet merged",
       go: one(prs, (s) => open("work", [s.id]), () => open("work")),
     },
   ]
