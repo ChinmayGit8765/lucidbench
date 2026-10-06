@@ -131,6 +131,13 @@ export const SESSIONS_PATH = "/api/council/sessions"
 /** Asks the Council page to focus its composer (the palette's "New braindump…"). */
 export const COMPOSE_EVENT = "lucidbench:council-compose"
 
+/** Opens Council with the composer focused, from anywhere in the app. */
+export function newBraindump(open: (id: string, sub?: string[]) => void) {
+  open("council")
+  // The page may already be open; ask it to focus the composer.
+  setTimeout(() => window.dispatchEvent(new Event(COMPOSE_EVENT)), 50)
+}
+
 export const STATUS: Record<CouncilStatus, { tone: Tone; label: string }> = {
   running: { tone: "info", label: "Running" },
   draft: { tone: "warning", label: "Waiting for approval" },
@@ -268,11 +275,7 @@ export interface CouncilAttention {
   meta: string
 }
 
-/**
- * Needs-attention entries for Overview: one per brief waiting for approval.
- * Overview has no contribution point for attention yet; this is ready to be
- * listed there once it does.
- */
+/** Needs-attention entries for Overview: one per brief waiting for approval. */
 export function councilAttention(list: CouncilSummary[]): CouncilAttention[] {
   return list
     .filter((s) => s.status === "draft")
@@ -280,6 +283,6 @@ export function councilAttention(list: CouncilSummary[]): CouncilAttention[] {
       key: `council-${s.id}`,
       id: s.id,
       title: `Brief waiting for approval: ${s.title || "untitled"}`,
-      meta: `${s.project ? `${s.project} · ` : ""}${s.rounds} ${s.rounds === 1 ? "round" : "rounds"} · ${s.brief_path ?? ""}`,
+      meta: `${s.project ? `${s.project} · ` : ""}${s.rounds} ${s.rounds === 1 ? "round" : "rounds"}${s.brief_path ? ` · ${s.brief_path}` : ""}`,
     }))
 }

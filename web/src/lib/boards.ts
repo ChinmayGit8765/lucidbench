@@ -1,4 +1,6 @@
-import { ApiError, getJSON, sendJSON } from "@/lib/api"
+import { useEffect, useState } from "react"
+
+import { ApiError, getJSON, sendJSON, usePoll } from "@/lib/api"
 import { memoryApi } from "@/lib/memory"
 
 /** A card. Only these fields go to the API: it rejects unknown ones. */
@@ -45,6 +47,29 @@ export const boardsApi = {
   update: (board: string, id: string, c: CardFields) => sendJSON<Card>(`/api/boards/${q(board)}/cards/${q(id)}`, "PUT", c),
   move: (board: string, id: string, column: string, index: number) =>
     sendJSON<Card>(`/api/boards/${q(board)}/cards/${q(id)}`, "PUT", { column, index }),
+}
+
+/**
+ * The default work board, followed by polling. It reads the board list
+ * first, so a visit that only looks (Overview) never creates the board
+ * file. board stays null until the board exists and has loaded.
+ */
+export function useWorkBoard(intervalMs = BOARDS_POLL_MS) {
+  const list = usePoll<BoardSummary[]>("/api/boards", intervalMs)
+  const exists = list.data?.some((b) => b.id === DEFAULT_BOARD) ?? false
+  const [board, setBoard] = useState<Board | null>(null)
+  useEffect(() => {
+    if (!exists) return
+    let cancelled = false
+    boardsApi
+      .get(DEFAULT_BOARD)
+      .then((b) => !cancelled && setBoard(b))
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [exists, list.updatedAt])
+  return { list, exists, board: exists ? board : null, loading: list.loading && !list.data && !list.error }
 }
 
 /** A board id from a title: lowercase letters, digits and dashes. */

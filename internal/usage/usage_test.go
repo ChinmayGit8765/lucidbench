@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
+	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
+	"github.com/ChinmayGit8765/lucidbench/internal/council"
+	"github.com/ChinmayGit8765/lucidbench/internal/work"
 )
 
 // zone is a fixed zone ahead of UTC, so a late-evening UTC event lands on the
@@ -349,6 +352,54 @@ func TestOwnRuns(t *testing.T) {
 	}
 	if src["council"] != 19 || src["work"] != 110 {
 		t.Errorf("sources %v", src)
+	}
+}
+
+// TestOwnRunsFromRealRecords writes records the way Council and Work write
+// them (their own structs, marshalled), so a renamed field in either package
+// fails here instead of leaving the Lucidbench row silently empty.
+func TestOwnRunsFromRealRecords(t *testing.T) {
+	e := newEnv(t)
+	created := time.Date(2026, 3, 2, 9, 0, 0, 0, zone)
+	cs := council.Session{
+		ID: "c-real", Status: council.StatusApproved, Created: created, Updated: created.Add(30 * time.Hour),
+		Usage: []agentexec.Usage{
+			{Provider: "claude", Model: "m", InputTokens: 10, OutputTokens: 5, CacheRead: 1, CacheWrite: 2, CostUSD: 0.25, DurationMS: 1},
+			{Provider: "codex", InputTokens: 3, OutputTokens: 1, DurationMS: 1},
+		},
+	}
+	b, err := json.Marshal(cs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(e.data, "council", cs.ID+".json"), string(b))
+
+	ended := created.Add(26 * time.Hour)
+	ws := work.Session{
+		ID: "w-real", Provider: "claude", Status: "done", Started: created.Add(25 * time.Hour), Ended: &ended,
+		Usage: &agentexec.Usage{Provider: "claude", InputTokens: 7, OutputTokens: 3, CacheRead: 100, CostUSD: 0.5, DurationMS: 2, Note: "n"},
+	}
+	if b, err = json.Marshal(ws); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(e.data, "work", "sessions", ws.ID, "session.json"), string(b))
+	// A session still running has reported no usage yet: it is not a run.
+	running, _ := json.Marshal(work.Session{ID: "w-run", Status: "running", Started: created})
+	write(t, filepath.Join(e.data, "work", "sessions", "w-run", "session.json"), string(running))
+
+	o := e.svc.Summary(7).Lucidbench
+	if o.Runs != 3 || o.Totals.Input != 20 || o.Totals.Output != 9 || o.Totals.CacheRead != 101 || o.Totals.CacheWrite != 2 {
+		t.Errorf("own totals %+v runs %d", o.Totals, o.Runs)
+	}
+	if o.Totals.CostUSD != 0.75 {
+		t.Errorf("cost %v", o.Totals.CostUSD)
+	}
+	// Council runs count on the day the session was created, work on the day it started.
+	if d := day(Provider{Daily: o.Daily}, "2026-03-02"); d.Input != 13 || d.CostUSD != 0.25 {
+		t.Errorf("Mar 2 %+v", d)
+	}
+	if d := day(Provider{Daily: o.Daily}, "2026-03-03"); d.Input != 7 || d.CostUSD != 0.5 {
+		t.Errorf("Mar 3 %+v", d)
 	}
 }
 

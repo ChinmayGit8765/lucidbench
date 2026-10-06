@@ -1,26 +1,41 @@
 import { lazy, useEffect, useState } from "react"
-import { RotateCw, ServerCog } from "lucide-react"
+import {
+  ArrowRight,
+  Container as ContainerIcon,
+  ExternalLink,
+  KeyRound,
+  Play,
+  RotateCw,
+  ServerCog,
+  TriangleAlert,
+  Workflow,
+} from "lucide-react"
 
-import { RunBars } from "@/components/ci"
+import { RunBars, RunIcon, RunnerDot } from "@/components/ci"
 import type { Command } from "@/components/CommandPalette"
 import { StatTile } from "@/components/StatTile"
 import { StatusPill } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { getJSON, refreshAll, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
   CI_POLL_MS,
+  containerAction,
   failingRuns,
   isFailure,
   rerunFailed,
   runState,
   shortRepo,
+  type CIContainer,
   type CIRun,
+  type CIRunners,
   type CIRuns,
   type CISummary,
 } from "@/lib/ci"
-import { useNow } from "@/lib/time"
+import { relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function RunnersTile() {
   const { open } = useApp()
@@ -103,6 +118,194 @@ function useRunnerCommands(paletteOpen: boolean): Command[] {
   ]
 }
 
+/** Re-runs a run's failed jobs after the user confirms. */
+function RerunButton({ run: r }: { run: CIRun }) {
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          setConfirm({
+            title: "Re-run failed jobs?",
+            description: `${r.repo} · ${r.name} #${r.run_number} on ${r.branch}. GitHub queues only the jobs that failed.`,
+            confirmLabel: "Re-run failed jobs",
+            run: async () => {
+              if (await rerunFailed(r)) setTimeout(refreshAll, 1500)
+            },
+          })
+        }
+      >
+        <RotateCw /> Re-run
+      </Button>
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </>
+  )
+}
+
+/** Starts a stopped runner container after the user confirms. */
+function StartContainerButton({ container: ct }: { container: CIContainer }) {
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          setConfirm({
+            title: `Start ${ct.name}?`,
+            description: "The container starts and the runner registers with GitHub again.",
+            confirmLabel: "Start runner",
+            run: async () => {
+              if (await containerAction(ct.name, "start")) refreshAll()
+            },
+          })
+        }
+      >
+        <Play /> Start
+      </Button>
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </>
+  )
+}
+
+/** Needs attention: failed runs, offline runners, stopped runner containers and CI setup problems. */
+function useRunnerAttention(): AttentionItem[] | null {
+  const { open } = useApp()
+  const now = useNow(5000)
+  const summary = usePoll<CISummary>("/api/ci/summary", CI_POLL_MS)
+  const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
+  const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
+  const answered = (p: { data: unknown; error: unknown }) => p.data !== null || p.error !== null
+  if (!answered(summary) || !answered(runsPoll)) return null
+  const s = summary.data
+  const out: AttentionItem[] = []
+  const view = (
+    <Button variant="ghost" size="sm" onClick={() => open("runners")}>
+      View <ArrowRight />
+    </Button>
+  )
+  for (const r of failingRuns(runsPoll.data?.runs ?? []).slice(0, 6)) {
+    out.push({
+      key: `run-${r.repo}-${r.id}`,
+      severity: "danger",
+      icon: <RunIcon run={r} />,
+      title: (
+        <>
+          {r.name} failed on <span className="font-mono text-[0.92em]">{r.branch}</span>
+        </>
+      ),
+      meta: (
+        <>
+          {shortRepo(r.repo)} · #{r.run_number} · {relativeTime(r.created_at, now)}
+        </>
+      ),
+      action: (
+        <>
+          <RerunButton run={r} />
+          <a
+            href={r.html_url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${r.name} #${r.run_number} on GitHub`}
+            title="Open on GitHub"
+            className="inline-flex size-7 items-center justify-center rounded-md text-subtle-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ExternalLink className="size-3.5" />
+          </a>
+        </>
+      ),
+    })
+  }
+  for (const r of (runners.data?.runners ?? []).filter((x) => x.status !== "online")) {
+    out.push({
+      key: `runner-${r.repo}-${r.id}`,
+      severity: "warning",
+      icon: <RunnerDot status="offline" />,
+      title: (
+        <>
+          Runner <span className="font-mono text-[0.92em]">{r.name}</span> is offline
+        </>
+      ),
+      meta: shortRepo(r.repo),
+      action: view,
+    })
+  }
+  for (const ct of (runners.data?.containers ?? []).filter((x) => x.state !== "running")) {
+    out.push({
+      key: `ct-${ct.name}`,
+      severity: "warning",
+      icon: <ContainerIcon className="size-3.5 text-warning" />,
+      title: (
+        <>
+          Container <span className="font-mono text-[0.92em]">{ct.name}</span> is stopped
+        </>
+      ),
+      meta: ct.status,
+      action: <StartContainerButton container={ct} />,
+    })
+  }
+  if (s && !s.configured) {
+    out.push({
+      key: "ci-setup",
+      severity: "info",
+      icon: <Workflow className="size-3.5 text-info" />,
+      title: "Watch your CI",
+      meta: "Add repositories to ci.github.repos to see runners and runs",
+      action: (
+        <Button variant="ghost" size="sm" onClick={() => open("runners")}>
+          Set up <ArrowRight />
+        </Button>
+      ),
+    })
+  } else if (s?.token_source === "none") {
+    out.push({
+      key: "ci-token",
+      severity: "warning",
+      icon: <KeyRound className="size-3.5 text-warning" />,
+      title: "No GitHub token",
+      meta: "Export GITHUB_TOKEN or sign in with gh auth login",
+      action: (
+        <Button variant="ghost" size="sm" onClick={() => open("runners")}>
+          Details <ArrowRight />
+        </Button>
+      ),
+    })
+  }
+  // One row per cause: a bad token fails every repository the same way, and
+  // a row per repository would bury the rest of the list.
+  const byCause = new Map<string, string[]>()
+  for (const e of s?.errors ?? []) {
+    if (e.source === "github") continue
+    if (e.source === "docker") {
+      out.push({
+        key: `err-docker-${e.message}`,
+        severity: "danger",
+        icon: <TriangleAlert className="size-3.5 text-danger" />,
+        title: "Docker is not reachable",
+        meta: e.message,
+      })
+      continue
+    }
+    const cause = e.message.replace(/^.*:\s+(?=\d{3}\b)/, "")
+    const repos = byCause.get(cause) ?? []
+    if (!repos.includes(shortRepo(e.source))) repos.push(shortRepo(e.source))
+    byCause.set(cause, repos)
+  }
+  for (const [cause, repos] of byCause) {
+    out.push({
+      key: `err-${cause}`,
+      severity: "danger",
+      icon: <TriangleAlert className="size-3.5 text-danger" />,
+      title: repos.length === 1 ? `Cannot read ${repos[0]}` : `Cannot read ${repos.length} repositories`,
+      meta: `${cause}${repos.length > 1 ? ` · ${repos.join(", ")}` : ""}`,
+      action: view,
+    })
+  }
+  return out
+}
+
 export const runners: ModuleDef = {
   id: "runners",
   title: "Runners & CI",
@@ -119,4 +322,5 @@ export const runners: ModuleDef = {
   component: lazy(() => import("@/pages/Runners")),
   useCommands: useRunnerCommands,
   overviewTile: RunnersTile,
+  useAttention: useRunnerAttention,
 }

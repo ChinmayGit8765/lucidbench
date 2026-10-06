@@ -1,13 +1,14 @@
 import { lazy } from "react"
-import { Gauge } from "lucide-react"
+import { ArrowRight, Gauge } from "lucide-react"
 
 import { StatTile } from "@/components/StatTile"
+import { Button } from "@/components/ui/button"
 import { useApp } from "@/lib/app"
 import { usePrefs } from "@/lib/prefs"
 import { useNow } from "@/lib/time"
-import { fmtTokens, livePercent, resetsIn, useUsageSummary, USAGE_WARN_PERCENT } from "@/lib/usage"
+import { fmtTokens, livePercent, resetsIn, usageAlerts, useUsageSummary, USAGE_WARN_PERCENT } from "@/lib/usage"
 import { cn } from "@/lib/utils"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function UsageTile() {
   const { open } = useApp()
@@ -53,6 +54,31 @@ function UsageTile() {
   )
 }
 
+/** Needs attention: limit windows at 80 % or more; 95 % and up reads as urgent. */
+function useUsageAttention(): AttentionItem[] | null {
+  const { open } = useApp()
+  const { label } = usePrefs()
+  const poll = useUsageSummary()
+  const now = useNow(30000)
+  if (!poll.data) return poll.error ? [] : null
+  return usageAlerts(poll.data).map((a): AttentionItem => ({
+    key: `usage-${a.provider}-${a.window.name}`,
+    severity: a.percent >= 95 ? "danger" : "warning",
+    icon: <Gauge className={cn("size-3.5", a.percent >= 95 ? "text-danger" : "text-warning")} />,
+    title: (
+      <>
+        {a.providerLabel} {a.window.label} {label("usage_meter", "usage")} at {Math.round(a.percent)}%
+      </>
+    ),
+    meta: resetsIn(a.window.resets_at, now) ? `resets in ${resetsIn(a.window.resets_at, now)}` : "reset time unknown",
+    action: (
+      <Button variant="ghost" size="sm" onClick={() => open("usage")}>
+        View <ArrowRight />
+      </Button>
+    ),
+  }))
+}
+
 export const usage: ModuleDef = {
   id: "usage",
   title: "Usage",
@@ -66,4 +92,5 @@ export const usage: ModuleDef = {
   keywords: "limits quota tokens cost meter windows spend",
   component: lazy(() => import("@/pages/Usage")),
   overviewTile: UsageTile,
+  useAttention: useUsageAttention,
 }

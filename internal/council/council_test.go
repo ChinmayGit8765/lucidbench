@@ -299,6 +299,10 @@ func TestEarlyStop(t *testing.T) {
 	if pg.Front["type"] != "brief" || pg.Front["status"] != "draft" || pg.Front["project"] != "demo-app" || pg.Front["council"] != sess.ID {
 		t.Errorf("front = %v", pg.Front)
 	}
+	// Memory, Boards and Obsidian show the brief's title, not its file name.
+	if pg.Title != sess.Title {
+		t.Errorf("page title %q, want %q", pg.Title, sess.Title)
+	}
 	if len(sess.Warnings) != 0 {
 		t.Errorf("warnings = %v", sess.Warnings)
 	}

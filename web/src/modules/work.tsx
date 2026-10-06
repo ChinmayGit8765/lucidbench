@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState, type ReactNode } from "react"
+import { lazy, useEffect, useState } from "react"
 import { ArrowRight, FileDiff, KanbanSquare, Play, SquareTerminal, TriangleAlert } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
@@ -10,7 +10,7 @@ import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { useNow } from "@/lib/time"
 import { elapsedOf, formatElapsed, needsReview, sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function WorkTile() {
   const { open } = useApp()
@@ -66,17 +66,32 @@ interface ReadyCard {
 function useWorkCommands(paletteOpen: boolean): Command[] {
   const { open } = useApp()
   const [cards, setCards] = useState<ReadyCard[] | null>(null)
+  const [review, setReview] = useState<WorkSession[]>([])
   useEffect(() => {
     if (!paletteOpen) return
     let cancelled = false
     getJSON<{ cards: ReadyCard[] }>("/api/boards/work")
       .then((b) => !cancelled && setCards(b.cards.filter((c) => c.column === "Ready" || c.column === "Inbox")))
       .catch(() => !cancelled && setCards([]))
+    getJSON<WorkSession[]>(sessionsPath)
+      .then((l) => !cancelled && setReview(l.filter(needsReview)))
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
   }, [paletteOpen])
   return [
+    ...review.map(
+      (s): Command => ({
+        id: `work-review-${s.id}`,
+        label: `Review diff: ${s.title}`,
+        group: "Actions",
+        icon: FileDiff,
+        hint: `${providerInfo(s.provider)?.label ?? s.provider} · ${s.project}`,
+        keywords: "work session diff review pr pull request",
+        run: () => open("work", [s.id]),
+      }),
+    ),
     {
       id: "work-start",
       label: "Start work…",
@@ -106,30 +121,29 @@ function useWorkCommands(paletteOpen: boolean): Command[] {
   ]
 }
 
-export interface WorkAttention {
-  key: string
-  icon: ReactNode
-  title: ReactNode
-  meta: ReactNode
-  action?: ReactNode
-}
-
-/** Needs attention: finished sessions whose diff waits for review. */
-export function useWorkAttention(): WorkAttention[] {
+/** Needs attention: finished or failed sessions whose diff waits for review. */
+function useWorkAttention(): AttentionItem[] | null {
   const { open } = useApp()
   const poll = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 4)
-  return (poll.data ?? [])
+  if (!poll.data) return poll.error ? [] : null
+  return poll.data
     .filter(needsReview)
     .slice(0, 6)
-    .map((s) => {
+    .map((s): AttentionItem => {
       const d = s.diff
       const failed = s.status === "failed"
       return {
         key: `work-${s.id}`,
+        severity: failed ? "danger" : "info",
         icon: failed ? <TriangleAlert className="size-3.5 text-danger" /> : <FileDiff className="size-3.5 text-info" />,
         title: (
           <>
-            {failed ? "Session failed" : "Session finished: review diff"} · {s.title}
+            {failed
+              ? "Session failed"
+              : d && d.files.length === 0 && d.uncommitted.length === 0
+                ? "Session finished without changes: read its answer"
+                : "Session finished: review diff"}{" "}
+            · {s.title}
           </>
         ),
         meta: (
@@ -161,4 +175,5 @@ export const work: ModuleDef = {
   component: lazy(() => import("@/pages/Work")),
   useCommands: useWorkCommands,
   overviewTile: WorkTile,
+  useAttention: useWorkAttention,
 }

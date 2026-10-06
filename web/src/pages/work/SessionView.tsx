@@ -6,11 +6,14 @@ import {
   Copy,
   ExternalLink,
   FileDiff,
+  FileText,
   FolderGit2,
   GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
+  KanbanSquare,
   ListTree,
+  Play,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -32,6 +35,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { Tabs } from "@/components/ui/tabs"
 import { ApiError, errorMessage, getJSON, request } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { DEFAULT_BOARD } from "@/lib/boards"
 import { useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import {
@@ -187,6 +191,16 @@ export function SessionView({ id }: { id: string }) {
                 {session.harness === "mine" ? "your harness" : "clean harness"}
                 {session.profile ? ` · ${session.profile}` : ""}
               </Meta>
+              {session.card && (
+                <Meta icon={KanbanSquare} title="Open the card" onClick={() => open("boards", [session.board || DEFAULT_BOARD, session.card!])}>
+                  card
+                </Meta>
+              )}
+              {session.brief && (
+                <Meta icon={FileText} title={`Open the brief: ${session.brief}`} onClick={() => open("memory", session.brief!.split("/"))}>
+                  brief
+                </Meta>
+              )}
             </div>
             <p className="mt-1 max-w-3xl text-2xs leading-4 text-subtle-foreground">{SANDBOX_NOTICE}</p>
           </div>
@@ -258,6 +272,7 @@ function Changes({
   setConfirm: (c: ConfirmRequest | null) => void
   expanded?: boolean
 }) {
+  const { open } = useApp()
   const d = session.diff!
   const [openFiles, setOpenFiles] = useState<Set<string>>(() => new Set(expanded || d.files.length === 1 ? d.files.map((f) => f.path) : []))
   const toggle = (p: string) =>
@@ -444,9 +459,20 @@ function Changes({
           })}
         </ul>
       ) : (
-        <p className="border-t px-5 py-4 text-sm text-muted-foreground">
-          {d.uncommitted.length > 0 ? "Nothing committed yet." : "The agent changed nothing."}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 border-t px-5 py-4">
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {d.uncommitted.length > 0
+              ? "Nothing committed yet."
+              : session.status === "running"
+                ? "No changes yet."
+                : "The agent changed nothing. If it asked you something, start a new session with your answers in the prompt."}
+          </p>
+          {d.uncommitted.length === 0 && session.status !== "running" && (
+            <Button size="sm" variant="secondary" onClick={() => open("work", session.card ? ["new", session.card] : ["new", "project", session.project])}>
+              <Play /> Answer and start again
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   )

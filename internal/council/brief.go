@@ -275,6 +275,10 @@ func (s *Service) saveBrief(sess *Session, title, brief string) (string, error) 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	front := map[string]any{"type": "brief", "status": StatusDraft, "project": sess.Project, "council": sess.ID}
+	if title != "" {
+		// The file name is a dated slug; the page shows this instead.
+		front["title"] = title
+	}
 	p := sess.BriefPath
 	if p != "" {
 		// Asked again: keep the page and any keys the user added to it.

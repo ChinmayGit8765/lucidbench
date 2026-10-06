@@ -1,9 +1,10 @@
 import { lazy, useEffect, useState } from "react"
-import { FolderKanban } from "lucide-react"
+import { ArrowRight, FolderKanban, OctagonAlert } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { StatTile } from "@/components/StatTile"
 import { StatusPill } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
@@ -16,7 +17,7 @@ import {
   type Project,
   type ProjectList,
 } from "@/lib/projects"
-import type { ModuleDef } from "@/modules/types"
+import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function ProjectsTile() {
   const { open } = useApp()
@@ -102,6 +103,35 @@ function useProjectCommands(paletteOpen: boolean): Command[] {
   }))
 }
 
+/** Needs attention: needs that block a project. */
+function useProjectAttention(): AttentionItem[] | null {
+  const { openProject } = useApp()
+  const poll = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
+  if (!poll.data) return poll.error ? [] : null
+  const list = poll.data.projects
+  return blockedNeeds(list)
+    .slice(0, 6)
+    .map(({ project, need }): AttentionItem => {
+      const from = need.from ? list.find((p) => p.id === need.from) : undefined
+      return {
+        key: `need-${project.id}-${need.what}`,
+        severity: "warning",
+        icon: <OctagonAlert className="size-3.5 text-warning" />,
+        title: (
+          <>
+            {project.name} is blocked on {need.what}
+          </>
+        ),
+        meta: from ? `needs it from ${from.name}` : `${project.progress.done}/${project.progress.total} needs done`,
+        action: (
+          <Button variant="ghost" size="sm" onClick={() => openProject(project.id)}>
+            View <ArrowRight />
+          </Button>
+        ),
+      }
+    })
+}
+
 export const projects: ModuleDef = {
   id: "projects",
   title: "Projects",
@@ -116,4 +146,5 @@ export const projects: ModuleDef = {
   component: lazy(() => import("@/pages/Projects")),
   useCommands: useProjectCommands,
   overviewTile: ProjectsTile,
+  useAttention: useProjectAttention,
 }

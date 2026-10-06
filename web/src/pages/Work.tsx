@@ -1,5 +1,5 @@
 import { type ReactNode } from "react"
-import { FileDiff, GitBranch, GitPullRequest, Plus, SquareTerminal } from "lucide-react"
+import { FileDiff, GitBranch, GitPullRequest, Plus, SquareKanban, SquareTerminal } from "lucide-react"
 
 import { ProviderTile, providerInfo } from "@/components/ProviderMark"
 import { PageHeader, RefreshButton } from "@/components/Shell"
@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { DEFAULT_BOARD } from "@/lib/boards"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import {
@@ -27,7 +28,10 @@ import { SessionView } from "@/pages/work/SessionView"
 
 /** /work lists sessions, /work/new starts one, /work/<id> shows one. */
 export default function Work({ subpath }: ModulePageProps) {
-  if (subpath[0] === "new") return <NewSession card={subpath[1]} />
+  // /work/new, /work/new/<card id>, or /work/new/project/<project id>.
+  if (subpath[0] === "new") {
+    return subpath[1] === "project" ? <NewSession project={subpath[2]} /> : <NewSession card={subpath[1]} />
+  }
   if (subpath[0]) return <SessionView id={subpath[0]} />
   return <SessionList />
 }
@@ -87,10 +91,13 @@ function SessionList() {
               </span>,
             ]}
             title="No sessions yet"
-            description="Start a session on a project with a local checkout. The agent works in a fresh worktree on its own branch, so your checkout stays untouched."
+            description="Pick a Ready card on the work board, or write a prompt. The agent works in a fresh worktree on its own branch, so your checkout stays untouched."
           >
             <Button onClick={() => open("work", ["new"])}>
               <Plus /> Start a session
+            </Button>
+            <Button variant="secondary" onClick={() => open("boards", [DEFAULT_BOARD])}>
+              <SquareKanban /> Open the work board
             </Button>
           </EmptyState>
         </Card>

@@ -14,16 +14,18 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { CalendarDays, Check, ChevronLeft, FileText, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
+import { CalendarDays, Check, ChevronLeft, FileText, PenLine, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { ErrorState, Skeleton } from "@/components/ui/states"
 import { errorMessage, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
   boardsApi,
+  DEFAULT_BOARD,
   dueState,
   formatDue,
   labelColor,
@@ -32,6 +34,7 @@ import {
   type Board,
   type Card as CardT,
 } from "@/lib/boards"
+import { newBraindump } from "@/lib/council"
 import { cn } from "@/lib/utils"
 import { CardSheet } from "@/pages/boards/CardSheet"
 
@@ -58,7 +61,7 @@ function orderOf(b: Board): Order {
 
 /** One board: columns of cards, drag between and within columns, a composer per column. */
 export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
-  const { navigate } = useApp()
+  const { navigate, open: openModule } = useApp()
   const poll = usePoll<Board>(`/api/boards/${encodeURIComponent(id)}`, 15000)
   const [board, setBoard] = useState<Board | null>(null)
   const [order, setOrder] = useState<Order>({})
@@ -221,6 +224,20 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
           </>
         }
       />
+      {total === 0 && board.id === DEFAULT_BOARD && (
+        <Card className="flex flex-wrap items-center gap-3 border-dashed px-4 py-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-fg">
+            <Vote className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Approve a brief in Council to get your first card</div>
+            <div className="text-xs text-muted-foreground">An approved brief lands here in Ready, linked to its page in Memory. From the card, Start work hands it to an agent.</div>
+          </div>
+          <Button size="sm" onClick={() => newBraindump(openModule)}>
+            <PenLine /> New braindump
+          </Button>
+        </Card>
+      )}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onStart} onDragOver={onOver} onDragEnd={(e) => void onEnd(e)} onDragCancel={() => setDragging(null)}>
         <div className="-mx-5 overflow-x-auto px-5 pb-4 md:-mx-8 md:px-8">
           <div className="flex min-h-[28rem] items-start gap-3">

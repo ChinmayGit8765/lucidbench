@@ -3,9 +3,11 @@ import {
   CalendarDays,
   Check,
   Columns3,
+  ExternalLink,
   FilePlus2,
   FileText,
   FolderKanban,
+  GitPullRequest,
   Link2,
   Play,
   SquareTerminal,
@@ -15,21 +17,20 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { providerInfo } from "@/components/ProviderMark"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet } from "@/components/ui/dialog"
-import { ApiError, errorMessage, getJSON } from "@/lib/api"
+import { errorMessage, getJSON } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { boardsApi, DEFAULT_BOARD, labelColor, type Board, type Card, type CardFields } from "@/lib/boards"
 import { baseName, memoryApi, pageRoute, safeName, type Hit } from "@/lib/memory"
 import type { ProjectList } from "@/lib/projects"
 import { cn } from "@/lib/utils"
+import { sessionPath, sessionsPath, STATUS_INFO, type WorkSession } from "@/lib/work"
 
 const field =
   "h-8 w-full rounded-md border bg-background/60 px-2.5 text-sm outline-none transition-colors placeholder:text-subtle-foreground hover:border-border-strong focus-visible:border-border-strong focus-visible:ring-2 focus-visible:ring-ring/30"
-
-/** "unknown" until checked; "missing" when the Work API is not in this build yet. */
-type WorkState = "unknown" | "ready" | "missing"
 
 /** The card detail slide-over. Every field saves on change. */
 export function CardSheet({ board, card, onClose, onSaved }: { board: Board; card: Card | null; onClose: () => void; onSaved: (c: Card) => void }) {
@@ -50,7 +51,7 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
   const { navigate, open } = useApp()
   const [title, setTitle] = useState(card.title)
   const [projects, setProjects] = useState<string[]>([])
-  const [work, setWork] = useState<WorkState>("unknown")
+  const [session, setSession] = useState<WorkSession | null>(null)
   const [linking, setLinking] = useState(false)
 
   useEffect(() => setTitle(card.title), [card.title])
@@ -60,14 +61,29 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
     getJSON<ProjectList>("/api/projects")
       .then((l) => !cancelled && setProjects(l.projects.map((p) => p.id)))
       .catch(() => undefined)
-    // Work ships separately; until its API answers, "Start work" waits.
-    getJSON<unknown>("/api/work/sessions")
-      .then(() => !cancelled && setWork("ready"))
-      .catch((e) => !cancelled && setWork(e instanceof ApiError && e.status === 404 ? "missing" : "ready"))
     return () => {
       cancelled = true
     }
   }, [])
+
+  // The card's Work session: its status, and the PR once there is one. Work
+  // writes the session id on the card's work:: line, then the PR URL once a
+  // PR is open; for a URL, the session is the one that opened that PR.
+  const prURL = card.work && /^https?:\/\//.test(card.work) ? card.work : null
+  useEffect(() => {
+    setSession(null)
+    if (!card.work) return
+    let cancelled = false
+    const found = prURL
+      ? getJSON<WorkSession[]>(sessionsPath).then((l) => l.find((s) => s.card === card.id && s.pr_url === prURL) ?? null)
+      : getJSON<WorkSession>(sessionPath(card.work))
+    found.then((s) => !cancelled && setSession(s)).catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [card.work, card.id, prURL])
+  const pr = session?.pr_url ?? prURL
+  const workID = session?.id ?? (prURL ? null : card.work)
 
   const save = async (fields: CardFields) => {
     try {
@@ -130,14 +146,27 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
         >
           <FileText /> Open brief
         </Button>
-        {work === "missing" ? (
-          <Button size="sm" disabled title="The Work module is not in this build yet">
-            <SquareTerminal /> Work not available
+        {pr ? (
+          <Button size="sm" asChild>
+            <a href={pr} target="_blank" rel="noreferrer">
+              <GitPullRequest /> Open PR
+            </a>
           </Button>
+        ) : workID ? (
+          <>
+            <Button size="sm" onClick={() => open("work", [workID])}>
+              <SquareTerminal /> Open session
+            </Button>
+            {session && session.status !== "running" && onWorkBoard && (
+              <Button size="sm" variant="ghost" onClick={startWork} title="Start another session on this card">
+                <Play /> Start again
+              </Button>
+            )}
+          </>
         ) : (
           <Button
             size="sm"
-            disabled={work !== "ready" || !onWorkBoard}
+            disabled={!onWorkBoard}
             onClick={startWork}
             title={onWorkBoard ? "Pick a provider and start an agent on this card" : "Work starts from cards on the work board"}
           >
@@ -209,29 +238,61 @@ function Body({ board, card, onSaved }: { board: Board; card: Card; onSaved: (c:
         </Prop>
         <Prop icon={Vote} label="Council">
           {card.council ? (
-            <button type="button" onClick={() => open("council", [card.council!])} className="flex items-center gap-2 text-sm hover:underline">
-              <span className="font-mono text-xs">{card.council}</span>
-            </button>
+            <LinkRow icon={Vote} onClick={() => open("council", [card.council!])} label="Council session" detail={card.council} />
           ) : (
             <span className="text-sm text-subtle-foreground">No council session</span>
           )}
         </Prop>
         <Prop icon={SquareTerminal} label="Work">
-          {card.work ? (
-            <button type="button" onClick={() => open("work", [card.work!])} className="flex items-center gap-2 text-sm hover:underline">
-              <span className="font-mono text-xs">{card.work}</span>
-              <StatusPill tone="info">session</StatusPill>
-            </button>
+          {workID ? (
+            <LinkRow
+              icon={SquareTerminal}
+              onClick={() => open("work", [workID])}
+              label={session ? `${providerInfo(session.provider)?.label ?? session.provider} session` : "Work session"}
+              detail={session?.branch ?? workID}
+              pill={session && <StatusPill tone={STATUS_INFO[session.status].tone}>{STATUS_INFO[session.status].label}</StatusPill>}
+            />
           ) : (
-            <span className="text-sm text-subtle-foreground">Not started</span>
+            <span className="text-sm text-subtle-foreground">{pr ? "The session that opened the PR is gone" : "Not started"}</span>
           )}
         </Prop>
+        {pr && (
+          <Prop icon={GitPullRequest} label="Pull request">
+            <a
+              href={pr}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-w-0 items-center gap-2 rounded-md border bg-background/60 px-2.5 py-1.5 text-sm hover:border-border-strong"
+            >
+              <GitPullRequest className="size-3.5 shrink-0 text-success" />
+              <span className="truncate">Draft PR</span>
+              <span className="ml-auto truncate font-mono text-2xs text-subtle-foreground">{pr.replace(/^https?:\/\/(www\.)?github\.com\//, "")}</span>
+              <ExternalLink className="size-3 shrink-0 text-subtle-foreground" />
+            </a>
+          </Prop>
+        )}
       </dl>
 
       <p className="border-t pt-4 text-xs text-subtle-foreground">
         Saved to <span className="font-mono">Boards/{board.id}.md</span> as an Obsidian Kanban card, with its fields as <span className="font-mono">key:: value</span> lines.
       </p>
     </div>
+  )
+}
+
+/** A linked record (council or work session) shown as a row that opens it. */
+function LinkRow({ icon: Icon, label, detail, pill, onClick }: { icon: typeof Tag; label: string; detail: string; pill?: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full min-w-0 items-center gap-2 rounded-md border bg-background/60 px-2.5 py-1.5 text-left text-sm hover:border-border-strong"
+    >
+      <Icon className="size-3.5 shrink-0 text-brand" />
+      <span className="truncate">{label}</span>
+      {pill}
+      <span className="ml-auto truncate font-mono text-2xs text-subtle-foreground">{detail}</span>
+    </button>
   )
 }
 
