@@ -350,15 +350,22 @@ function eventNode(ev: EventView): HTMLElement {
 }
 
 /** Reads server-sent events from a fetch body, so the Bearer header can be sent (EventSource cannot). */
-async function tail(id: string, onEvent: (ev: EventView) => void, onSession: (s: WorkView) => void, signal: AbortSignal) {
-  const r = await fetch(`${API}/work/sessions/${encodeURIComponent(id)}/events`, { headers: { Authorization: `Bearer ${token() ?? ""}`, Accept: "text/event-stream" }, signal, cache: "no-store" })
+/**
+ * Reads server-sent events from a fetch body, so the Bearer header can be
+ * sent (EventSource cannot). lastId resumes after the last event seen. It
+ * returns true at the "end" event, false when the connection just closed.
+ */
+async function tail(id: string, lastId: number, onEvent: (ev: EventView, id: number) => void, onSession: (s: WorkView) => void, signal: AbortSignal): Promise<boolean> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token() ?? ""}`, Accept: "text/event-stream" }
+  if (lastId >= 0) headers["Last-Event-ID"] = String(lastId)
+  const r = await fetch(`${API}/work/sessions/${encodeURIComponent(id)}/events`, { headers, signal, cache: "no-store" })
   if (r.status === 401) throw new Unpaired()
   if (!r.ok || !r.body) throw new Error((await r.text()).trim() || `${r.status}`)
   const reader = r.body.pipeThrough(new TextDecoderStream()).getReader()
   let buf = ""
   for (;;) {
     const { value, done } = await reader.read()
-    if (done) return
+    if (done) return false
     buf += value
     let i: number
     while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -366,14 +373,16 @@ async function tail(id: string, onEvent: (ev: EventView) => void, onSession: (s:
       buf = buf.slice(i + 2)
       let event = ""
       let data = ""
+      let eid = -1
       for (const line of block.split("\n")) {
         if (line.startsWith("event: ")) event = line.slice(7)
         else if (line.startsWith("data: ")) data += line.slice(6)
+        else if (line.startsWith("id: ")) eid = Number(line.slice(4))
       }
-      if (event === "end") return
+      if (event === "end") return true
       if (!data) continue
       if (event === "session") onSession(JSON.parse(data) as WorkView)
-      else if (event === "") onEvent(JSON.parse(data) as EventView)
+      else if (event === "") onEvent(JSON.parse(data) as EventView, eid)
     }
   }
 }
@@ -418,23 +427,32 @@ async function sessionScreen(id: string) {
   const ctl = new AbortController()
   streamAbort = ctl
   let n = 0
-  try {
-    await tail(
-      id,
-      (ev) => {
-        log.append(eventNode(ev))
-        if (++n > 400) log.firstElementChild?.remove()
-        log.scrollTop = log.scrollHeight
-      },
-      show,
-      ctl.signal,
-    )
-    if (!n) log.append(h("p", { class: "muted" }, "No events."))
-  } catch (e) {
-    if (ctl.signal.aborted) return
-    if (e instanceof Unpaired) return unpaired()
-    log.append(h("p", { class: "error" }, (e as Error).message))
+  let last = -1
+  const onEvent = (ev: EventView, eid: number) => {
+    if (eid >= 0) last = eid
+    log.append(eventNode(ev))
+    if (++n > 400) log.firstElementChild?.remove()
+    log.scrollTop = log.scrollHeight
   }
+  // A phone drops the connection when its screen locks or it changes
+  // network; the tail picks up after the last event it saw.
+  for (let tries = 0; ; tries++) {
+    try {
+      if (await tail(id, last, onEvent, show, ctl.signal)) break
+      tries = -1 // it was connected: start counting failures again
+    } catch (e) {
+      if (ctl.signal.aborted) return
+      if (e instanceof Unpaired) return unpaired()
+      if (tries >= 3) {
+        log.append(h("p", { class: "error" }, (e as Error).message))
+        return
+      }
+    }
+    if (ctl.signal.aborted) return
+    await new Promise((r) => setTimeout(r, 2000))
+    if (ctl.signal.aborted) return
+  }
+  if (!n) log.append(h("p", { class: "muted" }, "No events."))
 }
 
 /** A brief's Markdown as plain blocks: headings and paragraphs, never parsed as HTML. */
