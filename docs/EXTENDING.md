@@ -27,7 +27,7 @@ Today's modules:
 - **AI (core):** Accounts, MCP servers, Council (soon), Usage (soon)
 - **Bottom (core):** System, Settings
 - **Extensions:** Runners & CI, Containers and Kubernetes (added by default),
-  plus roadmap cards for Cloud, Databases, Payments, Picture, Live browser,
+  Cloud (added from the gallery), plus roadmap cards for Databases, Payments, Picture, Live browser,
   Linear and Trello
 
 A module with `status: "soon"` shows in the sidebar or gallery but cannot be

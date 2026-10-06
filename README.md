@@ -16,7 +16,8 @@ braindump ─► Council ─► brief in Memory ─► card on a Board ─► Wo
 - **Work:** runs Claude Code, Codex or Grok on a card in its own git worktree, using your own logins. The steps read like a conversation, with the diff inline, the raw log one click away, and Stop that really stops. When you confirm, it opens a **draft** PR. Merging is always your call.
 - **Usage:** token use from your local Claude Code and Codex logs, Codex rate-limit windows, and what Lucidbench's own runs cost.
 - **Also here:** account detection (several accounts per provider), the MCP access matrix, a projects map, Runners & CI for self-hosted GitHub Actions runners, Containers, Kubernetes (local kind), themes you can describe in words, and a Windows desktop app.
-- **Not yet:** Cloud, Databases, Payments, Picture, Live browser, and the Linear/Trello board connectors are visible as "soon" extensions.
+- **Cloud:** a read-only inventory of your Google Cloud Run services, Cloudflare Pages and Workers and Vercel projects (plus Azure and AWS sign-ins) through the CLIs you are already signed in to. Lucidbench stores no cloud credentials, and a project's card shows its live deploy status.
+- **Not yet:** Databases, Payments, Picture, Live browser, and the Linear/Trello board connectors are visible as "soon" extensions.
 
 **Safety in this beta:**
 - Work agents run as you on your machine. They are told to stay in their worktree, but this is not sandboxed yet.
