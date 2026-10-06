@@ -26,8 +26,15 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
     ...                         any user pages and folders
   council/<session-id>.json     council session record (rounds, critiques, usage)
   work/sessions/<id>/           session.json, events.jsonl (normalised events), raw.log
-  runs/<id>/                    existing per-run auth staging (internal/runner)
+  runs/<id>/                    existing per-run auth staging (internal/runner); owner = PID + lock name
+  locks/<provider>-<profile>.lock   per-profile run lock holding the holder's PID
 ```
+
+- **Stale runs:** a crashed run leaves `runs/<id>` (with its auth copy) behind. `runner.Sweep` runs
+  at lucidd startup and as `lucid runs sweep`. It deletes a folder only when its owner record is
+  older than 10 minutes, its owner PID is dead, and no live lock names that PID or the run's lock.
+  Any check it cannot answer keeps the folder. Deletes go through an `os.Root` on `runs/` and never
+  follow links; a folder that fails to delete is retried by the next sweep.
 
 - `vault.path` in config overrides the Memory location. Lucidbench never picks an existing vault
   by itself; the user chooses one in Settings → General.
