@@ -153,8 +153,9 @@ export default function Studio({ subpath }: ModulePageProps) {
     const byId = (id?: string) => templates.find((t) => t.id === id)
     if (h) {
       const t = byId(h.template) ?? byId("builder")!
-      const d = toDraft(t, h.project ?? "")
-      d.sections.task = h.text
+      // The palette's "New prompt from template" brings no text and no project: keep the last one.
+      const d = toDraft(t, h.project ?? loadDraft()?.project ?? "")
+      if (h.text.trim()) d.sections.task = h.text
       setDraft(d)
       return
     }
@@ -172,6 +173,7 @@ export default function Studio({ subpath }: ModulePageProps) {
   // A link or the palette asked for another template while the page is open.
   useEffect(() => {
     if (!started.current || !draft || !subpath[0] || subpath[0] === draft.template) return
+    takeHandoff("studio") // the palette's request, already answered here
     const t = templates.find((x) => x.id === subpath[0])
     if (t) setDraft(toDraft(t, draft.project, draft.context))
   }, [subpath[0]]) // only when the URL changes, not on every edit
@@ -381,6 +383,9 @@ export default function Studio({ subpath }: ModulePageProps) {
               <div>
                 {sections.map((s) => {
                   const m = meta.get(s.id)
+                  const inTemplate = !!current?.sections.some((x) => x.id === s.id)
+                  // A section the template does not use starts folded until it has text.
+                  const folded = collapsed[s.id] ?? (!inTemplate && !s.body.trim() && !(s.id === "context" && draft.context.length > 0))
                   return (
                     <SectionEditor
                       key={s.id}
@@ -389,9 +394,9 @@ export default function Studio({ subpath }: ModulePageProps) {
                       body={s.body}
                       mono={mono}
                       readOnly={readOnly}
-                      inTemplate={!!current?.sections.some((x) => x.id === s.id)}
-                      collapsed={!!collapsed[s.id]}
-                      onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}
+                      inTemplate={inTemplate}
+                      collapsed={folded}
+                      onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !folded }))}
                       onChange={(v) => setSection(s.id, v)}
                       workOwned={draft.target === "work" && (s.id === "role" || s.id === "constraints")}
                       findings={(rendered?.lint ?? []).filter((f) => f.section === s.id && f.severity !== "info")}
@@ -613,8 +618,7 @@ function SectionEditor({
   }, [body, collapsed, mono])
   const empty = body.trim() === ""
   if (readOnly && empty) return null
-  // A section the template does not use stays a one-line "add" row until it is opened.
-  const dormant = !inTemplate && empty && collapsed !== false
+  const dormant = !inTemplate && empty
   const title = meta?.title ?? id
   return (
     <section className="border-b last:border-b-0">
@@ -657,7 +661,7 @@ function SectionEditor({
             placeholder={readOnly ? "" : dormant ? `Add a ${title.toLowerCase()} section…` : meta?.hint}
             spellCheck={!mono}
             className={cn(
-              "block w-full resize-y rounded-lg border bg-background/50 px-3 py-2 text-sm leading-6 outline-none placeholder:text-subtle-foreground/70 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
+              "block w-full resize-y rounded-lg border bg-background/50 px-3 py-2 text-sm leading-6 outline-none [font-variant-ligatures:none] placeholder:text-subtle-foreground/70 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
               mono && "font-mono text-[0.8125rem] leading-[1.35rem]",
               readOnly && "cursor-default bg-muted/30 text-muted-foreground",
               workOwned && "opacity-70",
@@ -991,9 +995,9 @@ function Preview({
 
       {error && <ErrorState className="m-4" title="Could not render the prompt" message={error} />}
 
-      {rendered && rendered.lint.length > 0 && (
+      {rendered && (rendered.lint ?? []).length > 0 && (
         <ul aria-label="Lint" className="divide-y border-b">
-          {rendered.lint.map((f, i) => {
+          {(rendered.lint ?? []).map((f, i) => {
             const S = SEVERITY[f.severity]
             return (
               <li
@@ -1023,7 +1027,7 @@ function Preview({
         ) : (
           <pre
             aria-label="Rendered prompt"
-            className={cn("overflow-auto whitespace-pre-wrap break-words bg-background/40 px-4 py-3 font-mono text-[0.8125rem] leading-[1.4rem] text-foreground/90", !full && "max-h-[26rem]")}
+            className={cn("overflow-auto whitespace-pre-wrap break-words bg-background/40 px-4 py-3 font-mono [font-variant-ligatures:none] text-[0.8125rem] leading-[1.4rem] text-foreground/90", !full && "max-h-[26rem]")}
           >
             {rendered.text}
           </pre>

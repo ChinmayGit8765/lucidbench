@@ -137,7 +137,8 @@ func (a *API) RenderPrompt(in RenderRequest) (RenderResponse, error) {
 		secs = ForWork(secs)
 	}
 	r := Render(secs, vars, sources)
-	lint := append(problems, Lint(in.Sections, r, sources, in.Target)...)
+	// Never null: a clean prompt answers "lint": [].
+	lint := append(append([]Finding{}, problems...), Lint(in.Sections, r, sources, in.Target)...)
 	if in.Target == TargetWork {
 		lint = append(lint, Finding{Severity: SevInfo, Code: "work-adds",
 			Message: "Work puts its own role and safety rules first (worktree only, commit, never push, the allowed commands), so they are left out here."})

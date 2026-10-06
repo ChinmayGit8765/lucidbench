@@ -4,7 +4,7 @@ import { Lock, ScrollText, SquareTerminal, Vote, WandSparkles } from "lucide-rea
 import type { Command } from "@/components/CommandPalette"
 import { getJSON } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { TEMPLATES_PATH, type Template, type TemplateList } from "@/lib/prompts"
+import { putHandoff, TEMPLATES_PATH, type Template, type TemplateList } from "@/lib/prompts"
 import type { ModuleDef } from "@/modules/types"
 
 const iconOf = (t: Template) => (t.source === "council" ? Lock : t.target === "work" ? SquareTerminal : t.target === "council" ? Vote : ScrollText)
@@ -39,7 +39,8 @@ function useStudioCommands(paletteOpen: boolean): Command[] {
         hint: t.description,
         keywords: t.id,
         run: () => {
-          localStorage.removeItem("lucidbench:studio-draft")
+          // A fresh copy of the template; the project picked last stays.
+          putHandoff({ to: "studio", text: "", template: t.id, from: "palette" })
           open("studio", [t.id])
         },
       })),

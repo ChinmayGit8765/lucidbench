@@ -110,6 +110,10 @@ func newFixture(t *testing.T) *fixture {
 	writeJSON(t, filepath.Join(cdir, "20260504-090000-dddddd.json"), council.Session{
 		ID: "20260504-090000-dddddd", Input: "lost", Title: "Lost pieces", Status: council.StatusApproved,
 		BriefPath: "Inbox/deleted.md", Card: &boards.Card{ID: "c-gone", Title: "Lost pieces"},
+		Log: []council.Event{
+			{Time: at(3*60*24 + 1), Kind: "done", Text: "The brief is ready for approval"},
+			{Time: at(3*60*24 + 2), Kind: "done", Text: "The brief is ready for approval"},
+		},
 		Created: at(3 * 60 * 24), Updated: at(3 * 60 * 24),
 	})
 
@@ -275,6 +279,16 @@ func TestMissingPiecesAreTolerated(t *testing.T) {
 		t.Errorf("missing %v", idea.Missing)
 	}
 
+	var briefs []string
+	for _, e := range idea.Timeline {
+		if e.Kind == "brief" {
+			briefs = append(briefs, e.Title)
+		}
+	}
+	if strings.Join(briefs, "|") != "Brief written to Memory|Brief rewritten after Ask again" {
+		t.Errorf("brief events %v", briefs)
+	}
+
 	// A hand-made card with no record that moved it.
 	bare, err := f.svc.Get(CardPrefix + "work/" + f.bare.ID)
 	if err != nil || bare.CardView == nil || len(bare.CardView.History) != 0 || !strings.Contains(bare.CardView.HistoryNote, "only where it is now") ||
@@ -305,6 +319,19 @@ func TestMissingPiecesAreTolerated(t *testing.T) {
 	}
 	if list, err := (&Service{}).List(); err != nil || len(list) != 0 {
 		t.Errorf("nothing at all: %v %v", list, err)
+	}
+
+	// A fresh vault has no Boards folder: that is empty, not missing.
+	fresh, err := memory.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &Service{Council: f.svc.Council, Vault: func() (*memory.Vault, error) { return fresh, nil }}
+	if one, err := empty.Get("20260503-090000-cccccc"); err != nil || len(one.Missing) != 0 {
+		t.Errorf("fresh vault: missing %v, %v", one.Missing, err)
+	}
+	if _, err := os.Stat(filepath.Join(fresh.Root(), boards.Dir)); err == nil {
+		t.Error("reading ideas created the Boards folder")
 	}
 }
 

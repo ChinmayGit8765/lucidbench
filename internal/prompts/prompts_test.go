@@ -506,6 +506,11 @@ func TestRoutes(t *testing.T) {
 	if strings.Contains(out.Text, "You build Demo.") || codes(out.Lint)["work-adds"] != SevInfo {
 		t.Errorf("work target keeps the role: %s %+v", out.Text, out.Lint)
 	}
+	// A prompt with nothing to say about it answers an empty list, not null.
+	rec = do("POST", "/api/prompts/render", `{"sections":[{"id":"task","body":"An idea."}],"target":"council"}`, false)
+	if !strings.Contains(rec.Body.String(), `"lint":[]`) || !strings.Contains(rec.Body.String(), `"sources":[]`) || !strings.Contains(rec.Body.String(), `"unfilled":[]`) {
+		t.Errorf("clean render: %s", rec.Body)
+	}
 	if rec := do("POST", "/api/prompts/render", `{"sections":[{"id":"bogus","body":"x"}],"target":"copy"}`, false); rec.Code != 400 {
 		t.Errorf("bad section: %d", rec.Code)
 	}

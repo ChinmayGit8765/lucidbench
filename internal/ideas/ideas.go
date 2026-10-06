@@ -615,7 +615,7 @@ func stepEvent(st *council.Step, round int) (Event, bool) {
 }
 
 func timeline(sess *council.Session, c *cardRef, ses []work.Session, brief *Brief) []Event {
-	var out []Event
+	out := []Event{}
 	if sess != nil {
 		link := "council/" + sess.ID
 		out = append(out, Event{Time: sess.Created, Kind: "council", Title: "Braindump sent to the council", Link: link})
@@ -629,11 +629,19 @@ func timeline(sess *council.Session, c *cardRef, ses []work.Session, brief *Brie
 				}
 			}
 		}
+		writes := 0
 		for _, e := range sess.Log {
 			if e.Kind != "done" {
 				continue
 			}
-			ev := Event{Time: e.Time, Kind: "brief", Title: "Brief written to Memory", Link: link}
+			title := "Brief written to Memory"
+			if !strings.HasPrefix(e.Text, "Approved") {
+				// Each Ask again writes the same page again.
+				if writes++; writes > 1 {
+					title = "Brief rewritten after Ask again"
+				}
+			}
+			ev := Event{Time: e.Time, Kind: "brief", Title: title, Link: link}
 			if brief != nil && brief.Path != "" {
 				ev.Detail, ev.Link = brief.Path, "memory/"+brief.Path
 			}
