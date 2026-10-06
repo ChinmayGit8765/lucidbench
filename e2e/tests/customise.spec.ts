@@ -119,7 +119,9 @@ test("Projects: the Team tab checks the team and saves it to the repository", as
   expect(yaml).toContain("merge: human")
   await expect(editor).toContainText("the project's repository")
 
-  // Import YAML: an auto merge gate is refused.
+  // Import YAML: an auto merge gate is refused. Let the save toast go first,
+  // or it can sit over the button.
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 })
   await editor.getByRole("button", { name: "Import YAML" }).click()
   const dlg = page.getByRole("dialog", { name: "Import a team" })
   await dlg.getByLabel("Team YAML").fill("version: 1\ngates: {merge: auto}\n")

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1049,5 +1050,41 @@ func TestRoutes(t *testing.T) {
 	if r := post("/api/work/sessions/"+se.ID+"/remove", `{"discard":true}`, true); r.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(r.Body)
 		t.Errorf("remove discard: %d %s", r.StatusCode, b)
+	}
+}
+
+// Follow-ups sent at once (the desktop and the phone, or a double click)
+// start exactly one turn; the others are told the agent is busy.
+func TestFollowUpConcurrentStartsOneTurn(t *testing.T) {
+	f := newFixture(t, newRepo(t, true))
+	se, _, _ := startCardSession(t, f)
+	const n = 8
+	errs := make(chan error, n)
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := 0; i < n; i++ {
+		go func() {
+			start.Wait()
+			_, err := f.svc.FollowUp(se.ID, "Say it again")
+			errs <- err
+		}()
+	}
+	start.Done()
+	ok := 0
+	for i := 0; i < n; i++ {
+		err := <-errs
+		switch {
+		case err == nil:
+			ok++
+		case !errors.Is(err, ErrConflict):
+			t.Errorf("unexpected error %v", err)
+		}
+	}
+	if ok != 1 {
+		t.Fatalf("%d follow-ups started, want 1", ok)
+	}
+	got := wait(t, f.svc, se.ID)
+	if got.Status != StatusWaiting || len(got.Turns) != 2 {
+		t.Fatalf("%s with %d turns", got.Status, len(got.Turns))
 	}
 }

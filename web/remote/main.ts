@@ -271,7 +271,7 @@ function sessionRow(s: WorkView): HTMLElement {
       "div",
       { class: "grow" },
       h("div", { class: s.confidential ? "title redacted" : "title" }, s.title),
-      h("div", { class: "muted small" }, `${s.provider} · ${s.project} · ${ago(s.started)}${s.files ? ` · ${s.files} files +${s.added} −${s.deleted}` : ""}`),
+      h("div", { class: "muted small" }, `${s.provider} · ${s.project} · ${ago(s.started)}${s.files ? ` · ${s.files} ${s.files === 1 ? "file" : "files"} +${s.added} −${s.deleted}` : ""}`),
     ),
   )
 }
@@ -416,7 +416,7 @@ async function sessionScreen(id: string) {
     title.className = s.confidential ? "redacted" : ""
     status.textContent = statusLabel(s.status)
     status.className = `status ${s.status}`
-    meta.textContent = `${s.provider} · ${s.project}${s.turns > 1 ? ` · turn ${s.turns}` : ""} · started ${ago(s.started)}${s.files ? ` · ${s.files} files +${s.added} −${s.deleted}` : ""}${s.pr_state ? ` · PR ${s.pr_state}` : ""}`
+    meta.textContent = `${s.provider} · ${s.project}${s.turns > 1 ? ` · turn ${s.turns}` : ""} · started ${ago(s.started)}${s.files ? ` · ${s.files} ${s.files === 1 ? "file" : "files"} +${s.added} −${s.deleted}` : ""}${s.pr_state ? ` · PR ${s.pr_state}` : ""}`
     actions.replaceChildren()
     if (s.status === "running")
       actions.append(
