@@ -929,9 +929,9 @@ not the whole API.
 
 ## Phone remote
 
-The phone remote lets a paired phone see what needs you, follow running Work sessions and approve
-council briefs. It is **off by default**; turn it on in Settings › Phone remote (the mascot
-launcher's **Pair phone** opens it).
+The phone remote lets a paired phone see what needs you, follow running Work sessions, send a
+follow-up to a session that waits for you, and approve council briefs. It is **off by default**;
+turn it on in Settings › Phone remote (the mascot launcher's **Pair phone** opens it).
 
 **Model.** `lucidd` keeps listening on `server.addr` (127.0.0.1). When the remote is on, a
 **second listener** starts for the remote surface only:
@@ -961,11 +961,11 @@ whole desktop API and the desktop UI):
 |---|---|---|
 | `/r`, `/r/*` | GET | the phone page and its files (no token needed; they hold no data) |
 | `/r/api/pair` | POST | `{code, name}` returns `{token, device}` |
-| `/r/api/overview` | GET | attention items, running sessions, briefs awaiting approval, CI (last 24 h), tokens used today |
-| `/r/api/work/sessions` | GET | sessions without prompt, answer, paths, branch or patches |
-| `/r/api/work/sessions/{id}/events` | GET | live tail (server-sent events): each event's kind, title and text |
-| `/r/api/work/sessions/{id}/stop` | POST | stop the agent's whole process tree |
-| `/r/api/work/sessions/{id}/followup` | POST | answers 409 for now: a Work session runs its CLI once and never waits for input, so there is nothing to send a follow-up to |
+| `/r/api/overview` | GET | attention items (including each session waiting for you), running sessions, briefs awaiting approval, CI (last 24 h), tokens used today |
+| `/r/api/work/sessions` | GET | sessions without prompt, answer, paths, branch or patches, with their status and turn count |
+| `/r/api/work/sessions/{id}/events` | GET | live tail (server-sent events): each event's kind, title and text; it stays open while the session waits, so the next turn shows in the same tail |
+| `/r/api/work/sessions/{id}/stop` | POST | stop the running turn and its whole process tree; the session waits for you again |
+| `/r/api/work/sessions/{id}/followup` | POST | `{prompt}` (up to 4000 characters) runs the next turn of a session that waits for you, in the same worktree; `409` while a turn runs or once the session has ended, `400` for an empty prompt |
 | `/r/api/council/sessions/{id}` | GET | the brief, its open blockers and status |
 | `/r/api/council/sessions/{id}/approve` | POST | `{approved_with_blockers?}` approves it (a card goes to Ready) |
 | `/r/api/council/sessions/{id}/send-back` | POST | `{notes}` runs one more council round with your notes |
@@ -974,8 +974,8 @@ Every write needs the token **and** `X-Lucid-Confirm: yes`; the phone page asks 
 a sheet first. There are no settings, accounts, secrets, Memory pages, file contents (beyond the
 event text an agent streamed), Payments, Cloud, Databases or browser input on the remote.
 **Confidential** projects and pages show as "confidential" with their titles and project names
-redacted, their tails and briefs answer 403, and a brief cannot be approved from the phone; a CI repo
-of a confidential project is redacted too. When `projects.yaml` cannot be read, everything with a
+redacted, their tails, briefs and follow-ups answer 403, and a brief cannot be approved from the
+phone; a CI repo of a confidential project is redacted too. When `projects.yaml` cannot be read, everything with a
 project counts as confidential.
 
 **Limits.** Five failed pairings per client address (and twenty from anyone) in 10 minutes, and ten

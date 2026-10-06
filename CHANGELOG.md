@@ -3,6 +3,31 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
+## Unreleased
+
+- **Follow-ups in Work sessions:** a session no longer ends when the agent's turn does. It goes to
+  **waiting** and keeps its worktree, branch, settings and attached browser; you reply from a
+  composer at the bottom of the session (Enter sends, Shift+Enter is a new line, with the
+  provider and model and "turn N" beside it) and the next turn runs in the same worktree. Each
+  provider resumes its own session where its CLI can: `claude --resume` with the session id from
+  its stream, `codex exec resume` with the thread id, `grok --resume` with an id Lucidbench gives it
+  on the first run. Otherwise, or after a resume fails, the turn is a fresh run whose prompt
+  carries a short summary of the earlier turns (your follow-ups, the agent's final messages and the
+  changed files). The timeline marks each turn with a separator that says which way it went, and
+  shows time and cost per turn and in total. **End session** finishes it; **Open PR** works while it
+  waits. Stop now ends the running turn rather than the session. Overview shows "N sessions waiting
+  for you". New routes: `POST /api/work/sessions/{id}/followup` and `/end`; the event stream stays
+  open while a session waits (see [Work](docs/BETA-CONTRACTS.md#internalwork)).
+- **Phone remote:** the follow-up route now works. A session that waits shows "waiting for you"
+  and a **Send follow-up** sheet, the overview lists it as needing you, and the live tail shows the
+  next turn; the token, confirm header, audit entry and confidential 403 all apply.
+- **Restarts:** a session whose turn was running when Lucidbench stopped now waits for you, its turn
+  marked interrupted, instead of failing. A waiting session lets go of the agent browser after its
+  idle time and attaches it again on the next follow-up.
+- Editing runs no longer pass `--no-session-persistence` (claude) or `--ephemeral` (codex), so the
+  CLIs keep these sessions on disk like any other; their usage logs may count Work turns that
+  Lucidbench also records.
+
 ## 0.3.0-beta.3 (2026-10-07)
 
 - **Phone remote extension** (off by default): Settings › Phone remote (and **Pair phone** in the
