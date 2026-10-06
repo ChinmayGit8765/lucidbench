@@ -18,6 +18,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
 	"github.com/ChinmayGit8765/lucidbench/internal/council"
+	"github.com/ChinmayGit8765/lucidbench/internal/databases"
 	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
 	"github.com/ChinmayGit8765/lucidbench/internal/jobs"
@@ -134,6 +135,15 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		d.Usage = usage.NewService(cfg, data)
 	}
 	usage.Register(mux, d.Usage)
+	var powerLog *power.ActivityLog
+	if d.Power != nil {
+		powerLog = d.Power.Log
+	}
+	dbs := databases.New(data, powerLog)
+	if d.Power != nil {
+		d.Power.AddExtra(dbs.Managers)
+	}
+	databases.Register(mux, dbs)
 	themes.RegisterGenerate(mux, &themes.Generator{
 		InContainer: cluster.InContainer,
 		LookPath:    exec.LookPath,
