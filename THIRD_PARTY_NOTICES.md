@@ -34,13 +34,14 @@ Lucidbench is an independent project and is not affiliated with, sponsored by or
 | `mermaid` (Picture diagrams), loaded only when a diagram previews | MIT |
 | Mermaid's notable bundled dependencies: `d3*` (ISC, BSD-3-Clause), `dagre-d3-es`, `cytoscape` and its layouts, `katex`, `langium`, `@mermaid-js/parser`, `khroma`, `marked`, `lodash-es` | MIT, ISC or BSD-3-Clause |
 | `robust-predicates` (Mermaid, via `delaunator`) | Unlicense |
-| `elkjs` (Mermaid's optional ELK layout, a separate chunk fetched only for a diagram that asks for the ELK renderer; shipped unmodified) | EPL-2.0 |
+| `elkjs` 0.9.3 (Mermaid's optional ELK layout, a separate chunk fetched only for a diagram that asks for the ELK renderer; shipped unmodified, no Secondary Licence designated). Source: https://github.com/kieler/elkjs and https://www.npmjs.com/package/elkjs | EPL-2.0, full text in [`web/public/licenses/EPL-2.0-elkjs.txt`](web/public/licenses/EPL-2.0-elkjs.txt). Only the elkjs files are under EPL-2.0; the rest of Lucidbench stays Apache-2.0. |
 | `dompurify` (Mermaid's sanitiser, used under Apache-2.0) | MPL-2.0 OR Apache-2.0 |
 | `@excalidraw/excalidraw` (Picture design canvases), loaded only when a canvas opens | MIT |
 | Excalidraw's notable bundled dependencies: `roughjs`, `perfect-freehand`, `jotai`, `nanoid`, `@radix-ui/*`, `immer`, `fuzzy` | MIT |
 | `pako` (Excalidraw) | MIT AND Zlib |
 | `fractional-indexing` (Excalidraw) | CC0-1.0 |
-| Excalidraw's drawing fonts (Excalifont, Virgil, Cascadia Code, Nunito, Lilita One, Assistant, Liberation Sans, Comic Shanns), copied into the web UI at `/excalidraw/fonts` by the build so the canvas makes no CDN request. The CJK set (Xiaolai) is not copied. | Published by the Excalidraw project under open font licences (mostly SIL OFL 1.1); the font files carry no licence text, see the Excalidraw repository |
+| Excalidraw's drawing fonts, copied unmodified into the web UI at `/excalidraw/fonts` so the canvas makes no CDN request (the CJK set, Xiaolai, is not copied): Excalifont, Virgil, Nunito, Lilita One, Assistant, Cascadia Code and Liberation Sans | SIL Open Font License 1.1; copyright lines and the full text in [`web/public/licenses/OFL-1.1-Excalidraw-fonts.txt`](web/public/licenses/OFL-1.1-Excalidraw-fonts.txt) |
+| Comic Shanns (Excalidraw drawing font), copied unmodified | MIT; copyright lines and text in [`web/public/licenses/MIT-ComicShanns.txt`](web/public/licenses/MIT-ComicShanns.txt) |
 
 Build-time only (not shipped): Vite (MIT), TypeScript (Apache-2.0), lightningcss (MPL-2.0).
 

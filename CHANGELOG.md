@@ -3,7 +3,7 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
-## Unreleased
+## 0.3.0-beta.2 (2026-10-07)
 
 - **Picture extension:** back-end schematics and front-end design canvases next to your code.
   Diagrams are Mermaid (`.mmd`) with a side-by-side editor, a live preview and the parser's error
