@@ -103,6 +103,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	}
 	k8s.Register(mux, &k8s.Service{Connect: k8s.Clientset})
 	mux.Handle("/api/projects", projects.Handler())
+	projects.RegisterAssessment(mux, &projects.AssessAPI{Runner: &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath}})
 	mux.Handle("/api/mcp", mcp.HandlerFor(func() mcp.Roots { return mcp.FromConfig(cfg) }))
 	data := DataDir()
 	mux.Handle("/api/prefs", prefs.Handler(&prefs.Store{Path: filepath.Join(data, prefs.FileName), LegacyTheme: cfg.UI.Theme}))
