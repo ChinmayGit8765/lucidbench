@@ -379,7 +379,7 @@ function StepRow({ s }: { s: StepResult }) {
         {s.object_id && (
           <div className="mt-0.5 flex items-center gap-2 font-mono text-xs text-muted-foreground">
             {s.object_id}
-            {s.url && (
+            {s.url && s.kind === "payment_link" && (
               <a href={s.url} target="_blank" rel="noreferrer" className="truncate text-brand-fg hover:underline">
                 {s.url}
               </a>

@@ -247,20 +247,20 @@ func steps(id string, r PlanRequest) []Step {
 	out := []Step{{
 		ID: "s1", Kind: KindProduct, Path: "/v1/products", IdempotencyKey: key("s1"), Needs: []string{},
 		Title:  fmt.Sprintf("Create the product %q", r.ProductName),
-		Detail: "A product named " + fmt.Sprintf("%q", r.ProductName) + " with the description you gave.",
+		Detail: productDetail(r),
 	}}
 	var priceIDs []string
 	for i, p := range r.Prices {
 		sid := fmt.Sprintf("s%d", i+2)
 		priceIDs = append(priceIDs, sid)
-		what := "one-off"
+		what := "A one-off price"
 		if p.Interval != "" {
-			what = "every " + p.Interval
+			what = "A price charged every " + p.Interval
 		}
 		out = append(out, Step{
 			ID: sid, Kind: KindPrice, Path: "/v1/prices", IdempotencyKey: key(sid), Needs: []string{"s1"},
 			Title:  "Create a price of " + FormatAmount(p.Amount, p.Currency),
-			Detail: "A " + what + " price on the product.",
+			Detail: what + " on the product.",
 		})
 	}
 	next := len(r.Prices) + 2
@@ -279,6 +279,13 @@ func steps(id string, r PlanRequest) []Step {
 		})
 	}
 	return out
+}
+
+func productDetail(r PlanRequest) string {
+	if r.Description == "" {
+		return "A product with no description."
+	}
+	return "A product described as " + fmt.Sprintf("%q", r.Description) + "."
 }
 
 func plural(n int) string {
