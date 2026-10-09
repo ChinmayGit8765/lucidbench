@@ -35,6 +35,9 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   sections/<id>.json            Overview and project-page sections (internal/sections)
   sections/runs/*.json          what each "Describe a section" call cost (internal/sections)
   teams/<project>.yaml          a project's AI team when it is not kept in its checkout (internal/team)
+  assistant/<id>.jsonl          an Assistant conversation: meta, messages, Apply/Skip outcomes (internal/assistant)
+  assistant/runs/*.json         what each Assistant turn and braindump parse cost (internal/assistant)
+  bots/<id>.yaml                saved bots (internal/assistant)
 ```
 
 A project's checkout may hold `.lucid/team.yaml`, its AI team (docs/TEAM-SPEC.md); Lucidbench
@@ -348,6 +351,29 @@ func Approve(id string, project string) (*boards.Card, error)
 - Council: `council.Service.Team` gives a project's proposer, critics and their models; a start request that leaves `proposer` or `critics` out takes the team's. Sessions record `models`, `profiles` and `team`; steps record `model`.
 - Work: `work.Service.Team` gives the builder. `StartRequest.provider` may be empty when the project has one; the request's own provider, model, profile and `allowed_commands` win. Builder commands replace the stack part of the defaults, like `work.allowed_commands`. `GET /api/work/defaults` adds `team` (the builder, its budget and recent average cost). Sessions record `model` and `team`.
 - The confidential rule wins: Council and Work refuse a confidential project before any provider runs, whatever its team.
+
+**Assistant** (`internal/assistant`, web module `assistant`, AI section)
+- Every model call is `agentexec.ToolsNone` on the chosen provider or a bot's (claude defaults to `haiku`), with the versioned prompts `internal/assistant/prompts/assistant.md` and `braindump.md`. There is no native resume for a tool-less run, so a turn resends the last 12 messages (16,000 characters at most) with each proposal's outcome.
+- Context sent: project ids, names and kinds (a confidential project as its id only), the work board's columns, the conversation's project, and the current Memory page (4,000 characters). A turn or parse is refused with 403 before any CLI runs when its project is confidential, when the message, an earlier message or a bot's persona names a confidential project, when it links a confidential page, or when the current page is confidential.
+- An answer's actions are a fenced `lucid-actions` block: `{"actions": [{"action", "args"}]}`, at most 10, unknown keys refused at every level. The catalog: `create_card {project, title, body, column}`, `create_project {id, name, kind, local_path?}`, `create_idea {title, body, project?}`, `create_page {path, markdown}`, `start_council {braindump, project?}`, `start_work {project, prompt, provider?, model?}`, `add_needs {project, needs[]}`, `link_builds_into {project, target}`.
+- Validation turns each into a proposal `{action, args, summary, page?, valid, problems, spends?, requests?, snippet?, status: pending|applied|skipped|failed, note?}`. `requests` are the existing routes Apply sends in order (`PUT /api/memory/page`, `POST /api/boards/work/cards`, `POST /api/setup/projects`, `POST /api/council/sessions`, `POST /api/work/sessions`); `snippet` is YAML for `projects.yaml`, which is never rewritten (`add_needs`, `link_builds_into`, and `create_project` without a checkout). Nothing on the daemon applies a proposal.
+- `setup`'s entries take an optional `category` (default `experiment`), used by `create_project`.
+- Bots: `{id, name, provider, profile?, model?, persona, allowed_actions[], avatar?, source?}`; `avatar` is an emoji or `sprite:<slot>`. Import reads only the agent folders listed in docs/CONFIG.md, Assistant, and only their name, description, model and (when chosen) instructions.
+- Braindump items: `{quote, quote_found, restatement, type: idea|feature|bug|chore|question|process, project, new_project?, next: council|card|idea|park, similar?: {kind: card|idea, title, ref}}`.
+- Usage is recorded per call in `assistant/runs/` and counted as source `assistant`.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/assistant/catalog` | GET | the actions, providers, item types, next steps, sprite slots and prompt versions |
+| `/api/assistant/conversations` | GET | summaries, newest first, with `pending` proposals and `cost_usd` |
+| `/api/assistant/conversations/{id}` | GET / DELETE | one conversation / remove it |
+| `/api/assistant/conversations/{id}/outcome` | POST | `{message, proposal, status: applied\|skipped\|failed, note?}` records Apply or Skip |
+| `/api/assistant/turn` | POST | `{conversation?, message, provider?, model?, profile?, bot?, project?, page?}` returns `{conversation}`; a failed model call is on the assistant's message as `error` |
+| `/api/assistant/check` | POST | `{action, bot?}` validates one action against the current state; changes nothing, so no confirm header |
+| `/api/assistant/braindump` | POST | `{text, provider?, model?, profile?}` returns `{items, provider, model, prompt_version, usage, notes}`, a preview |
+| `/api/assistant/bots` | GET | saved bots |
+| `/api/assistant/bots/{id}` | PUT / DELETE | save / remove a bot |
+| `/api/assistant/bots/import` | GET / POST | the agents found in the CLIs' folders with a note per provider / `{key, persona}` saves one as a bot |
 
 **First-run setup** (`internal/setup`, the `/setup` view; not a module)
 - Opens by itself on `/` when the data dir has neither `ui.json` nor `projects.yaml`, and from Settings › General › Run setup again. Six steps, each skippable: accounts, Memory vault, projects, theme, power modes, a sample braindump. Finishing or skipping writes `ui.json`.
