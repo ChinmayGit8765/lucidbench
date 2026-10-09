@@ -9,6 +9,7 @@ import { ideas } from "@/modules/ideas"
 import { kubernetes } from "@/modules/kubernetes"
 import { linear } from "@/modules/linear"
 import { mcp } from "@/modules/mcp"
+import { nextup } from "@/modules/nextup"
 import { memory } from "@/modules/memory"
 import { overview } from "@/modules/overview"
 import { payments } from "@/modules/payments"
@@ -32,6 +33,7 @@ import { work } from "@/modules/work"
 export const MODULES: ModuleDef[] = [
   // Core: always present, reorderable.
   overview,
+  nextup,
   work,
   ideas,
   projects,
