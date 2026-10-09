@@ -46,6 +46,21 @@ type Services struct {
 	Usage    func() *usage.Summary
 	Projects func() (*projects.List, error)
 	Vault    memory.Opener
+	// NextUp is the top of Next up, read only; confidential items are
+	// redacted again here.
+	NextUp func(ctx context.Context) []NextUpItem
+}
+
+// NextUpItem is one Next up pick on the phone: what and why, no action.
+type NextUpItem struct {
+	Title        string `json:"title"`
+	Kind         string `json:"kind"`
+	Project      string `json:"project,omitempty"`
+	Score        int    `json:"score"`
+	Why          string `json:"why,omitempty"`
+	Confidential bool   `json:"confidential"`
+	// ProjectID is checked against projects.yaml; it is never sent.
+	ProjectID string `json:"-"`
 }
 
 // privacy answers "is this confidential?" for one request. It fails closed:
@@ -249,6 +264,7 @@ type Overview struct {
 	Awaiting  []CouncilItem `json:"awaiting"`
 	CI        *CIView       `json:"ci"`
 	Usage     *UsageView    `json:"usage"`
+	NextUp    []NextUpItem  `json:"next_up"`
 	FollowUp  bool          `json:"follow_up"` // a waiting session takes a follow-up prompt (always true now)
 	Generated time.Time     `json:"generated_at"`
 }
@@ -257,7 +273,20 @@ var severityRank = map[string]int{"error": 0, "warning": 1, "info": 2}
 
 func (s Services) overview(ctx context.Context) Overview {
 	pv := s.privacy()
-	out := Overview{Attention: []Attention{}, Running: []WorkView{}, Awaiting: []CouncilItem{}, FollowUp: true, Generated: time.Now().UTC()}
+	out := Overview{Attention: []Attention{}, Running: []WorkView{}, Awaiting: []CouncilItem{}, NextUp: []NextUpItem{}, FollowUp: true, Generated: time.Now().UTC()}
+	if s.NextUp != nil {
+		nctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		for _, it := range s.NextUp(nctx) {
+			if len(out.NextUp) == 3 {
+				break
+			}
+			if it.Confidential || pv.project(it.ProjectID) {
+				it.Title, it.Project, it.Why, it.Confidential = Redacted, "", "", true
+			}
+			out.NextUp = append(out.NextUp, it)
+		}
+		cancel()
+	}
 	if s.Work != nil {
 		for _, se := range s.Work.List() {
 			conf := pv.work(se)

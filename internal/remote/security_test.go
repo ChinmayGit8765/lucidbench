@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +44,35 @@ func TestCIRepoOfConfidentialProjectRedacted(t *testing.T) {
 	body := r.do("GET", "/r/api/overview", tok, false, "").Body.String()
 	if strings.Contains(strings.ToLower(body), "hush") || !strings.Contains(body, "you/open") {
 		t.Fatalf("overview: %s", body)
+	}
+}
+
+// The phone sees the top three Next up picks, read only, with every
+// confidential one redacted, even when the item itself was not marked.
+func TestNextUpOnThePhoneIsRedacted(t *testing.T) {
+	r := newRig(t)
+	list := &projects.List{Projects: []projects.Project{{ID: "open", Visibility: "private"}, {ID: "hush", Visibility: "confidential"}}}
+	r.surface.Services.Projects = func() (*projects.List, error) { return list, nil }
+	r.surface.Services.NextUp = func(context.Context) []NextUpItem {
+		return []NextUpItem{
+			{Title: "Hush roadmap", Kind: "card", Project: "Hush", ProjectID: "hush", Score: 40, Why: "due today"},
+			{Title: "Secret plan", Kind: "card", Score: 30, Confidential: true},
+			{Title: "Write the docs", Kind: "card", Project: "Open", ProjectID: "open", Score: 20, Why: "due in 2 days"},
+			{Title: "Fourth", Kind: "card", Score: 1},
+		}
+	}
+	tok := r.pair()
+	body := r.do("GET", "/r/api/overview", tok, false, "").Body.String()
+	var ov Overview
+	if err := json.Unmarshal([]byte(body), &ov); err != nil {
+		t.Fatal(err)
+	}
+	low := strings.ToLower(body)
+	if strings.Contains(low, "hush") || strings.Contains(low, "secret") || strings.Contains(body, "project_id") || strings.Contains(body, "Fourth") {
+		t.Fatalf("overview: %s", body)
+	}
+	if len(ov.NextUp) != 3 || ov.NextUp[0].Title != Redacted || ov.NextUp[1].Title != Redacted || ov.NextUp[2].Title != "Write the docs" || ov.NextUp[2].Why == "" {
+		t.Errorf("next up %+v", ov.NextUp)
 	}
 }
 

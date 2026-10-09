@@ -82,6 +82,8 @@ func standard(r req, w http.ResponseWriter) {
 	switch {
 	case r.Path == "/members/me/boards":
 		reply(w, []any{map[string]any{"id": boardID, "name": "Roadmap", "url": "https://trello.com/b/x/roadmap", "dateLastActivity": "2026-10-01T00:00:00Z"}})
+	case r.Path == "/members/me/cards":
+		reply(w, []any{cardJSON(cardID, listA, "first")})
 	case r.Path == "/boards/"+boardID:
 		reply(w, map[string]any{"id": boardID, "name": "Roadmap", "url": "https://trello.com/b/x/roadmap"})
 	case r.Path == "/boards/"+boardID+"/lists":
@@ -140,6 +142,22 @@ func TestReadBoardListsCards(t *testing.T) {
 	// Cached for a minute.
 	n := f.count()
 	if _, err := s.Board(t.Context(), boardID); err != nil || f.count() != n {
+		t.Errorf("second read hit the API: %d -> %d (%v)", n, f.count(), err)
+	}
+}
+
+func TestMyCardsListsTheAssignedCards(t *testing.T) {
+	f := newFake(t, func(r req, w http.ResponseWriter) { standard(r, w) })
+	s, _ := service(t, f)
+	cs, err := s.MyCards(t.Context())
+	if err != nil || len(cs) != 1 || cs[0].ID != cardID || cs[0].Name != "first" || cs[0].URL == "" {
+		t.Fatalf("cards = %+v, %v", cs, err)
+	}
+	if r := f.reqs[0]; r.Method != http.MethodGet || r.Path != "/members/me/cards" || !strings.Contains(r.Query, "filter=open") {
+		t.Errorf("request %s %s?%s", r.Method, r.Path, r.Query)
+	}
+	n := f.count()
+	if _, err := s.MyCards(t.Context()); err != nil || f.count() != n {
 		t.Errorf("second read hit the API: %d -> %d (%v)", n, f.count(), err)
 	}
 }

@@ -46,10 +46,19 @@ interface CouncilItem {
   created: string
   confidential: boolean
 }
+interface NextUpItem {
+  title: string
+  kind: string
+  project?: string
+  score: number
+  why?: string
+  confidential: boolean
+}
 interface Overview {
   attention: Attention[]
   running: WorkView[]
   awaiting: CouncilItem[]
+  next_up?: NextUpItem[]
   ci: { configured: boolean; runs_24h: number; in_progress: number; pass_rate: number | null; failing_repos: string[] } | null
   usage: { tokens: number; cost_usd: number; windows: { provider: string; label: string; used_percent: number }[]; providers: { id: string; label: string; tokens: number }[] } | null
   follow_up: boolean
@@ -312,6 +321,26 @@ function renderHome(ov: Overview, sessions: WorkView[]): Node[] {
       ov.attention.length ? h("div", { class: "list" }, ...ov.attention.map(attentionRow)) : h("p", { class: "muted" }, "Nothing needs you right now."),
     ),
   )
+  if (ov.next_up?.length)
+    out.push(
+      h(
+        "section",
+        { class: "card", "aria-label": "Next up" },
+        h("h2", {}, "Next up"),
+        h(
+          "div",
+          { class: "list" },
+          ...ov.next_up.map((n, i) =>
+            h(
+              "div",
+              { class: "item" },
+              h("div", { class: "grow" }, h("div", { class: n.confidential ? "title redacted" : "title" }, `${i + 1}. ${n.title}`), h("div", { class: "muted small" }, [n.project, n.why].filter(Boolean).join(" · ") || n.kind)),
+              h("span", { class: "muted small" }, String(n.score)),
+            ),
+          ),
+        ),
+      ),
+    )
   if (ov.awaiting.length)
     out.push(
       h(

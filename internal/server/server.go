@@ -30,6 +30,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
 	"github.com/ChinmayGit8765/lucidbench/internal/mcp"
 	"github.com/ChinmayGit8765/lucidbench/internal/memory"
+	"github.com/ChinmayGit8765/lucidbench/internal/nextup"
 	"github.com/ChinmayGit8765/lucidbench/internal/payments"
 	"github.com/ChinmayGit8765/lucidbench/internal/picture"
 	"github.com/ChinmayGit8765/lucidbench/internal/power"
@@ -188,8 +189,10 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		},
 	})
 	boards.Register(mux, vault)
-	linear.Register(mux, linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") }))
-	trello.Register(mux, trello.New(cfg.Integrations.Trello, vault))
+	linearSvc := linear.New(cfg.Integrations.Linear, vault, func() bool { return mcpHas(cfg, "linear") })
+	linear.Register(mux, linearSvc)
+	trelloSvc := trello.New(cfg.Integrations.Trello, vault)
+	trello.Register(mux, trelloSvc)
 	payments.Register(mux, &payments.Service{Stripe: stripe.New(cfg.Integrations.Stripe), Dir: filepath.Join(data, "payments"), Projects: projects.Load})
 	councilSvc := council.New(filepath.Join(data, "council"), vault, &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath})
 	council.Register(mux, councilSvc)
@@ -229,6 +232,10 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		Store:   sectionStore,
 		RunsDir: filepath.Join(data, "sections", "runs"),
 	})
+	// Next up: what to work on next, from everything above.
+	nextupSvc := newNextUp(nextupDeps{cfg: cfg, data: data, vault: vault, council: councilSvc, work: workSvc, ci: ciSvc,
+		linear: linearSvc, trello: trelloSvc, usage: d.Usage, teams: teams})
+	nextup.Register(mux, nextupSvc)
 	if d.Remote != nil {
 		d.Remote.Assets = webui.RemoteAssets()
 		d.Remote.SetServices(remote.Services{
@@ -238,6 +245,13 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 			Usage:    func() *usage.Summary { return d.Usage.Summary(1) },
 			Projects: projects.Load,
 			Vault:    vault,
+			NextUp: func(ctx context.Context) []remote.NextUpItem {
+				out := []remote.NextUpItem{}
+				for _, t := range nextupSvc.TopN(ctx, 3) {
+					out = append(out, remote.NextUpItem{Title: t.Title, Kind: t.Kind, Project: t.ProjectName, ProjectID: t.Project, Score: t.Score, Why: t.Why, Confidential: t.Confidential})
+				}
+				return out
+			},
 		})
 		remote.Register(mux, d.Remote)
 	}
