@@ -287,7 +287,7 @@ export default function NextUp({ subpath }: ModulePageProps) {
     const s = v?.settings
     setConfirm({
       title: `Ask an agent to rank ${plural(n, "item")}?`,
-      description: `${s?.provider ? `${s.provider}${s.model ? ` (${s.model})` : ""}` : "Your team's scout, else the first installed CLI on its cheap model (claude uses haiku),"} reads a short list of ids, titles, scores and reasons, with no tools, and puts them in order. It runs on your own account; a ranking usually costs well under a cent.`,
+      description: `${s?.provider ? `${s.provider}${s.model ? ` (${s.model})` : ""}` : "Your team's scout, else the first installed CLI on its cheap model (claude uses haiku),"} reads a short list of ids, titles, scores and reasons, with no tools, and puts them in order. It runs on your own account${v?.ranked ? `; the last ranking cost ${formatCost(v.ranked.cost_usd)}` : ": expect a few cents and a minute or two"}.`,
       confirmLabel: "Rank",
       body:
         conf > 0 ? (

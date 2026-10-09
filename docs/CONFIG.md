@@ -647,7 +647,8 @@ real ids never leave), with its score, kind, title, project name, due date, shor
 the score's reasons (an unblocking reason only says "unblocks other projects") and its action. It
 answers with an ordered list of `{id, reason, suggested_action, suggested_prompt}`; ids it was not
 given and repeats are dropped, a reason is cut at 300 characters, a prompt at 2000, an unknown
-action name is ignored, and a suggested prompt is kept only for work that starts a session. The
+action name is ignored, an alias the model wrote in a reason becomes that item's title ("a private
+item" for a confidential one), and a suggested prompt is kept only for work that starts a session. The
 order is kept in `state.json` until the next ranking; items it did not rank follow by score. Each
 call's cost is recorded in `<data dir>/nextup/runs/` and counts on the Usage page as source
 `nextup`.

@@ -46,7 +46,7 @@ const (
 	MaxActionName    = 32
 	MaxPrompt        = 2000
 	MaxContext       = 160
-	RankTimeout      = 2 * time.Minute
+	RankTimeout      = 3 * time.Minute
 	privateRankNotes = "Private item, ranked by its score."
 )
 
@@ -267,7 +267,7 @@ func ParseRanking(text string, cs []Candidate, alias map[string]int) ([]RankedIt
 		}
 		seen[i] = true
 		c := cs[i]
-		it := RankedItem{ID: c.ID, Reason: cut(r.Reason, MaxReason)}
+		it := RankedItem{ID: c.ID, Reason: cut(unalias(r.Reason, cs, alias), MaxReason)}
 		if a := strings.TrimSpace(r.SuggestedAction); len(a) <= MaxActionName && contains(ActionKinds, a) {
 			it.SuggestedAction = a
 		}
@@ -285,6 +285,23 @@ func ParseRanking(text string, cs []Candidate, alias map[string]int) ([]RankedIt
 		return nil, fmt.Errorf("%w: it named none of the candidates", ErrBadOutput)
 	}
 	return out, nil
+}
+
+var aliasRE = regexp.MustCompile(`\bc\d{1,3}\b`)
+
+// unalias replaces the aliases a model wrote in a reason ("unblocks c3")
+// with what the user knows them by: a short title, or "a private item".
+func unalias(text string, cs []Candidate, alias map[string]int) string {
+	return aliasRE.ReplaceAllStringFunc(text, func(a string) string {
+		i, ok := alias[a]
+		if !ok || i >= len(cs) {
+			return a
+		}
+		if cs[i].Confidential {
+			return "a private item"
+		}
+		return "“" + excerpt(cs[i].Title, 48) + "”"
+	})
 }
 
 // cut is one line of at most n runes.

@@ -591,7 +591,7 @@ func TestAgentInputRedactsConfidentialItems(t *testing.T) {
 		}
 	}
 	// The fake reversed the list, so the lowest scored item is now first.
-	if r.Provider != "claude" || r.Model != "haiku" || r.PromptVersion != "v1" || r.Usage.CostUSD != 0.0012 || v.Ranked == nil || v.Ranked.Ranked != len(v.Items) {
+	if r.Provider != "claude" || r.Model != "haiku" || r.PromptVersion != "v2" || r.Usage.CostUSD != 0.0012 || v.Ranked == nil || v.Ranked.Ranked != len(v.Items) {
 		t.Errorf("ranking %+v / %+v", r, v.Ranked)
 	}
 	plain := service(t, fixture(t)).List(context.Background()).Items
@@ -646,6 +646,11 @@ func TestParseRankingValidates(t *testing.T) {
 	}
 	if n := len([]rune(got[2].SuggestedPrompt)); n != MaxPrompt || got[2].SuggestedAction != ActStartWork {
 		t.Errorf("prompt is %d runes, action %q", n, got[2].SuggestedAction)
+	}
+	// Aliases in a reason become titles; a private one stays private.
+	got, err = ParseRanking(`{"ranking": [{"id": "c1", "reason": "Do it before c3 and c2, unlike c12."}]}`, cs, alias)
+	if err != nil || got[0].Reason != "Do it before “C” and a private item, unlike c12." {
+		t.Errorf("unaliased %q (%v)", got[0].Reason, err)
 	}
 	// A bare list is fine; nothing known is an error.
 	if got, err := ParseRanking(`[{"id":"c1"}]`, cs, alias); err != nil || len(got) != 1 {
