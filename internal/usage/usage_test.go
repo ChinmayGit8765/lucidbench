@@ -359,6 +359,20 @@ func TestOwnRuns(t *testing.T) {
 	}
 }
 
+func TestOwnRunsCountTheAssistant(t *testing.T) {
+	e := newEnv(t)
+	write(t, filepath.Join(e.data, "assistant", "runs", "a1.json"),
+		`{"kind":"chat","conversation":"c","created":"2026-03-03T03:00:00Z","usage":{"provider":"claude","model":"haiku","input_tokens":5,"output_tokens":2,"cost_usd":0.25,"duration_ms":1}}`)
+	write(t, filepath.Join(e.data, "assistant", "c.jsonl"), `{"type":"meta"}`)
+	o := e.svc.Summary(7).Lucidbench
+	if o.Runs != 1 || o.Totals.CostUSD != 0.25 {
+		t.Errorf("runs %d cost %v", o.Runs, o.Totals.CostUSD)
+	}
+	if len(o.Sources) != 1 || o.Sources[0].Name != "assistant" || o.Sources[0].Total != 7 {
+		t.Errorf("sources %+v", o.Sources)
+	}
+}
+
 // TestOwnRunsFromRealRecords writes records the way Council and Work write
 // them (their own structs, marshalled), so a renamed field in either package
 // fails here instead of leaving the Lucidbench row silently empty.

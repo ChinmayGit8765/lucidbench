@@ -346,6 +346,8 @@ type Entry struct {
 	Name      string `json:"name"`
 	LocalPath string `json:"local_path"`
 	Type      string `json:"type,omitempty"`
+	// Category is the project's kind; empty means DefaultCategory.
+	Category string `json:"category,omitempty"`
 }
 
 // AddResult is the body of POST /api/setup/projects.
@@ -375,7 +377,11 @@ func Snippet(entries []Entry) string {
 	for _, e := range entries {
 		fmt.Fprintf(&b, "  - id: %s\n", e.ID)
 		fmt.Fprintf(&b, "    name: %s\n", quote(e.Name))
-		fmt.Fprintf(&b, "    category: %s\n", DefaultCategory)
+		category := e.Category
+		if category == "" {
+			category = DefaultCategory
+		}
+		fmt.Fprintf(&b, "    category: %s\n", category)
 		if e.Type != "" {
 			fmt.Fprintf(&b, "    type: %s\n", e.Type)
 		}
@@ -417,6 +423,8 @@ func (s *Service) check(entries []Entry) error {
 			return bad("%s: local_path must be an absolute path", e.ID)
 		case e.Type != "" && !contains(projects.Types, e.Type):
 			return bad("%s: unknown type %q", e.ID, e.Type)
+		case e.Category != "" && !contains(projects.Categories, e.Category):
+			return bad("%s: unknown category %q", e.ID, e.Category)
 		}
 		if !isRepo(e.LocalPath) {
 			return bad("%s: %s is not a git repository", e.ID, e.LocalPath)

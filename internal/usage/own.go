@@ -12,7 +12,7 @@ import (
 // ownRun is one Lucidbench-run agent invocation, from a council, work or
 // Prompt Studio record.
 type ownRun struct {
-	Source string // council | work | studio | sections
+	Source string // council | work | studio | sections | assistant
 	At     time.Time
 	agentexec.Usage
 }
@@ -43,6 +43,11 @@ func readOwn(dataDir string) []ownRun {
 	sections, _ := filepath.Glob(filepath.Join(dataDir, "sections", "runs", "*.json"))
 	for _, p := range sections {
 		files[p] = "sections"
+	}
+	// Assistant turns and braindump parses, one record each.
+	assistant, _ := filepath.Glob(filepath.Join(dataDir, "assistant", "runs", "*.json"))
+	for _, p := range assistant {
+		files[p] = "assistant"
 	}
 	for p, src := range files {
 		b, err := os.ReadFile(p)

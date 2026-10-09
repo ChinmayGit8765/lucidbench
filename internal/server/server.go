@@ -14,6 +14,7 @@ import (
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
+	"github.com/ChinmayGit8765/lucidbench/internal/assistant"
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/browser"
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
@@ -201,7 +202,8 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	workSvc.Browser = browserSvc.Attach
 	browserSvc.Sink = workSvc.AddEvent
 	work.Register(mux, workSvc)
-	ideas.Register(mux, &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault})
+	ideasSvc := &ideas.Service{Council: councilSvc, Work: workSvc, Vault: vault}
+	ideas.Register(mux, ideasSvc)
 	home, _ := os.UserHomeDir()
 	setup.Register(mux, &setup.Service{DataDir: data, ProjectsPath: projects.Path, Home: home})
 	resolver := &prompts.Resolver{Projects: projects.Load, Vault: vault, Council: councilSvc, Home: home}
@@ -228,6 +230,16 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		Runner:  &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath, ProfileDir: func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }},
 		Store:   sectionStore,
 		RunsDir: filepath.Join(data, "sections", "runs"),
+	})
+	// The assistant: chat, bots and braindump parsing, every call with no tools.
+	assistant.Register(mux, &assistant.Service{
+		Dir:      filepath.Join(data, "assistant"),
+		BotsDir:  filepath.Join(data, "bots"),
+		Runner:   &agentexec.Runner{InContainer: cluster.InContainer, LookPath: exec.LookPath, ProfileDir: func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }},
+		Projects: projects.Load,
+		Vault:    vault,
+		Existing: assistant.ExistingFrom(vault, ideasSvc.List),
+		Roots:    func() accounts.Roots { return accounts.FromConfig(cfg) },
 	})
 	if d.Remote != nil {
 		d.Remote.Assets = webui.RemoteAssets()
