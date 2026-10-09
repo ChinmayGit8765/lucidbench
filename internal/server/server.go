@@ -245,6 +245,13 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 			Usage:    func() *usage.Summary { return d.Usage.Summary(1) },
 			Projects: projects.Load,
 			Vault:    vault,
+			NextUp: func(ctx context.Context) []remote.NextUpItem {
+				out := []remote.NextUpItem{}
+				for _, t := range nextupSvc.TopN(ctx, 3) {
+					out = append(out, remote.NextUpItem{Title: t.Title, Kind: t.Kind, Project: t.ProjectName, ProjectID: t.Project, Score: t.Score, Why: t.Why, Confidential: t.Confidential})
+				}
+				return out
+			},
 		})
 		remote.Register(mux, d.Remote)
 	}

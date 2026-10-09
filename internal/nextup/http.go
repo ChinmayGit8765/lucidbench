@@ -165,12 +165,13 @@ func Register(mux *http.ServeMux, s *Service) {
 // Top is the phone remote's read-only view: the first n items, with
 // confidential ones reduced to a placeholder title and no project.
 type Top struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Kind        string `json:"kind"`
-	ProjectName string `json:"project_name,omitempty"`
-	Score       int    `json:"score"`
-	Why         string `json:"why,omitempty"`
+	Title        string `json:"title"`
+	Kind         string `json:"kind"`
+	Project      string `json:"project,omitempty"`
+	ProjectName  string `json:"project_name,omitempty"`
+	Score        int    `json:"score"`
+	Why          string `json:"why,omitempty"`
+	Confidential bool   `json:"confidential"`
 }
 
 // PrivateTitle stands in for a confidential item's title off the desktop.
@@ -185,7 +186,7 @@ func (s *Service) TopN(ctx context.Context, n int) []Top {
 		if len(out) == n {
 			break
 		}
-		t := Top{Kind: c.Kind, Score: c.Score, Title: c.Title, ProjectName: c.ProjectName}
+		t := Top{Kind: c.Kind, Score: c.Score, Title: c.Title, Project: c.Project, ProjectName: c.ProjectName, Confidential: c.Confidential}
 		if len(c.Parts) > 0 {
 			t.Why = c.Parts[0].Why
 			// An unblocking reason names other projects, which may be confidential.
@@ -194,7 +195,7 @@ func (s *Service) TopN(ctx context.Context, n int) []Top {
 			}
 		}
 		if c.Confidential {
-			t.Title, t.ProjectName, t.Why = PrivateTitle, "", ""
+			t.Title, t.Project, t.ProjectName, t.Why = PrivateTitle, "", "", ""
 		}
 		out = append(out, t)
 	}
