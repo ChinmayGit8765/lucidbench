@@ -1,4 +1,5 @@
 import { accounts } from "@/modules/accounts"
+import { assistant } from "@/modules/assistant"
 import { boards } from "@/modules/boards"
 import { browser } from "@/modules/browser"
 import { cloud } from "@/modules/cloud"
@@ -39,6 +40,7 @@ export const MODULES: ModuleDef[] = [
   boards,
   accounts,
   mcp,
+  assistant,
   council,
   studio,
   usage,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowLeft, Check, Moon, Palette, PenLine, Plus, ScrollText, Smartphone, SquareTerminal, type LucideIcon } from "lucide-react"
+import { ArrowLeft, Check, MessageCircle, Moon, Palette, PenLine, Plus, ScrollText, Smartphone, SquareTerminal, type LucideIcon } from "lucide-react"
 
 import { spriteLabel, StateSprite, useThemeSprite, type SpriteState } from "@/components/StateSprite"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
@@ -79,6 +79,7 @@ export function Launcher({
   }, [shown, view])
 
   const actions: Action[] = [
+    { id: "ask", label: "Ask Lucid…", icon: MessageCircle, run: () => open("assistant") },
     { id: "braindump", label: "New braindump", icon: PenLine, run: () => newBraindump(open) },
     { id: "work", label: "Start work", icon: SquareTerminal, run: () => open("work", ["new"]) },
     {

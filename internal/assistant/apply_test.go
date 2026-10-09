@@ -188,8 +188,8 @@ func TestApplyEachKindThroughTheRealHandlers(t *testing.T) {
 		t.Errorf("card page %v %+v", err, pg)
 	}
 	// A second card with the same title gets a page of its own.
-	if p := check(act(ActCreateCard, map[string]any{"title": "Write the README", "body": "again"})); p.Args["page"] != "Inbox/write-the-readme-2.md" {
-		t.Errorf("second page %v", p.Args["page"])
+	if p := check(act(ActCreateCard, map[string]any{"title": "Write the README", "body": "again"})); p.Page != "Inbox/write-the-readme-2.md" {
+		t.Errorf("second page %v", p.Page)
 	}
 
 	// create_idea: an Inbox page and an Inbox card labelled idea.

@@ -94,6 +94,8 @@ type Proposal struct {
 	Args   map[string]any `json:"args"`
 	// Summary is one line for the card's title.
 	Summary string `json:"summary"`
+	// Page is the Memory page a card or idea will link, when it has one.
+	Page string `json:"page,omitempty"`
 	Valid   bool   `json:"valid"`
 	// Problems say why an action cannot be applied.
 	Problems []string `json:"problems"`
@@ -380,7 +382,7 @@ func Validate(a Action, w *World, allowed []string) Proposal {
 			}
 			p.Requests = append(p.Requests, pageRequest(pg, x.Title, front, x.Body+"\n"))
 			card["memory"] = pg
-			p.Args["page"] = pg
+			p.Page = pg
 		}
 		p.Requests = append(p.Requests, cardRequest(card))
 	case ActCreateIdea:
@@ -409,7 +411,7 @@ func Validate(a Action, w *World, allowed []string) Proposal {
 		if body == "" {
 			body = x.Title
 		}
-		p.Args["page"] = pg
+		p.Page = pg
 		p.Requests = []Request{pageRequest(pg, x.Title, front, body+"\n"), cardRequest(card)}
 	case ActCreatePage:
 		var x pageArgs

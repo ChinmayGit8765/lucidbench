@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react"
 import { ChevronDown, GitPullRequest, Lightbulb, PenLine, Search, SquareTerminal, Vote, WandSparkles, X } from "lucide-react"
 
+import { BraindumpParse } from "@/components/assistant/BraindumpParse"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Sheet } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
@@ -56,9 +58,21 @@ function IdeaList() {
   )
   const spent = all.reduce((n, i) => n + i.cost_usd, 0)
   const filtered = !!(stage || project || q.trim())
+  const [parsing, setParsing] = useState(false)
 
   return (
     <div className="space-y-6">
+      <Sheet
+        open={parsing}
+        onClose={() => {
+          setParsing(false)
+          poll.refresh()
+        }}
+        title="Parse a braindump"
+        description="Split a messy dump into items, then keep each one as a card, an idea or a council braindump."
+      >
+        <BraindumpParse className="p-5" />
+      </Sheet>
       <PageHeader
         icon={<Lightbulb />}
         title="Ideas"
@@ -66,6 +80,9 @@ function IdeaList() {
         actions={
           <>
             <RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />
+            <Button size="sm" variant="secondary" onClick={() => setParsing(true)} data-testid="ideas-parse-braindump">
+              <WandSparkles /> Parse a braindump
+            </Button>
             <Button size="sm" onClick={() => newBraindump(open)}>
               <PenLine /> New braindump
             </Button>

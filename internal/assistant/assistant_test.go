@@ -226,6 +226,33 @@ func TestValidateUnknownProjects(t *testing.T) {
 	}
 }
 
+// The UI sends a proposal's args back to check before Apply, so a valid
+// proposal's args must check again as they are.
+func TestProposalArgsCheckAgain(t *testing.T) {
+	e := newEnv(t, nil, projectsYAML+"  - id: tool\n    name: Tooling\n    category: tool\n    status: active\n    visibility: private\n    local_path: "+quote(t.TempDir())+"\n")
+	w := world(t, e)
+	for _, a := range []Action{
+		act(ActCreateCard, map[string]any{"project": "demo", "title": "x", "body": "y", "column": "ready"}),
+		act(ActCreateIdea, map[string]any{"title": "x", "body": "y"}),
+		act(ActCreatePage, map[string]any{"path": "Notes/x", "markdown": "y"}),
+		act(ActStartCouncil, map[string]any{"braindump": "x", "project": "demo"}),
+		act(ActStartWork, map[string]any{"project": "tool", "prompt": "x"}),
+		act(ActCreateProject, map[string]any{"id": "new-one", "name": "New", "kind": "tool"}),
+		act(ActAddNeeds, map[string]any{"project": "demo", "needs": []any{"x", map[string]any{"what": "y", "from": "tool"}}}),
+		act(ActLinkBuildsInto, map[string]any{"project": "tool", "target": "demo"}),
+	} {
+		p := Validate(a, w, nil)
+		if !p.Valid {
+			t.Errorf("%s: %v", a.Action, p.Problems)
+			continue
+		}
+		again := Validate(act(p.Action, p.Args), w, nil)
+		if !again.Valid {
+			t.Errorf("%s args %v do not check again: %v", a.Action, p.Args, again.Problems)
+		}
+	}
+}
+
 func TestPagePathSafety(t *testing.T) {
 	for _, bad := range []string{"", "../x", "Notes/../../x", "/etc/passwd", `C:\Windows\x`, "C:/x", "a//b", "./a", ".trash/x", "Notes/.hidden", "Boards/work", "boards/work.md", "a/b\\c", strings.Repeat("a", MaxPagePath+1)} {
 		if p, err := PagePath(bad); err == nil {
@@ -321,7 +348,7 @@ func TestTurnProposesAndRedactsConfidential(t *testing.T) {
 	if _, err := e.vault.Read("Boards/work.md"); err == nil {
 		t.Error("the turn created the work board")
 	}
-	if _, err := e.vault.Read(ps[0].Args["page"].(string)); err == nil {
+	if _, err := e.vault.Read(ps[0].Page); err == nil {
 		t.Error("the turn wrote the card's page")
 	}
 	if files, _ := filepath.Glob(filepath.Join(e.data, "assistant", "runs", "*.json")); len(files) != 1 {
