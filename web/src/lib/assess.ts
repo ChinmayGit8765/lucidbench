@@ -12,6 +12,8 @@ export interface Question {
   text: string
   type: QuestionType
   options?: string[]
+  /** A choice or bool that may stay unanswered (added after the kind shipped). */
+  optional?: boolean
 }
 
 export interface Kind {

@@ -1,6 +1,6 @@
 id: video-media
-name: Video or media
-blurb: A system that makes, edits, streams or publishes video, audio or images.
+name: Video system
+blurb: A pipeline, streaming service or editing tool that makes, edits, streams or publishes video, audio or images.
 order: 8
 types: [video-system]
 questions:
@@ -22,6 +22,20 @@ questions:
   - id: output
     text: What must the output be?
     type: text
+  - id: latency
+    text: How soon after the input arrives must the output be ready?
+    type: choice
+    options: [whenever-batch, within-minutes, live-under-seconds]
+    optional: true
+  - id: engine
+    text: What does the heavy lifting?
+    type: choice
+    options: [ffmpeg-or-gstreamer, a-media-library, hardware-or-gpu-encoders, an-editor-plugin]
+    optional: true
+  - id: reference-clips
+    text: Is there a set of awkward reference clips to test against (odd frame rates, variable frame rate, no audio, a corrupt file)?
+    type: bool
+    optional: true
 rules:
   - criteria:
       - "A sample input produces the expected output — proof: the output file and a frame, listening or play-through check"
@@ -49,6 +63,27 @@ rules:
     risk:
       level: medium
       reason: Large jobs are slow and costly to repeat
+  - when: {latency: live-under-seconds}
+    criteria:
+      - "Delay from input to viewer stays under the target through a 30-minute run, and a dropped input recovers without a restart — proof: timestamps or a latency log across the run"
+    risk:
+      level: high
+      reason: Live media fails in public and in real time, and cannot be redone
+  - when: {engine: hardware-or-gpu-encoders}
+    criteria:
+      - "When the hardware encoder is missing or busy the job falls back to software or fails with a clear message — proof: a run with hardware encoding turned off"
+    risk:
+      level: medium
+      reason: Hardware encoders differ by driver, card and machine
+  - when: {engine: an-editor-plugin}
+    criteria:
+      - "The plugin loads and renders in each supported host version — proof: a checklist with one line per host version"
+  - when: {reference-clips: "false"}
+    criteria:
+      - "A reference set of awkward clips is fetched by a script and every clip runs through the system — proof: the clip list and a clean run over it"
+    risk:
+      level: medium
+      reason: Media bugs hide in the files nobody tested
   - when: {pipeline: "true"}
     criteria:
       - "A failed job is reported, not silently skipped — proof: feed it a corrupt file and read the report"

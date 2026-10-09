@@ -1,6 +1,6 @@
 id: web-app
-name: Web app (product)
-blurb: A product people use in the browser, with accounts or data behind it.
+name: Web app or SaaS (product)
+blurb: A product people use in the browser, with accounts, data or subscriptions behind it.
 order: 2
 types: [web-app]
 questions:
@@ -28,6 +28,16 @@ questions:
   - id: stack
     text: What is it built with?
     type: text
+  - id: tenancy
+    text: Do different customers' data live in the same database?
+    type: choice
+    options: [one-user-or-team, many-customers-shared, many-customers-separate]
+    optional: true
+  - id: monitoring
+    text: How would you find out it broke in production?
+    type: choice
+    options: [a-user-tells-me, logs-i-check, alerts-and-error-tracking]
+    optional: true
 rules:
   - commands: [npm test]
     criteria:
@@ -62,6 +72,18 @@ rules:
     risk:
       level: high
       reason: Paying customers notice every outage
+  - when: {tenancy: many-customers-shared}
+    criteria:
+      - "One customer can never read or change another customer's records — proof: a test that signs in as customer A and requests customer B's records by id"
+    risk:
+      level: high
+      reason: A missing tenant check leaks one customer's data to another
+  - when: {monitoring: [a-user-tells-me, logs-i-check]}
+    criteria:
+      - "An error in production reaches you without anyone reporting it — proof: a deliberate test error arriving in the error tracker or alert channel"
+    risk:
+      level: medium
+      reason: Without alerts, outages are found by users first
   - when: {deploy: by-hand}
     risk:
       level: medium

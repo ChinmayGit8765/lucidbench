@@ -36,12 +36,22 @@ var Levels = []string{"low", "medium", "high"}
 // MaxText is the longest accepted text answer.
 const MaxText = 500
 
+// MinQuestions and MaxQuestions bound the questions of one kind.
+const (
+	MinQuestions = 5
+	MaxQuestions = 10
+)
+
 // Question is one step of the flow. A bool answer is "true" or "false".
 type Question struct {
 	ID      string   `json:"id" yaml:"id"`
 	Text    string   `json:"text" yaml:"text"`
 	Type    string   `json:"type" yaml:"type"`
 	Options []string `json:"options,omitempty" yaml:"options"`
+	// Optional lets a choice or bool question go unanswered. Questions added
+	// to a kind after it shipped are optional, so an assessment saved before
+	// them stays valid.
+	Optional bool `json:"optional,omitempty" yaml:"optional"`
 }
 
 // StringList reads either one string or a list of strings from YAML.
@@ -182,8 +192,8 @@ func validateKind(k Kind) error {
 	if k.ID == "" || k.Name == "" || k.Blurb == "" {
 		return fmt.Errorf("id, name and blurb are required")
 	}
-	if n := len(k.Questions); n < 5 || n > 7 {
-		return fmt.Errorf("%s: want 5 to 7 questions, got %d", k.ID, n)
+	if n := len(k.Questions); n < MinQuestions || n > MaxQuestions {
+		return fmt.Errorf("%s: want %d to %d questions, got %d", k.ID, MinQuestions, MaxQuestions, n)
 	}
 	qs := map[string]Question{}
 	for _, q := range k.Questions {
@@ -240,7 +250,7 @@ func validateKind(k Kind) error {
 }
 
 // Validate checks an assessment against its kind. Every choice and bool
-// question must be answered; text answers are optional.
+// question must be answered unless it is optional; text answers are optional.
 func Validate(a Assessment) error {
 	k, ok := Get(a.Kind)
 	if !ok {
@@ -256,6 +266,9 @@ func Validate(a Assessment) error {
 		v := a.Answers[q.ID]
 		switch q.Type {
 		case TypeChoice:
+			if v == "" && q.Optional {
+				continue
+			}
 			if v == "" {
 				return fmt.Errorf("answers.%s: required", q.ID)
 			}
@@ -263,6 +276,9 @@ func Validate(a Assessment) error {
 				return fmt.Errorf("answers.%s: unknown value %q (want one of %s)", q.ID, v, strings.Join(q.Options, ", "))
 			}
 		case TypeBool:
+			if v == "" && q.Optional {
+				continue
+			}
 			if v != "true" && v != "false" {
 				return fmt.Errorf("answers.%s: want true or false", q.ID)
 			}
