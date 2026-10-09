@@ -9,7 +9,9 @@
 //     adds a line and commits again. In the council it answers with a
 //     brief, or with an "ok" critique when the council-critique prompt is in
 //     its input; asked for a section (Settings › Sections), it answers with
-//     one.
+//     one; asked to rank Next up, it keeps its input in
+//     $LUCID_E2E_STATE/nextup-stdin.txt and answers with the candidates in
+//     reverse order.
 //   - codex, grok: critics; they always answer "ok".
 //   - gh: `pr create` prints a PR URL; `pr view` reports the state written
 //     in $LUCID_E2E_STATE/pr-state (OPEN unless a test wrote MERGED).
@@ -134,6 +136,8 @@ func claude(args []string) int {
 		answer = okCritique
 	case strings.Contains(text, "You design one dashboard section"):
 		answer = section
+	case strings.Contains(text, "You rank the user's next pieces of work"):
+		answer = rank(in)
 	}
 	out(m{"type": "result", "is_error": false, "result": answer, "total_cost_usd": 0.02,
 		"usage": m{"input_tokens": 100, "output_tokens": 50}, "modelUsage": m{"claude-fake": m{}}})
@@ -269,4 +273,27 @@ func gh(args []string) int {
 	}
 	fmt.Fprintln(os.Stderr, "fake gh: not supported in tests:", strings.Join(args, " "))
 	return 1
+}
+
+// rank answers "Ask an agent to rank": the candidates it was given, last
+// first. Its input is kept so a test can read what reached the provider.
+func rank(in []byte) string {
+	if dir := stateDir(); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "nextup-stdin.txt"), in, 0o600)
+	}
+	var input struct {
+		Candidates []struct {
+			ID string `json:"id"`
+		} `json:"candidates"`
+	}
+	s := string(in)
+	if i := strings.Index(s, "{"); i >= 0 {
+		_ = json.Unmarshal([]byte(s[i:]), &input)
+	}
+	out := []m{}
+	for i := len(input.Candidates) - 1; i >= 0; i-- {
+		out = append(out, m{"id": input.Candidates[i].ID, "reason": "The fake ranks the list backwards.", "suggested_action": "start_work"})
+	}
+	b, _ := json.Marshal(m{"ranking": out})
+	return string(b)
 }
