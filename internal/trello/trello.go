@@ -219,6 +219,24 @@ func (s *Service) Boards(ctx context.Context) ([]Board, error) {
 	return out, nil
 }
 
+// MyCards lists the open cards the member is assigned to, on every board.
+// Cached for a minute.
+func (s *Service) MyCards(ctx context.Context) ([]Card, error) {
+	if v, ok := s.Cache.Get("mycards"); ok {
+		return v.([]Card), nil
+	}
+	var raw []rawCard
+	if err := s.call(ctx, http.MethodGet, "/members/me/cards", url.Values{"filter": {"open"}, "fields": {cardFields}}, nil, &raw); err != nil {
+		return nil, err
+	}
+	out := []Card{}
+	for _, c := range raw {
+		out = append(out, c.card())
+	}
+	s.Cache.Put("mycards", out)
+	return out, nil
+}
+
 // Board returns one board with its open lists and cards. Cached for a minute.
 func (s *Service) Board(ctx context.Context, id string) (*BoardView, error) {
 	if err := checkID(id); err != nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ChinmayGit8765/lucidbench/internal/ci"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 )
 
@@ -103,6 +104,27 @@ func TestWorkRoutes(t *testing.T) {
 	}
 }
 
+func TestNextUpRoutes(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("LUCID_DATA_DIR", filepath.Join(root, "data"))
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
+	t.Setenv("PATH", root) // no provider CLI
+	h := New()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nextup", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"items":[]`) {
+		t.Errorf("list: %d %s", rec.Code, rec.Body)
+	}
+	for _, p := range []string{"/api/nextup/rank", "/api/nextup/snooze", "/api/nextup/dismiss", "/api/nextup/restore"} {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, strings.NewReader(`{}`)))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s without confirm: %d", p, rec.Code)
+		}
+	}
+}
+
 func TestPromptsRoutes(t *testing.T) {
 	data := filepath.Join(t.TempDir(), "data")
 	t.Setenv("LUCID_DATA_DIR", data)
@@ -133,5 +155,21 @@ func TestUnknownAPIIs404(t *testing.T) {
 	New().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/nope", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status %d", rec.Code)
+	}
+}
+
+func TestFailingOnDefault(t *testing.T) {
+	runs := []ci.Run{
+		{Repo: "you/a", Branch: "main", Status: "completed", Conclusion: "failure", CreatedAt: "2026-10-09T10:00:00Z", Name: "ci", RunNumber: 7, HTMLURL: "https://example.invalid/a/7"},
+		{Repo: "you/a", Branch: "main", Status: "completed", Conclusion: "success", CreatedAt: "2026-10-09T09:00:00Z"},
+		{Repo: "you/b", Branch: "main", Status: "completed", Conclusion: "success", CreatedAt: "2026-10-09T10:00:00Z"},
+		{Repo: "you/b", Branch: "main", Status: "completed", Conclusion: "failure", CreatedAt: "2026-10-09T08:00:00Z"},
+		{Repo: "you/c", Branch: "feature", Status: "completed", Conclusion: "failure", CreatedAt: "2026-10-09T10:00:00Z"},
+		{Repo: "you/d", Branch: "master", Status: "in_progress", CreatedAt: "2026-10-09T11:00:00Z"},
+		{Repo: "you/d", Branch: "master", Status: "completed", Conclusion: "timed_out", CreatedAt: "2026-10-09T10:00:00Z"},
+	}
+	got := failingOnDefault(runs)
+	if len(got) != 2 || got[0].Repo != "you/a" || got[0].RunNumber != 7 || got[0].URL == "" || got[1].Repo != "you/d" || got[1].Conclusion != "timed_out" {
+		t.Errorf("failing %+v", got)
 	}
 }
