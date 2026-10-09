@@ -91,6 +91,10 @@ export interface Seed {
   prefs?: boolean
   /** Lines of projects.yaml (the whole file). */
   projects?: string
+  /** Extra environment for lucidd (config overrides, secret values). */
+  env?: Record<string, string>
+  /** Extension ids added to the sidebar (they are opt-in). */
+  extensions?: string[]
 }
 
 /** Runs git in a folder with the test env. */
@@ -188,8 +192,9 @@ export async function startDaemon(seed?: (d: Daemon) => Seed | void): Promise<Da
 
   const d: Daemon = { root, home, data, state, env, stop: async () => {} }
   const s = seed?.(d) ?? {}
-  if (s.prefs) writeFileSync(path.join(data, "ui.json"), JSON.stringify({ theme: "midnight", overrides: {}, modules: {}, extensions: {}, sprite_board: false }))
+  if (s.prefs) writeFileSync(path.join(data, "ui.json"), JSON.stringify({ theme: "midnight", overrides: {}, modules: {}, extensions: Object.fromEntries((s.extensions ?? []).map((id, i) => [id, { added: true, order: i }])), sprite_board: false }))
   if (s.projects !== undefined) writeFileSync(path.join(data, "projects.yaml"), s.projects)
+  Object.assign(env, s.env)
 
   const logFile = path.join(root, "lucidd.log")
   let log = ""
