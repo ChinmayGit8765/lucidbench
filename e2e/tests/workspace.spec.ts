@@ -35,6 +35,8 @@ async function drag(page: Page, from: string, toColumn: string) {
 test("Memory: create a page, edit it, reload, and undo a trash", async ({ page }) => {
   await page.goto("/memory")
   await page.getByRole("button", { name: "New page" }).first().click()
+  // Wait for the new page to open before naming it, or the name can land first.
+  await expect(page).toHaveURL(/Untitled/)
   const title = page.getByLabel("Page title")
   await expect(title).toBeVisible()
   await title.fill("Release checklist")

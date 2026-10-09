@@ -24,6 +24,25 @@ marked `-beta.N`.
 - Overview has a **Next up** tile with the top pick and a Start button that opens its confirm
   dialog; the palette has **What should I work on?**; the phone remote's overview lists the top
   three, read only, with confidential items redacted.
+- **Assistant** (AI › Assistant, **Ask Lucid…** in the mascot launcher and the palette): a chat
+  with claude, codex, grok or one of your bots, every turn run with no tools. Answers may propose
+  actions from a fixed catalog (card, project, idea, page, council, Work session, needs, builds
+  into); each is checked against your projects, the work board and Memory, shown as a card with
+  Apply and Skip, checked again before Apply, and applied through the app's own routes. Councils
+  and Work sessions go through the confirm dialog; changes to `projects.yaml` other than appending
+  a project with a checkout are a snippet to paste. Confidential projects reach the model as an id
+  only, and a conversation about one is refused before any CLI runs. Conversations are kept in
+  `<data dir>/assistant/`, and their cost counts on the Usage page as `assistant`
+  (see [Assistant](docs/CONFIG.md#assistant)).
+- **Bots:** saved agents with a provider, model, persona, allowed actions and an emoji or sprite
+  avatar, in `<data dir>/bots/`. Import lists, read-only, the agents you already made in Claude
+  Code (`.claude/agents`), Codex (`.codex/agents`) and the Grok CLI (`.grok/agents`,
+  `.grok/personas`). **Task this bot** starts a Work session with its persona first or puts it in a
+  council's proposer seat.
+- **Parse a braindump** (in the Assistant and on the Ideas page): a dump split into items with
+  your own words, a restatement, a type, a project and a next step, each kept as a card, an idea
+  or a council braindump, one at a time or as a selection; an item close to an existing card or
+  idea says so.
 
 ## 0.3.0-beta.4 (2026-10-07)
 

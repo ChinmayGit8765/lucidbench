@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`, `sections/`, `teams/`, `nextup/`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`, `sections/`, `teams/`, `nextup/`, `assistant/`, `bots/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -677,6 +677,109 @@ read-only, with confidential ones redacted.
 
 Every write needs `X-Lucid-Confirm: yes`; one ranking runs at a time (409). A source that cannot be
 read in 6 seconds is listed under `errors` and the rest still show.
+
+## Assistant
+
+The Assistant (AI › Assistant, **Ask Lucid…** in the mascot launcher and the
+command palette) is a chat with your own CLI: claude, codex, grok, or one of
+your bots. Each message is one run of that CLI with **no tools**
+(`agentexec.ToolsNone`): no file access, no shell, no MCP servers, no hooks,
+in an empty temporary folder. Claude runs on `haiku` unless you name a model.
+The CLIs keep no session for a tool-less answer, so each turn resends the
+last 12 messages (at most 16,000 characters, newest kept) with the outcome of
+every earlier proposal.
+
+**What the model sees:** the system prompt in
+`internal/assistant/prompts/assistant.md`, each project's id, name and kind
+(a confidential project as its id only), the work board's column names, the
+project the conversation is about, and the Memory page you are on when the
+UI passes one (cut at 4,000 characters). Card titles, briefs, paths and the
+rest of `projects.yaml` are not sent.
+
+**Proposed actions.** An answer may end with a fenced `lucid-actions` block,
+`{"actions": [{"action": "<kind>", "args": {…}}]}`. Lucidbench checks each
+one and shows it as a card with **Apply** and **Skip**; nothing is applied by
+itself. The catalog is fixed:
+
+| Action | Args | Apply does |
+|---|---|---|
+| `create_card` | `project, title, body, column` | a page `Inbox/<slug>.md` for the body (when there is one), then a card on the work board linking it |
+| `create_idea` | `title, body, project?` | a page `Inbox/<slug>.md` (`type: idea`) and a card in the first column, labelled `idea` (it shows on the Ideas page) |
+| `create_page` | `path, markdown` | a new Memory page |
+| `create_project` | `id, name, kind, local_path?` | with a git checkout: setup's append to `projects.yaml` (backup, proven by parsing); without one: a snippet to paste |
+| `start_council` | `braindump, project?` | `POST /api/council/sessions`, after the confirm dialog |
+| `start_work` | `project, prompt, provider?, model?` | `POST /api/work/sessions`, after the confirm dialog |
+| `add_needs` | `project, needs[]` (`{what, from?}` or a string) | a snippet to paste: `projects.yaml` is yours and is never rewritten |
+| `link_builds_into` | `project, target` | a snippet to paste |
+
+A proposal is refused, with the reason on its card, for an unknown action or
+argument key, a project id that is not in `projects.yaml`, a column the work
+board does not have, a title over 200 characters, a body over 8,000, a page
+over 20,000 or a prompt or braindump over 20,000, more than 10 needs, a page
+path that is absolute or has `..`, a backslash, a hidden part or `Boards/` at
+its start, a page that already exists, a page body that opens with front
+matter, Work on a project with no `local_path`, and council or Work on a
+confidential project. At most 10 actions are read from one answer. Apply asks
+the daemon to check the action again first (`POST /api/assistant/check`), then
+sends exactly the requests that check returns, with `X-Lucid-Confirm`. A
+council or Work session goes through the same confirm dialog as everywhere
+else.
+
+**Confidential projects and pages.** A turn is refused (403) before any CLI
+runs when the conversation is about a confidential project, when the message,
+an earlier message or the bot's persona names a confidential project (its
+name as a whole word), when it links a confidential Memory page with
+`[[…]]`, or when the current page is confidential. Braindump parsing follows
+the same rule.
+
+**Bots** are saved agents in `<data dir>/bots/<id>.yaml`:
+
+```yaml
+id: doc-writer
+name: Doc Writer
+provider: claude          # claude | codex | grok
+model: haiku              # optional
+profile: work             # optional host account profile
+persona: You write clear, short documentation.
+allowed_actions: [create_card, create_page]   # every action when the bot is made
+avatar: "sprite:thinking" # an emoji, or sprite:<slot> for a theme sprite
+```
+
+Talking to a bot uses its provider and model, adds its persona to the system
+prompt and refuses any action outside `allowed_actions`. **Task this bot**
+starts a Work session on its provider and model with the persona first in
+the prompt, or a council with the bot's provider in the proposer's seat (the
+council keeps its own prompts, so the persona is not sent); both go through
+the confirm dialog.
+
+**Import** reads, read-only, the agents your CLIs already have:
+`<config dir>/agents/*.md` for Claude Code (subagents, front matter `name`,
+`description`, `model`), `~/.grok/agents/*.md` (agents, the same front matter)
+and `~/.grok/personas/*.toml` (personas: `instructions`, `description`,
+`model`) for the Grok CLI, and `<CODEX_HOME>/agents/*.toml` (`name`,
+`description`, `model`, `developer_instructions`) for Codex. Only those
+fields are read, files over 256 KB and symlinks are skipped, no CLI is run,
+and credentials and `config.toml` are never opened (so Grok personas written
+inline in `config.toml` are not listed). An agent becomes a bot with its
+description as the persona, or with its instructions when you choose
+**with instructions**. A provider with none of these folders says so in the
+Import list.
+
+**Parse a braindump** (Assistant › Parse a braindump, and on the Ideas page)
+sends a dump of up to 20,000 characters with the project list to your CLI,
+with no tools and the prompt in `internal/assistant/prompts/braindump.md`,
+and shows the items: the words you used (marked when they cannot be found as
+written), a restatement, a type (idea, feature, bug, chore, question,
+process), a project or "new project?", and a next step (council, card, idea,
+park). An item whose restatement shares most of its words with an existing
+card or council idea says "looks like an existing card". Apply one, or
+select several and **Apply selected**, as a card, an idea or a council
+braindump; councils ask first. The Council's own braindump is unchanged.
+
+Every model call (a turn or a parse) is recorded in
+`<data dir>/assistant/runs/` and counts on the Usage page as source
+`assistant`. Conversations are `<data dir>/assistant/<id>.jsonl`, one record
+per line (the conversation, each message, each Apply or Skip).
 
 ## Docker and Kubernetes
 
