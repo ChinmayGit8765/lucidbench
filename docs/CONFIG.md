@@ -12,7 +12,7 @@ locations.
 | Config file | Windows: `%APPDATA%\lucidbench\config.yaml` |
 | | macOS: `~/Library/Application Support/lucidbench/config.yaml` |
 | | Linux: `$XDG_CONFIG_HOME/lucidbench/config.yaml` (usually `~/.config/lucidbench/config.yaml`) |
-| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`, `sections/`, `teams/`) | the same `lucidbench` directory as the config file |
+| Data dir (`locks/`, `kubeconfig`, `projects.yaml`, `databases.yaml`, `ui.json`, `themes/`, `browser/shots/`, `sections/`, `teams/`, `nextup/`) | the same `lucidbench` directory as the config file |
 
 These come from Go's `os.UserConfigDir()`. Two variables move them:
 
@@ -593,6 +593,90 @@ a PR and merging always stay with you, and a confidential project is refused
 whatever its team says. The format, the checks and the routes are in
 [TEAM-SPEC.md](TEAM-SPEC.md).
 
+## Next up
+
+Next up (Workspace, under Overview) works out what to work on next. It reads what Lucidbench
+already knows and gives each piece of work a score, the reasons for it, and one action. Listing it
+is free: it reads local records and the CI, Linear and Trello answers those modules already cache,
+and never runs a provider. Nothing starts by itself.
+
+**Where items come from**
+
+| Source | Item | Action |
+|---|---|---|
+| Boards | cards in a to-do column (Inbox, Ready, To do, Backlog, Next) or a doing column (In progress, Doing, WIP), not done, and not covered by a running or waiting session | start a Work session on the card |
+| Council | a draft brief (no open blockers counts as ready), an approved brief with no card on a board, a council that failed before writing a brief | open the brief; run the council again on the same braindump |
+| Work | a session waiting for your reply, a failed session | reply (opens the session); review |
+| Pull requests | a session's PR: checks failing, open and waiting on review, or a draft | open the PR |
+| CI | the latest completed run on `main` or `master` of a `ci.github.repos` repository failed | fix CI: a Work session whose prompt names the workflow, run number, commit and run link (the log is not fetched; the agent is asked to reproduce the failure) |
+| Linear | open issues assigned to you, when the connector is configured, unless a card already links them | open in Linear |
+| Trello | open cards you are a member of, when the connector is configured, unless a card already links them | open in Trello |
+| Projects | each need of a live project (not archived, shipped or frozen) that is not done; a need with `from` is work on the supplying project | start a Work session with the need as the task |
+
+"Ideas marked ready" have no flag of their own: a draft brief with no open blockers is the ready
+idea, and it scores a little higher than one with blockers. A spending action is offered only when
+Work can run there: the project exists, is not confidential and has a `local_path`. The provider
+and model come from the project's team builder, else the first installed of claude, codex and grok.
+
+**The score** is a sum of terms, each shown with its reason ("why it's next"):
+
+| Term | Points |
+|---|---|
+| Urgency | failing CI on a default branch +40, failing PR checks +35, an agent waiting +32, a failed session +30, a PR waiting on review +18, a draft PR +10, a brief to approve +14 (+6 when no blocker is open), an approved brief without a card +12, a council to run again +8, Linear priority 1/2/3 +30/+18/+8; due: overdue +30 plus 2 a day (up to +20 more), today +28, within 3 days +20, within 7 days +10; already in progress +12 |
+| Unblocking | +15 for each other project with an unmet need this project supplies (up to 3), +5 for each live project it builds into (up to 3) |
+| Staleness | +1 a day after the first day untouched, up to +10 |
+| Focus | your focus project +25, a pinned project +12 |
+| Effort | labels `small`, `quick`, `easy`, `effort:s` +6; `large`, `big`, `effort:l` -6 |
+| Blocked | a `blocked` label or a blocked need -25 |
+| Usage headroom | work that would spend on a provider whose rate-limit window is at 90 % or more -30, at 75 % or more -15 |
+| Set aside | -5 for each item of the same project you set aside in the last 30 days (up to 3) |
+
+Ties go by id, so the order is the same every time.
+
+**Snooze and Not now.** Snooze hides an item for a day or a week. Not now hides it until you bring
+it back, with a reason (not important, blocked, someone else's, later, other), and counts against
+the project's other items for 30 days. Both are listed under "Snoozed and set aside" with a button
+to restore them.
+
+**Ask an agent to rank** is opt-in and spends on your own account. After a confirm, it runs one CLI
+call with no tools (the same flags as Describe a section) and the versioned prompt
+`internal/nextup/prompts/rank.md`. The provider is the one in Next up's settings, else the scout of
+your default team (`config.yaml` `team:`), else the first installed CLI; claude defaults to
+`haiku`. The agent gets a compact JSON list of at most 30 items, each under an alias (`c1`, `c2`, …;
+real ids never leave), with its score, kind, title, project name, due date, short context, labels,
+the score's reasons (an unblocking reason only says "unblocks other projects") and its action. It
+answers with an ordered list of `{id, reason, suggested_action, suggested_prompt}`; ids it was not
+given and repeats are dropped, a reason is cut at 300 characters, a prompt at 2000, an unknown
+action name is ignored, and a suggested prompt is kept only for work that starts a session. The
+order is kept in `state.json` until the next ranking; items it did not rank follow by score. Each
+call's cost is recorded in `<data dir>/nextup/runs/` and counts on the Usage page as source
+`nextup`.
+
+A schedule ("every N hours, while Lucidbench is open") re-ranks from the open page or the Overview
+tile; it is off by default and never runs without the app open.
+
+**Privacy.** Confidential projects (and cards whose project or Memory page is confidential) stay in
+the list on this machine, but reach the ranking agent as an alias and a score only: no title,
+project, context, labels or reasons. Their actions never start an agent. A CI repository of a
+confidential project counts as confidential too, and a project that cannot be checked (not in
+`projects.yaml`, or the file cannot be read) counts as confidential. The phone shows the top three
+read-only, with confidential ones redacted.
+
+**Files** under `<data dir>/nextup/`: `state.json` (`snoozed`, `dismissed`, `settings` with
+`focus_project`, `pinned`, `schedule_hours`, `provider`, `model`, and `last_rank`) and `runs/*.json`.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/nextup` | GET | `{items, hidden, errors, settings, ranked, generated_at}`; each item has `id, kind, source, title, context, project, project_name, confidential, due, labels, updated, link, score, parts[{factor, points, why}], action, agent?` |
+| `/api/nextup/rank` | POST | `{provider?, profile?, model?}` asks the agent; returns the list and `usage` |
+| `/api/nextup/snooze` | POST | `{id, days: 1\|7}` |
+| `/api/nextup/dismiss` | POST | `{id, reason}` |
+| `/api/nextup/restore` | POST | `{id}` |
+| `/api/nextup/settings` | PUT | `{focus_project, pinned, schedule_hours, provider, model}` |
+
+Every write needs `X-Lucid-Confirm: yes`; one ranking runs at a time (409). A source that cannot be
+read in 6 seconds is listed under `errors` and the rest still show.
+
 ## Docker and Kubernetes
 
 The Containers and Kubernetes extensions read the local Docker engine and
@@ -961,7 +1045,7 @@ whole desktop API and the desktop UI):
 |---|---|---|
 | `/r`, `/r/*` | GET | the phone page and its files (no token needed; they hold no data) |
 | `/r/api/pair` | POST | `{code, name}` returns `{token, device}` |
-| `/r/api/overview` | GET | attention items (including each session waiting for you), running sessions, briefs awaiting approval, CI (last 24 h), tokens used today |
+| `/r/api/overview` | GET | attention items (including each session waiting for you), running sessions, briefs awaiting approval, the top three Next up picks (read only: title, kind, project, score and first reason), CI (last 24 h), tokens used today |
 | `/r/api/work/sessions` | GET | sessions without prompt, answer, paths, branch or patches, with their status and turn count |
 | `/r/api/work/sessions/{id}/events` | GET | live tail (server-sent events): each event's kind, title and text; it stays open while the session waits, so the next turn shows in the same tail |
 | `/r/api/work/sessions/{id}/stop` | POST | stop the running turn and its whole process tree; the session waits for you again |

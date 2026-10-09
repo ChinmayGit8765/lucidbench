@@ -3,6 +3,28 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
+## Unreleased
+
+- **Next up:** a new Workspace page, under Overview, that works out what to work on next. It gathers
+  board cards (to do and in progress), briefs to approve or without a card, sessions waiting for
+  you or failed, pull requests with failing checks or waiting on review, CI failing on a default
+  branch, Linear issues and Trello cards assigned to you, and unmet project needs. Each item gets a
+  deterministic score with its reasons shown (urgency, unblocking other projects, staleness, your
+  focus and pinned projects, effort labels, usage headroom, items you set aside) and one action:
+  start a Work session with the prompt filled in, reply to a waiting session, open the PR, fix CI,
+  run the council again, open the card. Every action that spends asks first; nothing starts by
+  itself. The top pick is a hero card that says why it is next and what starting it does; the rest
+  is a ranked list with score chips, a project filter, **Snooze** (a day or a week) and **Not now**
+  (with a reason, which counts against that project for a while). Settings on the page: a focus
+  project, pinned projects, and an opt-in schedule for the agent ranking.
+- **Ask an agent to rank:** one call with no tools on a cheap model (claude `haiku` by default, or
+  your team's scout) re-orders the list and says why for each item. It sees aliases, scores and
+  short context; confidential items go as an alias and a score only. Its answer is validated and
+  its cost counts on the Usage page as `nextup`. See [Next up](docs/CONFIG.md#next-up).
+- Overview has a **Next up** tile with the top pick and a Start button that opens its confirm
+  dialog; the palette has **What should I work on?**; the phone remote's overview lists the top
+  three, read only, with confidential items redacted.
+
 ## 0.3.0-beta.4 (2026-10-07)
 
 - **Follow-ups in Work sessions:** a session no longer ends when the agent's turn does. It goes to

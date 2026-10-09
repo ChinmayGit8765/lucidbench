@@ -35,6 +35,8 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   sections/<id>.json            Overview and project-page sections (internal/sections)
   sections/runs/*.json          what each "Describe a section" call cost (internal/sections)
   teams/<project>.yaml          a project's AI team when it is not kept in its checkout (internal/team)
+  nextup/state.json             Next up: snoozed and set-aside items, focus and pinned projects, schedule, last agent ranking (internal/nextup)
+  nextup/runs/*.json            what each "Ask an agent to rank" call cost (internal/nextup)
 ```
 
 A project's checkout may hold `.lucid/team.yaml`, its AI team (docs/TEAM-SPEC.md); Lucidbench
@@ -348,6 +350,23 @@ func Approve(id string, project string) (*boards.Card, error)
 - Council: `council.Service.Team` gives a project's proposer, critics and their models; a start request that leaves `proposer` or `critics` out takes the team's. Sessions record `models`, `profiles` and `team`; steps record `model`.
 - Work: `work.Service.Team` gives the builder. `StartRequest.provider` may be empty when the project has one; the request's own provider, model, profile and `allowed_commands` win. Builder commands replace the stack part of the defaults, like `work.allowed_commands`. `GET /api/work/defaults` adds `team` (the builder, its budget and recent average cost). Sessions record `model` and `team`.
 - The confidential rule wins: Council and Work refuse a confidential project before any provider runs, whatever its team.
+
+**Next up** (`internal/nextup`, web module `nextup`, Workspace section; docs/CONFIG.md, Next up)
+- Candidates are derived on every request from the boards, council sessions, Work sessions and their PRs, `ci.Runs` (the latest completed run on `main`/`master` that failed), Linear issues assigned to the user and Trello cards the user is a member of (only when those connectors are configured), and unmet needs of live projects. Ids: `card:<board>/<card>`, `brief:<council>`, `work:<session>`, `pr:<session>`, `ci:<owner/repo>`, `linear:<identifier>`, `trello:<card>`, `need:<project>/<index>`.
+- Listing never runs a provider. Each source is read in parallel and bounded (6 s); one that fails or times out is listed in `errors`.
+- The score is deterministic: a sum of `parts[{factor, points, why}]` over urgency, unblocking, staleness, focus, effort, blocked, usage headroom and set-aside; ties go by id.
+- Each item has one `action`: `start_work` and `fix_ci` carry the `POST /api/work/sessions` body (`card`, `project`, `prompt`, `provider`, `model`, `profile` from the team builder, else the first installed CLI); `run_council` carries the `POST /api/council/sessions` body; the rest carry an in-app `route` or an outside `url`. Spending actions are offered only for a project Work can use, and the UI confirms each one first.
+- Ranking: `agentexec.ToolsNone`, prompt `internal/nextup/prompts/rank.md` (`<!-- rank v1 -->`), claude on `haiku` by default (else the default team's scout, else the first installed CLI). Input items are aliased `c1…cN`; a confidential item is `{id, score}` only. The answer is validated (known aliases only, no repeats, length caps) and kept as `last_rank` until the next ranking. Usage source `nextup`.
+- The phone's `GET /r/api/overview` carries `next_up`: the top three, read only, confidential ones redacted. No remote route was added.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/nextup` | GET | `{items, hidden, errors, settings, ranked, generated_at}` |
+| `/api/nextup/rank` | POST | `{provider?, profile?, model?}` re-orders the list with an agent; returns the list and `usage` |
+| `/api/nextup/snooze` | POST | `{id, days: 1\|7}` |
+| `/api/nextup/dismiss` | POST | `{id, reason: not-important\|blocked\|someone-else\|later\|other}` |
+| `/api/nextup/restore` | POST | `{id}` |
+| `/api/nextup/settings` | PUT | `{focus_project, pinned, schedule_hours (0 = off, at most 168), provider, model}` |
 
 **First-run setup** (`internal/setup`, the `/setup` view; not a module)
 - Opens by itself on `/` when the data dir has neither `ui.json` nor `projects.yaml`, and from Settings › General › Run setup again. Six steps, each skippable: accounts, Memory vault, projects, theme, power modes, a sample braindump. Finishing or skipping writes `ui.json`.
