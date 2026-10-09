@@ -120,4 +120,12 @@ integrations:
 #     proposer: {provider: claude, model: sonnet}
 #     critic: [{provider: codex}, {provider: grok}]
 #     builder: {provider: claude, budget_usd: 2}
+
+# Update check: at most once every six hours, Lucidbench asks GitHub Releases
+# whether a newer version is out and shows a quiet banner. It never downloads
+# or installs anything. false turns the check off.
+update_check: true
+# The GitHub repository releases are read from, as owner/name. Empty means
+# the repository this build came from.
+update_repo: ""
 `

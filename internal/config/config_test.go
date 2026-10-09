@@ -188,3 +188,24 @@ func TestHandler(t *testing.T) {
 		t.Fatalf("POST status %d", rec.Code)
 	}
 }
+
+func TestUpdateCheckKeys(t *testing.T) {
+	c, _, err := LoadFrom(filepath.Join(t.TempDir(), "missing.yaml"), env(nil))
+	if err != nil || !c.UpdateCheck || c.UpdateRepo != "" {
+		t.Fatalf("defaults: err=%v check=%v repo=%q", err, c.UpdateCheck, c.UpdateRepo)
+	}
+	c, _, err = LoadFrom(write(t, "update_check: false\nupdate_repo: someone/fork\n"), env(nil))
+	if err != nil || c.UpdateCheck || c.UpdateRepo != "someone/fork" || c.Source("update_check") != "file" {
+		t.Fatalf("file: err=%v check=%v repo=%q", err, c.UpdateCheck, c.UpdateRepo)
+	}
+	c, _, err = LoadFrom(write(t, "update_check: false\n"), env(map[string]string{"LUCID_UPDATE_CHECK": "true"}))
+	if err != nil || !c.UpdateCheck || c.Source("update_check") != "env:LUCID_UPDATE_CHECK" {
+		t.Fatalf("env: err=%v check=%v from %q", err, c.UpdateCheck, c.Source("update_check"))
+	}
+	if _, _, err := LoadFrom(write(t, "update_check: maybe\n"), env(nil)); err == nil || !strings.Contains(err.Error(), "update_check") {
+		t.Errorf("bad bool: %v", err)
+	}
+	if _, _, err := LoadFrom(write(t, "update_repo: not-a-repo\n"), env(nil)); err == nil || !strings.Contains(err.Error(), "update_repo") {
+		t.Errorf("bad repo: %v", err)
+	}
+}

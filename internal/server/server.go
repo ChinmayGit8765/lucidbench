@@ -45,6 +45,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/team"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
+	"github.com/ChinmayGit8765/lucidbench/internal/update"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
@@ -267,6 +268,14 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		})
 		remote.Register(mux, d.Remote)
 	}
+	// The update check: GitHub Releases at most once every six hours, never
+	// a download. A dev build asks only a test feed (update.FeedEnv).
+	updateRepo := cfg.UpdateRepo
+	if updateRepo == "" {
+		updateRepo = version.Repo
+	}
+	update.Register(mux, &update.Service{Enabled: cfg.UpdateCheck, Repo: updateRepo, Current: version.Version,
+		BaseURL: os.Getenv(update.FeedEnv), DataDir: data})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())
