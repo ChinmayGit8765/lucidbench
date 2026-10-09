@@ -9,7 +9,8 @@
 //     adds a line and commits again. In the council it answers with a
 //     brief, or with an "ok" critique when the council-critique prompt is in
 //     its input; asked for a section (Settings › Sections), it answers with
-//     one.
+//     one. The Assistant gets a line and one create_card proposal; a
+//     braindump parse gets three items.
 //   - codex, grok: critics; they always answer "ok".
 //   - gh: `pr create` prints a PR URL; `pr view` reports the state written
 //     in $LUCID_E2E_STATE/pr-state (OPEN unless a test wrote MERGED).
@@ -111,6 +112,19 @@ const section = `{"id": "briefs-waiting", "title": "Briefs waiting for me", "des
  "source": {"api": "/api/council/sessions"}, "view": "list", "filter": [{"field": "status", "op": "eq", "value": "draft"}],
  "sort": {"field": "updated", "desc": true}, "fields": [{"path": "title"}, {"path": "project", "format": "badge"}, {"path": "updated", "format": "relative"}]}`
 
+// assistantAnswer is the Assistant's reply: a line of text and one card for
+// the demo project.
+const assistantAnswer = "I'll put that on the board for demo.\n\n```lucid-actions\n" +
+	`{"actions": [{"action": "create_card", "args": {"project": "demo", "title": "Write the README", "body": "Cover install and usage.", "column": "Inbox"}}]}` +
+	"\n```"
+
+// braindumpItems is a braindump split into three items.
+const braindumpItems = `{"items": [
+ {"quote": "the demo needs a changelog page", "restatement": "Add a changelog page to demo", "type": "feature", "project": "demo", "next": "card"},
+ {"quote": "maybe a tool that renames photos by date", "restatement": "Build a tool that renames photos by date", "type": "idea", "project": "new", "next": "idea"},
+ {"quote": "how should releases be numbered", "restatement": "Decide how releases are numbered", "type": "question", "project": "demo", "next": "council"}
+]}`
+
 // claude answers the council (no tools, one JSON result) or does Work's
 // edit-and-commit run (stream-json).
 func claude(args []string) int {
@@ -134,6 +148,10 @@ func claude(args []string) int {
 		answer = okCritique
 	case strings.Contains(text, "You design one dashboard section"):
 		answer = section
+	case strings.Contains(text, "You are Lucid, the assistant inside Lucidbench"):
+		answer = assistantAnswer
+	case strings.Contains(text, "You split a messy braindump into atomic items"):
+		answer = braindumpItems
 	}
 	out(m{"type": "result", "is_error": false, "result": answer, "total_cost_usd": 0.02,
 		"usage": m{"input_tokens": 100, "output_tokens": 50}, "modelUsage": m{"claude-fake": m{}}})
