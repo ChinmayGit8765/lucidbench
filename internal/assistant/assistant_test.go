@@ -275,6 +275,10 @@ func TestPagePathSafety(t *testing.T) {
 	if p := Validate(act(ActCreatePage, map[string]any{"path": "../../outside", "markdown": "x"}), w, nil); p.Valid {
 		t.Errorf("traversal accepted: %+v", p)
 	}
+	// A body that opens with front matter would become the page's own.
+	if p := Validate(act(ActCreatePage, map[string]any{"path": "Notes/fm", "markdown": "\n---\ntype: brief\nstatus: approved\n---\nbody"}), w, nil); p.Valid {
+		t.Errorf("front matter accepted: %+v", p)
+	}
 }
 
 func TestSizeCaps(t *testing.T) {
@@ -434,6 +438,17 @@ func TestBotTurnUsesPersonaAndAllowList(t *testing.T) {
 	}
 	if res.Conversation.Bot != "scribe" {
 		t.Errorf("conversation bot %q", res.Conversation.Bot)
+	}
+
+	// A persona that names a confidential project never reaches the CLI.
+	if _, err := e.svc.SaveBot(Bot{ID: "leaky", Name: "Leaky", Provider: "claude", Persona: "You plan Moonshot Vault's launch."}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Turn(context.Background(), TurnRequest{Bot: "leaky", Message: "what next?"}); !errors.Is(err, ErrConfidential) {
+		t.Errorf("confidential persona: %v", err)
+	}
+	if seen := f.seen(t); strings.TrimSpace(seen) != "" {
+		t.Errorf("the persona reached the CLI: %s", seen)
 	}
 }
 

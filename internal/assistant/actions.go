@@ -95,8 +95,8 @@ type Proposal struct {
 	// Summary is one line for the card's title.
 	Summary string `json:"summary"`
 	// Page is the Memory page a card or idea will link, when it has one.
-	Page string `json:"page,omitempty"`
-	Valid   bool   `json:"valid"`
+	Page  string `json:"page,omitempty"`
+	Valid bool   `json:"valid"`
 	// Problems say why an action cannot be applied.
 	Problems []string `json:"problems"`
 	// Spends is true for council and Work: the UI asks first.
@@ -425,6 +425,12 @@ func Validate(a Action, w *World, allowed []string) Proposal {
 			pg = strings.TrimSpace(x.Path)
 		}
 		c.text("markdown", strings.TrimSpace(x.Markdown), 1, MaxPage)
+		// The page is written with no front matter of its own, so a body that
+		// opens with "---" would become the page's front matter on the next
+		// read (a type, a status, a board): the model writes the body only.
+		if strings.HasPrefix(strings.TrimLeft(x.Markdown, string(rune(0xFEFF))+" \t\r\n"), "---") {
+			c.bad("a proposed page may not start with --- (front matter); Lucidbench writes the body only")
+		}
 		if err == nil && w.PageExists != nil && w.PageExists(pg) {
 			c.bad("%s already exists; Lucidbench never overwrites a page from a proposal", pg)
 		}

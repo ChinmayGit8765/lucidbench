@@ -432,6 +432,10 @@ func (s *Service) Turn(ctx context.Context, req TurnRequest) (*TurnResult, error
 	}
 	req.Project = strings.TrimSpace(req.Project)
 	texts := []string{msg}
+	if bot != nil {
+		// The persona goes into the system prompt, so it is checked too.
+		texts = append(texts, bot.Name, bot.Persona)
+	}
 	if conv != nil {
 		for _, m := range conv.Messages {
 			texts = append(texts, m.Text)
