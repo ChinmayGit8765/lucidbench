@@ -97,7 +97,11 @@ function Chat({ conversationId, botId }: { conversationId?: string; botId?: stri
       })
       .catch((e) => setLoadErr(errorMessage(e)))
   }, [conversationId])
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [conv?.messages.length, sending])
+  // A block body: scrollIntoView returns a promise in newer browsers, and an
+  // effect may only return a cleanup function.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" })
+  }, [conv?.messages.length, sending])
 
   const bot = talkTo.startsWith("bot:") ? bots.data?.find((b) => b.id === talkTo.slice(4)) : undefined
   const provider = bot?.provider ?? talkTo

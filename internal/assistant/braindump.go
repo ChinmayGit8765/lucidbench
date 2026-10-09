@@ -147,7 +147,7 @@ func parseItems(answer, dump string, ps []projects.Project) ([]Item, []string, e
 	}
 	raw := doc.Items
 	var items []Item
-	var notes []string
+	notes := []string{}
 	if len(raw) > MaxItems {
 		notes = append(notes, fmt.Sprintf("the answer had %d items; the first %d are shown", len(raw), MaxItems))
 		raw = raw[:MaxItems]

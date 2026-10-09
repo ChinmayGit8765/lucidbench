@@ -147,7 +147,7 @@ export function BraindumpParse({ className }: { className?: string }) {
               </Button>
             </div>
           </div>
-          {res.notes.map((n, i) => (
+          {(res.notes ?? []).map((n, i) => (
             <p key={i} className="text-xs text-warning-fg">
               {n}
             </p>

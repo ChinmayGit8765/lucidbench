@@ -396,7 +396,7 @@ function TaskDialog({ bot, onClose }: { bot: Bot | null; onClose: () => void }) 
           </label>
           <label className="block space-y-1">
             <span className="text-sm font-medium">{mode === "work" ? "The task" : "The braindump"}</span>
-            <textarea aria-label="Task" value={task} onChange={(e) => setTask(e.target.value)} rows={4} className="w-full rounded-md border bg-background/50 p-2.5 text-sm" />
+            <textarea aria-label="What to do" value={task} onChange={(e) => setTask(e.target.value)} rows={4} className="w-full rounded-md border bg-background/50 p-2.5 text-sm" />
           </label>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>
