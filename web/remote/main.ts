@@ -268,7 +268,8 @@ function attentionRow(a: Attention): HTMLElement {
 
 /** A session's status in words; a waiting session waits for you. */
 function statusLabel(status: string): string {
-  return status === "waiting" ? "waiting for you" : status
+  const words: Record<string, string> = { waiting: "waiting for you", merged: "PR merged", closed: "PR closed" }
+  return words[status] ?? status
 }
 
 function sessionRow(s: WorkView): HTMLElement {
