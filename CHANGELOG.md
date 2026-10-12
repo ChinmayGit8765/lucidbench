@@ -5,6 +5,27 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Restart engine.** A setting saved to `config.yaml` that waits for a restart now says so next
+  to a **Restart engine** button, which replaces the engine with a fresh copy of itself and
+  reconnects the page (`POST /api/engine/restart`; Windows starts the new `lucidd` and hands it
+  the port, Linux and macOS exec in place). If the engine does not come back within 20 seconds
+  the page says to close and reopen Lucidbench. The check interval and the cluster and runner
+  idle times no longer need a restart at all: they apply the moment they are saved. See
+  [Saving settings from the UI](docs/CONFIG.md#saving-settings-from-the-ui).
+- **One "Docker isn't running" state.** Containers, Kubernetes, Runners & CI, Databases and the
+  Live browser each had their own docker error and kept polling while the engine was down. They
+  now show their header over one calm state with a Retry, call nothing of docker until the health
+  check says it answers, and open by themselves once it does; Settings › System does the same for
+  the cluster and its jobs. Walking every page with Docker stopped went from 11 console errors and
+  11 failed requests to none.
+- **Polish pass.** Every page header is a title, one line of purpose and its actions on the
+  right (Memory's home included); one status palette colours sessions, councils, idea stages, CI
+  runs, jobs, project needs and board columns alike (amber your move, blue running, green merged,
+  red failed); a waiting session has one Open PR, on its Changes card; Home's Focus panel is the
+  focus project and "N pinned · edit" instead of a wall of chips; a tab page's breadcrumb names its
+  tab ("Work › Board"); the council session goes back to Ideas. Checked in light and dark and at
+  1024x700: the Projects summary wraps instead of truncating, the Work list drops the branch
+  column first, tab bars keep one line and the sidebar keeps Settings in view.
 - **One focused shell.** The sidebar is nine entries instead of 25: Home, Ideas, Work, Projects
   and Memory, then Assistant, Accounts, Extensions and Settings. Pages without an entry of their
   own are tabs of the one they belong to (Work › Board; Accounts › Usage and MCP servers;

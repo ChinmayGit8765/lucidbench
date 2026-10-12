@@ -52,7 +52,7 @@ export function Tabs({
             )}
           >
             {/* On a narrow window the labels keep to one line and the icons step aside. */}
-            {Icon && <Icon className={cn("size-3.5 max-@4xl:hidden", on ? "text-brand" : "text-subtle-foreground")} />}
+            {Icon && <Icon className={cn("size-3.5 @max-4xl:hidden", on ? "text-brand" : "text-subtle-foreground")} />}
             {l}
             {count !== undefined && (
               <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">{count}</span>
