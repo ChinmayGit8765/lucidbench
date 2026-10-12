@@ -107,7 +107,7 @@ export function Infrastructure() {
     <div className="space-y-5">
       <Section
         title="On-demand infrastructure"
-        description="Run the local cluster, runner containers and stacks only when something needs them. Idle things are stopped to free memory; Start and Stop work in every mode. Saved to config.yaml; applies when Lucidbench restarts."
+        description="Run the local cluster, runner containers and stacks only when something needs them. Idle things are stopped to free memory; Start and Stop work in every mode. Saved to config.yaml: the idle times and the check interval apply at once, the modes when the engine restarts."
         actions={
           <>
             {changed.length > 0 && (

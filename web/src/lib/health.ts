@@ -5,6 +5,16 @@ export interface Health {
   version: string
   /** Whether the docker engine answers; only present when asked for (withDocker). */
   docker?: boolean
+  /** When this engine process started; it changes across a restart. */
+  started?: string
+}
+
+/** The mounted health polls, so a Retry can ask now instead of waiting a tick. */
+const checkers = new Set<() => Promise<void>>()
+
+/** Asks every health poll again now; resolves once they have answered. */
+export function recheckHealth(): Promise<void> {
+  return Promise.all([...checkers].map((c) => c())).then(() => undefined)
 }
 
 /**
@@ -30,9 +40,11 @@ export function useHealth(intervalMs = 10000, withDocker = false, enabled = true
     }
     void poll()
     const id = setInterval(poll, intervalMs)
+    checkers.add(poll)
     return () => {
       cancelled = true
       clearInterval(id)
+      checkers.delete(poll)
     }
   }, [intervalMs, withDocker, enabled])
   return health

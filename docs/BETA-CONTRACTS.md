@@ -260,8 +260,9 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
 | `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once and ends a waiting session as `merged` (a closed one as `closed`) |
 | `/api/config/file` | GET | `{path, found, values, sources, pending}`: the keys the UI may save, as config.yaml sets them, and those a restart still has to apply |
-| `/api/config/preview` | POST | `{set: {key: value}}` returns `{path, created, changed, diff[{op, text}], overridden, restart}`; writes nothing |
+| `/api/config/preview` | POST | `{set: {key: value}}` returns `{path, created, changed, diff[{op, text}], overridden, restart}`; writes nothing. `restart` never lists `power.poll_seconds` or the two idle times: a save applies those at once |
 | `/api/config/save` | POST | the same, written: backup `config.yaml.bak-<time>` (newest five kept), only the keys sent, atomic replace; `400` for a key the UI may not write, a bad value or a literal secret |
+| `/api/engine/restart` | POST | `202 {restarting, started}`: the engine replaces itself with a fresh copy that reads `config.yaml` again (Windows: starts the new `lucidd`, which waits for the port, then exits; elsewhere: execs in place); `GET /api/health` reports a new `started` once it is up; `501` when the engine was built without a restarter, `500` when the new process could not start (nothing stopped) |
 | `/api/usage/summary?days=` | GET | per provider: tokens, cost, windows |
 | `/api/usage/plan?hours=` | GET | per account: the current window, its reset, the burn rate over the last `hours` (default 2, 0.25-24) and the run-out projection; the saved plan with estimates, the provider to use, fits/after_reset/too_big/unknown and budget warnings. Local records only |
 | `/api/usage/plan` | PUT | `{items[{id?, title, kind: council\|work\|section\|rank\|assistant, provider?, model?, project?, source?, nextup_id?}]}` saves `usage/plan.json` (at most 30 items) and returns the new view |

@@ -213,7 +213,7 @@ func TestWriteRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	RegisterWrite(mux, running, noEnv)
+	RegisterWrite(mux, running, noEnv, nil)
 	do := func(method, path, body string, confirm bool) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		if confirm {
@@ -249,6 +249,50 @@ func TestWriteRoutes(t *testing.T) {
 	}
 	if v.Values["power.cluster"] != "off" || v.Sources["power.cluster"] != "file" || strings.Join(v.Pending, ",") != "power.cluster" || v.Values["power.runner_idle_minutes"] != float64(15) {
 		t.Errorf("file view %+v", v)
+	}
+}
+
+// A key with a live function applies on save: the function gets the saved
+// config, the reply asks for no restart, and the file view does not call it
+// pending. A key without one still waits for a restart.
+func TestLiveKeysApplyOnSave(t *testing.T) {
+	p := writeFile(t, commented)
+	running, _, err := LoadFrom(p, noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int
+	mux := http.NewServeMux()
+	RegisterWrite(mux, running, noEnv, Live{"power.runner_idle_minutes": func(c *Config) { got = append(got, c.Power.RunnerIdleMinutes) }})
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("X-Lucid-Confirm", "yes")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	body := `{"set":{"power.runner_idle_minutes":25,"power.cluster":"off"}}`
+	var e Edit
+	rec := do("POST", "/api/config/preview", body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil || rec.Code != 200 {
+		t.Fatalf("preview %d %s", rec.Code, rec.Body)
+	}
+	if strings.Join(e.Restart, ",") != "power.cluster" || len(got) != 0 {
+		t.Errorf("preview restart %v, applied %v", e.Restart, got)
+	}
+	rec = do("POST", "/api/config/save", body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil || rec.Code != 200 {
+		t.Fatalf("save %d %s", rec.Code, rec.Body)
+	}
+	if strings.Join(e.Restart, ",") != "power.cluster" || len(got) != 1 || got[0] != 25 {
+		t.Errorf("save restart %v, applied %v", e.Restart, got)
+	}
+	var v FileView
+	if err := json.Unmarshal(do("GET", "/api/config/file", "").Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(v.Pending, ",") != "power.cluster" {
+		t.Errorf("pending %v", v.Pending)
 	}
 }
 

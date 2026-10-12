@@ -157,7 +157,8 @@ func (s *Supervisor) State(ctx context.Context) State {
 
 	st := State{PollSeconds: int(s.poll().Seconds()), Runners: []Item{}, Stacks: []Item{}, Activity: []Entry{}, Errors: []string{}}
 	st.Modes.Cluster, st.Modes.Runners = s.Cfg.Cluster, s.Cfg.Runners
-	st.Modes.ClusterIdleMinutes, st.Modes.RunnerIdleMinutes = s.Cfg.ClusterIdleMinutes, s.Cfg.RunnerIdleMinutes
+	clusterIdle, runnerIdle := s.idleTimes()
+	st.Modes.ClusterIdleMinutes, st.Modes.RunnerIdleMinutes = int(clusterIdle.Minutes()), int(runnerIdle.Minutes())
 	if !ticked.IsZero() {
 		st.CheckedAt = &ticked
 	}
@@ -235,7 +236,7 @@ func (s *Supervisor) State(ctx context.Context) State {
 
 	// runners
 	if rErr == nil {
-		idleFor := time.Duration(s.Cfg.RunnerIdleMinutes) * time.Minute
+		idleFor := runnerIdle
 		s.mu.Lock()
 		for _, x := range rcs {
 			it := Item{Kind: "runner", Name: x.Name, Mode: s.Cfg.Runners, Repo: x.Repo(), Containers: []string{x.Name}, MemoryBytes: mem[x.Name]}

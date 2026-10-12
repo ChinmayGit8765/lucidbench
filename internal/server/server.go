@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
 	"github.com/ChinmayGit8765/lucidbench/internal/agentexec"
@@ -62,7 +63,14 @@ type HealthResponse struct {
 	// UI asks only while an extension that needs docker is added, so it never
 	// calls a docker endpoint just to learn the engine is not there.
 	Docker *bool `json:"docker,omitempty"`
+	// Started is when this daemon process started (RFC 3339). It changes
+	// across a restart while the version does not, so the UI can tell the
+	// new engine is up.
+	Started string `json:"started"`
 }
+
+// started is when this process started serving.
+var started = time.Now()
 
 // HealthHandler reports daemon liveness and version.
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +85,7 @@ func healthWith(det *hostinfo.Detector) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		body := HealthResponse{Status: "ok", Version: version.Version}
+		body := HealthResponse{Status: "ok", Version: version.Version, Started: started.UTC().Format(time.RFC3339Nano)}
 		if det != nil && r.URL.Query().Get("docker") == "1" {
 			up := det.Detect(r.Context()).Docker
 			body.Docker = &up
@@ -108,6 +116,10 @@ type Deps struct {
 	// uses. Like Power, NewWith never builds one, and wiring it binds
 	// nothing: the daemon calls Start, which binds only when enabled.
 	Remote *remote.Manager
+	// Restart serves POST /api/engine/restart: it begins replacing the
+	// daemon with a fresh copy of itself (Restarter.Restart). Nil answers
+	// 501, so a handler built in a test never stops anything.
+	Restart func() error
 }
 
 // mcpHas reports whether any AI client has an MCP server whose name contains
@@ -140,7 +152,15 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux.Handle("/api/accounts", accounts.HandlerFor(func() accounts.Roots { return accounts.FromConfig(cfg) }))
 	mux.HandleFunc("/api/cluster", cluster.Handler)
 	mux.Handle("/api/config", config.Handler(cfg, nil))
-	config.RegisterWrite(mux, cfg, nil)
+	// The power timings apply to the running supervisor; every other
+	// writable key waits for a restart (POST /api/engine/restart).
+	var live config.Live
+	if d.Power != nil {
+		timings := func(c *config.Config) { d.Power.SetTimings(c.Power) }
+		live = config.Live{"power.poll_seconds": timings, "power.cluster_idle_minutes": timings, "power.runner_idle_minutes": timings}
+	}
+	config.RegisterWrite(mux, cfg, nil, live)
+	mux.HandleFunc("/api/engine/restart", restartHandler(d.Restart))
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	ciSvc := ci.New(cfg.CI)
