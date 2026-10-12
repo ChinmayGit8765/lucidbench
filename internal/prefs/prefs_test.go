@@ -87,6 +87,51 @@ func TestSaveIsAtomic(t *testing.T) {
 	}
 }
 
+// Runners, Containers and Kubernetes are opt-in for a new install, while a
+// ui.json from before keeps them unless the user had removed one.
+func TestInfraExtensionsStayForExistingUsers(t *testing.T) {
+	s := store(t)
+	p, err := s.Load()
+	if err != nil || p.Version != Version || len(p.Extensions) != 0 {
+		t.Fatalf("new install = %+v, %v", p, err)
+	}
+
+	old := `{"theme":"midnight","overrides":{},"modules":{},"extensions":{"containers":{"added":false,"order":1},"cloud":{"added":true,"order":10}},"sprite_board":false}`
+	if err := os.WriteFile(s.Path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err = s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]ExtensionPref{
+		"runners":    {Added: true, Order: 0},
+		"kubernetes": {Added: true, Order: 2},
+		"containers": {Added: false, Order: 1}, // removed before: stays removed
+		"cloud":      {Added: true, Order: 10},
+	}
+	if p.Version != Version || len(p.Extensions) != len(want) {
+		t.Fatalf("upgraded = %+v", p)
+	}
+	for id, e := range want {
+		if p.Extensions[id] != e {
+			t.Errorf("%s = %+v, want %+v", id, p.Extensions[id], e)
+		}
+	}
+
+	// Once saved at the current version, removing one sticks.
+	delete(p.Extensions, "runners")
+	if err := s.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ = s.Load(); p.Extensions["runners"].Added {
+		t.Errorf("a removal at the current version must stick: %+v", p.Extensions)
+	}
+	if err := (&Prefs{Version: Version + 1}).Validate(); err == nil {
+		t.Error("a version from the future should be refused")
+	}
+}
+
 func TestHTTP(t *testing.T) {
 	s := store(t)
 	h := Handler(s)
