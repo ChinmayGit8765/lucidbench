@@ -140,6 +140,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux.Handle("/api/accounts", accounts.HandlerFor(func() accounts.Roots { return accounts.FromConfig(cfg) }))
 	mux.HandleFunc("/api/cluster", cluster.Handler)
 	mux.Handle("/api/config", config.Handler(cfg, nil))
+	config.RegisterWrite(mux, cfg, nil)
 	mux.HandleFunc("/api/jobs/", jobs.Handler)
 	mux.HandleFunc("/api/jobs", jobs.Handler)
 	ciSvc := ci.New(cfg.CI)

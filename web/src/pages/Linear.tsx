@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { ExternalLink, Waypoints } from "lucide-react"
 
+import { EnvVarField } from "@/components/ConfigSave"
 import { SetupCard } from "@/components/SetupCard"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Card } from "@/components/ui/card"
@@ -77,7 +78,8 @@ function Setup({ status }: { status: LinearStatus }) {
           Set it as the environment variable <code>{name}</code> where the daemon starts (for the desktop app, a user environment variable), then restart Lucidbench.
         </>,
         <>
-          To use a different variable, point <code>integrations.linear.token</code> at it, as <code>env:NAME</code>, in your config.
+          Or keep the key in another variable: name it here and it is saved to config.yaml as <code>integrations.linear.token</code> (the name only, never the key).
+          <EnvVarField configKey="integrations.linear.token" current={status.token_ref} label="Linear API key variable" />
         </>,
       ]}
       vars={[{ name, set: status.configured }]}

@@ -20,7 +20,6 @@ test("an idea's structure renders: council, critiques, brief, card and timeline"
   await page.getByRole("button", { name: /Convene council/ }).click()
   await expect(page.getByRole("heading", { level: 1, name: TITLE })).toBeVisible({ timeout: 45_000 })
   await page.getByRole("button", { name: "Approve", exact: true }).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Approve and add card" }).click()
   await expect(page.getByText(/On the work board · Ready/)).toBeVisible()
 
   const list = (await (await fetch(`${BASE}/api/ideas`)).json()) as { ideas?: { id: string; title: string; stage: string }[] } | { id: string; title: string; stage: string }[]

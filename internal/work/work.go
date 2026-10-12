@@ -39,13 +39,33 @@ import (
 // user's follow-up (waiting) until the user ends it (done). A first turn that
 // fails ends the session as failed. Stopped is only found on sessions made
 // before follow-ups: Stop now ends the turn, not the session.
+//
+// A waiting session whose PR GitHub reports merged (or closed) ends as merged
+// (or closed): the work has landed or been turned down, so nothing waits for
+// a follow-up any more. A turn still running when the merge is seen finishes
+// first and then ends the same way. A closed PR that is reopened brings a
+// closed session back to waiting.
 const (
 	StatusRunning = "running"
 	StatusWaiting = "waiting"
 	StatusDone    = "done"
 	StatusFailed  = "failed"
 	StatusStopped = "stopped"
+	StatusMerged  = "merged"
+	StatusClosed  = "closed"
 )
+
+// prEnded is the session status a PR state ends a waiting session in, ""
+// when the PR is still open (or unknown).
+func prEnded(prState string) string {
+	switch prState {
+	case PRMerged:
+		return StatusMerged
+	case PRClosed:
+		return StatusClosed
+	}
+	return ""
+}
 
 // Board columns a session moves its card to.
 const (
@@ -270,6 +290,12 @@ func (s *Service) load() {
 		legacyTurn(&e.s)
 		if se.Status == StatusRunning {
 			s.interrupted(e)
+		}
+		// Saved before merged and closed were states: a session left waiting
+		// on a PR that had already landed ends now.
+		if st := prEnded(e.s.PRState); st != "" && e.s.Status == StatusWaiting {
+			e.s.Status = st
+			_ = s.save(&e.s)
 		}
 		s.sessions[se.ID] = e
 	}
@@ -901,9 +927,13 @@ func (s *Service) run(ctx context.Context, e *entry, req agentexec.Request, done
 	if t.Answer != "" {
 		se.Answer = t.Answer
 	}
-	if t.Status == StatusFailed && t.N == 1 {
+	switch {
+	case t.Status == StatusFailed && t.N == 1:
 		se.Status, se.Error = StatusFailed, t.Error
-	} else {
+	case prEnded(se.PRState) != "" && !se.Removed:
+		// The PR was merged or closed while this turn ran.
+		se.Status, se.Error = prEnded(se.PRState), ""
+	default:
 		se.Status, se.Error = StatusWaiting, ""
 	}
 	if derr == nil {

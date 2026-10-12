@@ -178,6 +178,7 @@ func (s *Service) RefreshPR(id string) Session {
 	}
 	info, err := view(repo, url)
 	var board, card string
+	var release func()
 	s.update(e, func(x *Session) {
 		// Whatever the answer, wait a minute before asking again.
 		x.PRChecked = time.Now().UTC()
@@ -189,7 +190,23 @@ func (s *Service) RefreshPR(id string) Session {
 			x.CardDone = true
 			board, card = x.Board, x.Card
 		}
+		// A waiting session ends with its PR; a running turn finishes first
+		// (run ends it the same way). A reopened PR revives a closed session.
+		switch st := prEnded(info.State); {
+		case st != "" && x.Status == StatusWaiting:
+			x.Status = st
+			if x.Ended == nil {
+				now := time.Now().UTC()
+				x.Ended = &now
+			}
+			release = e.takeRelease()
+		case st == "" && x.Status == StatusClosed && !x.Removed:
+			x.Status = StatusWaiting
+		}
 	})
+	if release != nil {
+		release()
+	}
 	if card != "" {
 		log.Printf("work: PR %s was merged: moving card %s on %s to Done", url, card, board)
 		s.moveCard(board, card, ColumnDone, url, true)

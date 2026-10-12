@@ -34,6 +34,33 @@ marked `-beta.N`.
   errors that only mean Docker is not running read as one plain sentence instead of `docker ps …
   exit status 1`; every page shows its title as its h1 while its code loads; the Add account
   dialog loads on first use, so the Accounts page gets its own chunk.
+- **Work: one truthful state.** A session whose PR is merged ends as `merged` (closed: `closed`)
+  instead of waiting for a reply forever, so Next up, the Overview, the Work counters, Ideas and
+  the phone stop saying "waiting for you" once the card is in Done. The session ends with
+  "Merged — remove the worktree?" and a one-click remove. Sessions saved waiting on a merged PR
+  end when lucidd starts (see [Work sessions](docs/CONFIG.md#work-sessions)).
+- **Work list:** the counters count by state (Running, Waiting for you, To review, Open PRs,
+  Merged, Spent) and agree with the rows.
+- **Work session:** reads like a chat. The card brief renders as a brief instead of raw
+  Markdown; the header is two lines and the composer one growing line, so the timeline leads at
+  1024x700; runs of tool steps fold into one line with the files they changed as chips; turn
+  separators stick under the header; a "new events" pill brings you back down; Enter sends,
+  Shift+Enter is a new line and Esc stops a running turn.
+- **Council:** a sticky bar keeps the verdicts and Approve / Send back / Run again on screen.
+  Approving a brief no critic blocks is one click (a brief with an open blocker still asks); Run
+  again asks first because it spends.
+- **Boards:** columns share the width down to a readable minimum and scroll sideways past it,
+  with edge fades and a "2 more" button.
+- **Settings save for real.** Infrastructure (power modes, idle times, poll interval), the
+  vault folder and the update check write `config.yaml` after showing the diff: a backup first,
+  only the keys you changed, comments and unknown keys kept, and a clear "restart Lucidbench to
+  apply". Linear, Trello and Payments let you name the env var a secret lives in; only the
+  `env:` reference is saved (see [Saving settings from the UI](docs/CONFIG.md#saving-settings-from-the-ui)).
+- **Fixes:** Live browser no longer offers Start while Docker is down; Kubernetes says why Hello
+  job is off; Runners shows "No runs yet" instead of "all green" with no runs. Memory: a "[[" typed
+  where a dismissed menu was opens the link menu again, the caret stays clear of the path bar, and
+  search snippets drop half-cut links.
+
 - **Usage: pace and plan.** For each provider account, the current window's use, its reset and
   the burn rate over the last 1, 2 or 6 hours, with the run-out time in plain words ("at this pace
   codex hits its 5h limit at 14:20, 40 min before it resets"). Codex windows come from its logs;

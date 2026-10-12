@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Boxes, CreditCard, ExternalLink, FlaskConical, History, Link2, Receipt, Rocket, ShieldAlert, Webhook as WebhookIcon } from "lucide-react"
 
+import { EnvVarField } from "@/components/ConfigSave"
 import { SetupCard } from "@/components/SetupCard"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { StatusPill } from "@/components/ui/badge"
@@ -72,7 +73,8 @@ export default function Payments({ subpath }: { subpath: string[] }) {
               Set the key as <code>{status.data.key_ref.replace(/^env:/, "")}</code> where the daemon starts, then restart Lucidbench. The mode (test or live) is read from the key.
             </>,
             <>
-              To use another variable, point <code>integrations.stripe.key</code> at it, as <code>env:NAME</code>, in your config.
+              Or keep the key in another variable: name it here and it is saved to config.yaml as <code>integrations.stripe.key</code> (the name only, never the key).
+              <EnvVarField configKey="integrations.stripe.key" current={status.data.key_ref} label="Stripe key variable" />
             </>,
           ]}
           vars={[{ name: status.data.key_ref.replace(/^env:/, ""), set: status.data.configured }]}

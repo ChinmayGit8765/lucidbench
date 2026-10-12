@@ -1,7 +1,7 @@
 import type { Tone } from "@/components/ui/badge"
 import type { Card } from "@/lib/boards"
 import type { CouncilSession } from "@/lib/council"
-import type { PRChecks, PRState, WorkUsage } from "@/lib/work"
+import type { PRChecks, PRState, WorkStatus, WorkUsage } from "@/lib/work"
 
 /* Mirrors internal/ideas: keep these in step with the Go structs. */
 
@@ -58,7 +58,7 @@ export interface IdeaCard extends Card {
 export interface IdeaSession {
   id: string
   title: string
-  status: "running" | "waiting" | "done" | "failed" | "stopped"
+  status: WorkStatus
   provider: string
   model?: string
   branch: string

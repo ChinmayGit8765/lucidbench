@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { BookOpen, ExternalLink, RefreshCw, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
-import { CopyCommand, copyText } from "@/components/CopyCommand"
+import { PendingRestart, SaveButton, useConfigFile, useConfigSave } from "@/components/ConfigSave"
+import { copyText } from "@/components/CopyCommand"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ErrorState, Skeleton } from "@/components/ui/states"
@@ -12,7 +13,7 @@ import { SETUP_ROUTE } from "@/lib/setup"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { checkNow, UPDATE_PATH, UPDATE_POLL_MS, type UpdateStatus } from "@/lib/update"
 import { cn } from "@/lib/utils"
-import { Section } from "@/pages/settings/controls"
+import { Section, Switch } from "@/pages/settings/controls"
 
 interface About {
   version: string
@@ -41,62 +42,86 @@ function Item({ label, children, copy }: { label: string; children: ReactNode; c
   )
 }
 
-interface ConfigView {
-  vault: { path: string }
-  sources: Record<string, string>
-}
-
 /**
- * Where Memory keeps its pages. The daemon reads config at start and has no
- * write route, so changing the vault is a config edit plus a restart; this
- * shows the effective path and exactly what to change.
+ * Where Memory keeps its pages. Save writes vault.path to config.yaml (after
+ * showing the diff); Memory and Boards open the new folder once Lucidbench
+ * restarts, and nothing is copied or moved.
  */
 function VaultSection({ dataDir, focus }: { dataDir?: string; focus: boolean }) {
-  const cfg = usePoll<ConfigView>("/api/config", 60000)
+  const file = useConfigFile()
   const ref = useRef<HTMLElement>(null)
   useEffect(() => {
     if (focus) ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [focus])
-  const c = cfg.data
-  const configured = !!c?.vault.path
-  const source = c?.sources["vault.path"] ?? "default"
-  const effective = configured ? c!.vault.path : dataDir ? `${dataDir.replace(/[\\/]+$/, "")}${dataDir.includes("\\") ? "\\" : "/"}memory` : ""
+  const f = file.data
+  const saved = typeof f?.values["vault.path"] === "string" ? (f.values["vault.path"] as string) : ""
+  const [draft, setDraft] = useState<string | null>(null)
+  const value = draft ?? saved
+  // The engine shows the saved path with ~ expanded, so the box follows it.
+  const { save, busy, dialog } = useConfigSave(() => {
+    setDraft(null)
+    file.refresh()
+  })
+  const source = f?.sources["vault.path"] ?? "default"
+  const fromEnv = source.startsWith("env:")
+  const fallback = dataDir ? `${dataDir.replace(/[\\/]+$/, "")}${dataDir.includes("\\") ? "\\" : "/"}memory` : ""
+  const dirty = draft !== null && draft.trim() !== saved
   return (
     <section ref={ref} id="vault" className={cn("scroll-mt-6 rounded-xl", focus && "ring-2 ring-brand/40")}>
-      <Section title="Memory vault" description="The folder of Markdown pages behind Memory and Boards. Any Obsidian vault works; Lucidbench never picks one by itself.">
-        <dl>
-          <Item label="Location" copy={effective || undefined}>
-            {cfg.error && !c ? (
-              <span className="text-xs text-danger-fg">{cfg.error.message}</span>
-            ) : !c ? (
-              <Skeleton className="h-5 w-64" />
-            ) : (
-              <>
-                <span className="truncate font-mono text-xs" title={effective}>
-                  {effective}
-                </span>
-                <StatusPill tone={configured ? "info" : "neutral"}>{configured ? `vault.path · ${source}` : "built-in default"}</StatusPill>
-              </>
-            )}
-          </Item>
-        </dl>
-        <div className="space-y-3 border-t px-5 py-4">
-          <div className="text-sm font-medium">Use a different vault</div>
-          <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>
-              Find your config file:
-              <CopyCommand command="lucid config path" className="mt-1.5" />
-            </li>
-            <li>
-              Set the vault folder in it (a leading <code className="font-mono text-xs">~</code> is your home folder):
-              <pre className="mt-1.5 overflow-x-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs text-foreground">{"vault:\n  path: ~/Notes"}</pre>
-              or set the <code className="font-mono text-xs">LUCID_VAULT_PATH</code> environment variable.
-            </li>
-            <li>Restart Lucidbench. Memory and Boards then open that folder; nothing is copied or moved.</li>
-          </ol>
+      <Section
+        title="Memory vault"
+        description="The folder of Markdown pages behind Memory and Boards. Any Obsidian vault works; Lucidbench never picks one by itself. Saved to config.yaml; applies when Lucidbench restarts."
+      >
+        <div className="flex flex-wrap items-center gap-2 border-t px-5 py-3">
+          {file.error && !f ? (
+            <span className="text-xs text-danger-fg">{file.error.message}</span>
+          ) : !f ? (
+            <Skeleton className="h-8 w-80" />
+          ) : (
+            <>
+              <input
+                aria-label="Vault folder"
+                value={value}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={fallback ? `${fallback} (built-in default)` : "~/Notes"}
+                spellCheck={false}
+                disabled={fromEnv}
+                className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2.5 font-mono text-xs outline-none placeholder:text-subtle-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <StatusPill tone={saved ? "info" : "neutral"}>{saved ? `vault.path · ${source}` : "built-in default"}</StatusPill>
+              <SaveButton dirty={dirty && !fromEnv} busy={busy} onClick={() => void save({ "vault.path": value.trim() }, "the vault folder")} />
+            </>
+          )}
         </div>
+        <p className="border-t px-5 py-2.5 text-xs text-muted-foreground">
+          A leading <code className="font-mono">~</code> is your home folder. Leave it empty for the built-in folder in the data directory.
+          {fromEnv && <span className="text-warning-fg"> {source.slice(4)} sets it, which wins over the file; change or unset that variable instead.</span>}
+        </p>
+        <PendingRestart file={f} keys={["vault.path"]} />
       </Section>
+      {dialog}
     </section>
+  )
+}
+
+/** Turns the update check on or off in config.yaml. */
+function UpdateToggle() {
+  const file = useConfigFile()
+  const { save, dialog } = useConfigSave(() => file.refresh())
+  const f = file.data
+  if (!f) return <Skeleton className="h-5 w-40" />
+  const on = f.values["update_check"] === true
+  const src = f.sources["update_check"] ?? "default"
+  return (
+    <>
+      <Switch label="Check for updates" checked={on} onChange={(v) => void save({ update_check: v }, v ? "update checks on" : "update checks off")} />
+      <span className="text-xs text-muted-foreground">
+        {on ? "On" : "Off"}
+        {src.startsWith("env:") ? ` · ${src.slice(4)} overrides the file` : ""}
+        {f.pending.includes("update_check") ? " · restart to apply" : ""}
+      </span>
+      {dialog}
+    </>
   )
 }
 
@@ -170,18 +195,8 @@ function UpdatesSection() {
               </span>
             </Item>
           )}
-          <Item label="Turn off">
-            <span className="text-xs text-muted-foreground">
-              {u.enabled ? (
-                <>
-                  Add <code className="font-mono">update_check: false</code> to your config file (or set <code className="font-mono">LUCID_UPDATE_CHECK=false</code>) and restart.
-                </>
-              ) : (
-                <>
-                  Off: <code className="font-mono">update_check: false</code> is set. Remove it and restart to turn checks back on.
-                </>
-              )}
-            </span>
+          <Item label="Update checks">
+            <UpdateToggle />
           </Item>
         </dl>
       )}

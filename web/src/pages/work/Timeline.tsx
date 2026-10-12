@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
   Bot,
   Camera,
@@ -8,6 +8,7 @@ import {
   FilePen,
   FilePlus2,
   FileText,
+  GitMerge,
   Globe,
   Hourglass,
   Info,
@@ -21,8 +22,9 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { BriefBody, parseBrief } from "@/components/Brief"
 import { ProviderTile, providerInfo } from "@/components/ProviderMark"
-import { cn } from "@/lib/utils"
+import { cn, plural } from "@/lib/utils"
 import {
   diffCounts,
   elapsedOf,
@@ -303,49 +305,234 @@ const TURN_END: Record<WorkTurn["status"], string> = {
   interrupted: "interrupted",
 }
 
+/** A file the agent changed, as a small chip: its name and the lines added and removed. */
+function FileChip({ path, added, deleted, onClick }: { path: string; added?: number; deleted?: number; onClick?: () => void }) {
+  const name = path.split(/[\\/]/).pop() || path
+  const body = (
+    <>
+      <FilePen className="size-3 shrink-0 text-brand" />
+      <span className="max-w-[14rem] truncate font-mono">{name}</span>
+      {(added !== undefined || deleted !== undefined) && (
+        <span className="font-mono tabular-nums">
+          <span className="text-success-fg">+{added ?? 0}</span> <span className="text-danger-fg">−{deleted ?? 0}</span>
+        </span>
+      )}
+    </>
+  )
+  const cls = "inline-flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 text-2xs text-muted-foreground"
+  return onClick ? (
+    <button onClick={onClick} title={`${path}: open in Changes`} className={cn(cls, "transition-colors hover:border-border-strong hover:text-foreground")} data-testid="file-chip">
+      {body}
+    </button>
+  ) : (
+    <span title={path} className={cls} data-testid="file-chip">
+      {body}
+    </span>
+  )
+}
+
+/** The files a run of steps edited, each once, with its lines added and removed. */
+function editedFiles(steps: Step[]): { path: string; added: number; deleted: number }[] {
+  const byPath = new Map<string, { path: string; added: number; deleted: number }>()
+  for (const s of steps) {
+    if (s.type !== "tools" || s.kind !== "edit") continue
+    for (const it of s.items) {
+      if (!it.target) continue
+      const f = byPath.get(it.target) ?? { path: it.target, added: 0, deleted: 0 }
+      if (it.diff) {
+        const c = diffCounts(it.diff)
+        f.added += c.added
+        f.deleted += c.deleted
+      }
+      byPath.set(it.target, f)
+    }
+  }
+  return [...byPath.values()]
+}
+
+/** "Read 3 files, ran 2 commands and edited README.md": a run of tool steps in one line. */
+function groupSummary(steps: Extract<Step, { type: "tools" }>[]): string {
+  const count: Partial<Record<ToolKind, number>> = {}
+  for (const s of steps) count[s.kind] = (count[s.kind] ?? 0) + s.items.length
+  const n = (k: ToolKind, one: string, many: string) => {
+    const c = count[k] ?? 0
+    return c === 0 ? null : c === 1 ? one : `${many.replace("#", String(c))}`
+  }
+  const parts = [
+    n("read", "read a file", "read # files"),
+    n("search", "searched once", "searched # times"),
+    n("command", "ran a command", "ran # commands"),
+    n("edit", "edited a file", "edited # files"),
+    n("plan", "updated the plan", "updated the plan # times"),
+    n("web", "looked something up", "looked up # things"),
+    n("agent", "asked a helper agent", "asked # helper agents"),
+    n("other", "used a tool", "used # tools"),
+  ].filter(Boolean) as string[]
+  const text = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : (parts[0] ?? "worked")
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/**
+ * Several tool steps in a row, folded into one line ("Read 3 files and ran 2
+ * commands") with the files it changed as chips. Open while the agent is on
+ * it; once something follows, it folds so the conversation stays readable.
+ */
+function ToolGroup({ steps, running, live }: { steps: Extract<Step, { type: "tools" }>[]; running: boolean; live: boolean }) {
+  const failed = steps.some((s) => s.items.some((x) => x.failed))
+  const [open, setOpen] = useState<boolean | null>(null)
+  const shown = open ?? (live || failed)
+  const files = editedFiles(steps)
+  const calls = steps.reduce((n, s) => n + s.items.length, 0)
+  return (
+    <li className="relative pl-9" data-testid="tool-group">
+      <span
+        className={cn(
+          "absolute left-[7px] top-1.5 z-[1] flex size-[22px] items-center justify-center rounded-full border bg-card",
+          failed ? "border-danger/50 text-danger" : "text-subtle-foreground",
+        )}
+      >
+        <Wrench className="size-3" />
+      </span>
+      <button
+        onClick={() => setOpen(!shown)}
+        aria-expanded={shown}
+        className="group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="min-w-0 truncate text-muted-foreground">
+          <span className="font-medium text-foreground">{groupSummary(steps)}</span>
+          <span className="text-subtle-foreground"> · {plural(calls, "step")}</span>
+        </span>
+        {failed && <span className="shrink-0 rounded bg-danger-soft px-1.5 text-2xs font-medium text-danger-fg">error</span>}
+        <span className="flex-1" />
+        <ChevronRight className={cn("size-3.5 shrink-0 text-subtle-foreground transition-transform", shown && "rotate-90")} />
+      </button>
+      {!shown && files.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-2 pb-1">
+          {files.map((f) => (
+            <FileChip key={f.path} {...f} />
+          ))}
+        </div>
+      )}
+      {shown && (
+        <ol className="space-y-0.5 border-l border-dashed pb-1 pl-1 animate-in fade-in-0 duration-150 [&>li]:pl-7 [&>li>span:first-child]:left-0">
+          {steps.map((s) => (
+            <ToolRow key={s.key} kind={s.kind} items={s.items} running={running} />
+          ))}
+        </ol>
+      )}
+    </li>
+  )
+}
+
+/** A step to render: one step, or a run of tool steps folded together. */
+type Row = Step | { type: "group"; key: string; steps: Extract<Step, { type: "tools" }>[] }
+
+/** Runs of three or more tool steps in a row become one foldable group. */
+function grouped(steps: Step[]): Row[] {
+  const out: Row[] = []
+  let run: Extract<Step, { type: "tools" }>[] = []
+  const flush = () => {
+    if (run.length >= 3) out.push({ type: "group", key: `g-${run[0].key}`, steps: run })
+    else out.push(...run)
+    run = []
+  }
+  for (const s of steps) {
+    if (s.type === "tools") run.push(s)
+    else {
+      flush()
+      out.push(s)
+    }
+  }
+  flush()
+  return out
+}
+
+/** The brief or prompt a session started from: a council brief as a page, anything else as text. */
+function StartPrompt({ session }: { session: WorkSession }) {
+  const [full, setFull] = useState(false)
+  const [more, setMore] = useState(false)
+  // The task only: after the "# Task" heading, before Work's verify and report sections.
+  const task = (session.prompt.split(/\n# Task[^\n]*\n/)[1] ?? session.prompt).split(/\n## Verify\n/)[0]
+  const parsed = useMemo(() => parseBrief(task), [task])
+  const structured = parsed.sections.some((s) => s.heading !== "")
+  const long = task.length > 700
+  return (
+    <div className="rounded-xl border bg-brand-soft/40 px-4 py-3" data-testid="start-prompt">
+      <div className="mb-1.5 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
+        {session.card ? "Card brief" : "Prompt"}
+        {session.brief && <span className="truncate font-mono normal-case tracking-normal">{session.brief}</span>}
+      </div>
+      {full ? (
+        <Prose text={session.prompt} />
+      ) : (
+        <div className={cn("relative", long && !more && "max-h-64 overflow-hidden")}>
+          {structured ? (
+            <div data-testid="brief-rendered">
+              {parsed.title && <p className="mb-2 text-sm font-semibold">{parsed.title}</p>}
+              <BriefBody b={parsed} compact />
+            </div>
+          ) : (
+            <Prose text={task} />
+          )}
+          {long && !more && <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background/90 to-transparent" />}
+        </div>
+      )}
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {long && !full && (
+          <button onClick={() => setMore((m) => !m)} className="hover:text-foreground">
+            {more ? "Show less" : "Show the whole brief"}
+          </button>
+        )}
+        <button onClick={() => setFull((s) => !s)} className="hover:text-foreground">
+          {full ? "Show the brief only" : "Show the full prompt, with the worktree rules"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /**
  * The run as a conversation: your prompt, the agent's messages, and between
- * them compact rows for what it did.
+ * them compact rows for what it did. Runs of tool calls fold into one line,
+ * and each turn's separator sticks under the header while you read it.
  */
-export function Timeline({ session, steps, now }: { session: WorkSession; steps: Step[]; now: number }) {
+export function Timeline({ session, steps, now, onOpenChanges }: { session: WorkSession; steps: Step[]; now: number; onOpenChanges?: () => void }) {
   const running = session.status === "running"
   const waiting = session.status === "waiting"
-  const [showPrompt, setShowPrompt] = useState(false)
   const name = providerInfo(session.provider)?.label ?? session.provider
   const turns = session.turns ?? []
   const multi = turns.length > 1
   const current = turns[turns.length - 1]
-  // The task only: after the "# Task" heading, before Work's verify and report sections.
-  const brief = (session.prompt.split(/\n# Task[^\n]*\n/)[1] ?? session.prompt).split(/\n## Verify\n/)[0]
+  const rows = useMemo(() => grouped(steps), [steps])
+  const lastRow = rows[rows.length - 1]
+  const files = session.diff?.files ?? []
   return (
-    <ol className="relative space-y-1">
+    <ol className="relative space-y-1.5">
       <span aria-hidden className="absolute bottom-3 left-[17px] top-3 w-px bg-border" />
 
-      <li className="relative pb-3 pl-9">
+      <li className="relative pb-2 pl-9">
         <YouAvatar />
-        <div className="rounded-xl border bg-brand-soft/40 px-4 py-3">
-          <div className="mb-1 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
-            {session.card ? "Card brief" : "Prompt"}
-            {session.brief && <span className="normal-case tracking-normal font-mono">{session.brief}</span>}
-          </div>
-          <Prose text={showPrompt ? session.prompt : brief} className={cn(!showPrompt && "line-clamp-[12]")} />
-          <button onClick={() => setShowPrompt((s) => !s)} className="mt-2 text-xs text-muted-foreground hover:text-foreground">
-            {showPrompt ? "Show the brief only" : "Show the full prompt, with the worktree rules"}
-          </button>
-        </div>
+        <StartPrompt session={session} />
       </li>
 
-      {steps.map((s) => {
+      {rows.map((s, i) => {
+        const prev = rows[i - 1]
         switch (s.type) {
-          case "message":
+          case "group":
+            return <ToolGroup key={s.key} steps={s.steps} running={running} live={running && s === lastRow} />
+          case "message": {
+            // A name over the agent's first message after you spoke, as a chat does.
+            const first = !prev || prev.type === "turn"
             return (
-              <li key={s.key} className="relative py-1.5 pl-9">
+              <li key={s.key} className="relative py-2 pl-9">
                 <Avatar provider={session.provider} />
-                <div className="pt-0.5">
-                  <Prose text={s.text} />
+                {first && <div className="mb-0.5 text-xs font-medium text-muted-foreground">{name}</div>}
+                <div className={cn(!first && "pt-0.5")}>
+                  <Prose text={s.text} className="text-[0.9375rem] leading-7" />
                 </div>
               </li>
             )
+          }
           case "tools":
             return <ToolRow key={s.key} kind={s.kind} items={s.items} running={running} />
           case "error":
@@ -392,7 +579,12 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
           case "turn": {
             const t = turns.find((x) => x.n === s.n)
             return [
-              <li key={`${s.key}-sep`} className="relative z-[1] bg-background pb-2 pt-4" data-testid="turn-separator">
+              <li
+                key={`${s.key}-sep`}
+                className="sticky z-[5] -mx-1 bg-background/90 px-1 pb-2 pt-3 backdrop-blur-sm"
+                style={{ top: "var(--session-head, 0px)" }}
+                data-testid="turn-separator"
+              >
                 <div className="flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
                   <span className="h-px flex-1 bg-border" aria-hidden />
                   <span className="text-foreground">Turn {s.n}</span>
@@ -402,11 +594,11 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
                   <span className="h-px flex-1 bg-border" aria-hidden />
                 </div>
               </li>,
-              <li key={s.key} className="relative pb-3 pl-9">
+              <li key={s.key} className="relative pb-2 pl-9">
                 <YouAvatar />
                 <div className="rounded-xl border bg-brand-soft/40 px-4 py-3">
                   <div className="mb-1 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">Follow-up</div>
-                  <Prose text={s.prompt} />
+                  <Prose text={s.prompt} className="text-[0.9375rem] leading-7" />
                 </div>
               </li>,
             ]
@@ -462,19 +654,27 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
           </div>
         </li>
       ) : (
-        <li className="relative py-2 pl-9">
+        <li className="relative py-2 pl-9" data-testid="ended-footer">
           <span
             className={cn(
               "absolute left-[7px] top-2.5 z-[1] flex size-[22px] items-center justify-center rounded-full border bg-card",
-              session.status === "done" ? "border-success/50 text-success" : session.status === "failed" ? "border-danger/50 text-danger" : "text-subtle-foreground",
+              session.status === "done" || session.status === "merged"
+                ? "border-success/50 text-success"
+                : session.status === "failed"
+                  ? "border-danger/50 text-danger"
+                  : "text-subtle-foreground",
             )}
           >
-            {session.status === "done" ? <CircleCheck className="size-3.5" /> : <CircleX className="size-3.5" />}
+            {session.status === "merged" ? (
+              <GitMerge className="size-3.5" />
+            ) : session.status === "done" ? (
+              <CircleCheck className="size-3.5" />
+            ) : (
+              <CircleX className="size-3.5" />
+            )}
           </span>
           <div className="pt-1 text-sm">
-            <span className="font-medium">
-              {session.status === "done" ? "Finished" : session.status === "failed" ? "Failed" : "Stopped"}
-            </span>
+            <span className="font-medium">{ENDED[session.status] ?? "Stopped"}</span>
             <span className="text-muted-foreground">
               {" "}
               {costLine(elapsedOf(session, now), session.usage)}
@@ -484,6 +684,25 @@ export function Timeline({ session, steps, now }: { session: WorkSession; steps:
           </div>
         </li>
       )}
+      {!running && files.length > 0 && (
+        <li className="relative -mt-1 pb-1 pl-9">
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Files changed">
+            {files.slice(0, 12).map((f) => (
+              <FileChip key={f.path} path={f.path} added={f.added} deleted={f.deleted} onClick={onOpenChanges} />
+            ))}
+            {files.length > 12 && <span className="text-2xs text-subtle-foreground">and {files.length - 12} more</span>}
+          </div>
+        </li>
+      )}
     </ol>
   )
+}
+
+/** How an ended session's last line reads. */
+const ENDED: Partial<Record<WorkSession["status"], string>> = {
+  done: "Finished",
+  failed: "Failed",
+  stopped: "Stopped",
+  merged: "Merged",
+  closed: "PR closed",
 }
