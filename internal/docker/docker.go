@@ -25,8 +25,17 @@ import (
 // Func runs the docker CLI with args and returns its standard output.
 type Func func(ctx context.Context, args ...string) ([]byte, error)
 
-// Exec runs the real docker CLI.
+// Exec runs the real docker CLI. While the engine is unreachable it backs
+// off instead of spawning docker on every call (see Breaker).
 func Exec(ctx context.Context, args ...string) ([]byte, error) {
+	return engine.Do(ctx, args...)
+}
+
+// EngineDown reports whether the last real docker call found no engine and
+// Exec is still backing off.
+func EngineDown() bool { return engine.Down() }
+
+func spawn(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
