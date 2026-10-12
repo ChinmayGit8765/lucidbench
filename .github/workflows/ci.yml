@@ -52,10 +52,11 @@ jobs:
       - run: npm run check-links
 
   # The UI end to end in headless Chromium, against a lucidd with a temporary
-  # data dir and fake claude, codex, grok, gh and docker on its PATH.
+  # data dir and fake claude, codex, grok, gh, docker and vercel on its PATH,
+  # and in-test fake Stripe, Linear, Trello, GitHub and Kubernetes servers.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
