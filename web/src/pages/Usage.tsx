@@ -12,6 +12,7 @@ import { usePrefs } from "@/lib/prefs"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import {
   fmtTokens,
+  gaugeTone,
   livePercent,
   resetsIn,
   usageURL,
@@ -25,6 +26,7 @@ import {
   type UsageWindow,
 } from "@/lib/usage"
 import { cn, plural } from "@/lib/utils"
+import { Planner } from "@/pages/usage/Planner"
 
 /** The stacked series, bottom to top. Colours come from the theme's status tokens. */
 const SERIES = [
@@ -36,7 +38,7 @@ const SERIES = [
 
 type SeriesKey = (typeof SERIES)[number]["key"]
 
-const barTone = (pct: number) => (pct >= USAGE_WARN_PERCENT ? "bg-danger" : pct >= 60 ? "bg-warning" : "bg-brand")
+const barTone = gaugeTone
 
 /* ---------- limit windows ---------- */
 
@@ -330,6 +332,8 @@ export default function Usage() {
       {s && (
         <>
           <WindowsCard providers={gauges} title={`${title} windows`} now={now} />
+
+          <Planner />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Tokens, last {s.days} days</h2>

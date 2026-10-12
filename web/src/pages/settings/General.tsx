@@ -1,13 +1,16 @@
-import { useEffect, useRef, type ReactNode } from "react"
-import { BookOpen, ExternalLink, Sparkles } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { BookOpen, ExternalLink, RefreshCw, Sparkles } from "lucide-react"
+import { toast } from "sonner"
 
 import { CopyCommand, copyText } from "@/components/CopyCommand"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ErrorState, Skeleton } from "@/components/ui/states"
-import { usePoll } from "@/lib/api"
+import { errorMessage, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { SETUP_ROUTE } from "@/lib/setup"
+import { absoluteTime, relativeTime, useNow } from "@/lib/time"
+import { checkNow, UPDATE_PATH, UPDATE_POLL_MS, type UpdateStatus } from "@/lib/update"
 import { cn } from "@/lib/utils"
 import { Section } from "@/pages/settings/controls"
 
@@ -97,6 +100,95 @@ function VaultSection({ dataDir, focus }: { dataDir?: string; focus: boolean }) 
   )
 }
 
+/**
+ * Updates: what is installed, the newest release found and a manual check.
+ * Nothing is downloaded; the links open the release page.
+ */
+function UpdatesSection() {
+  const poll = usePoll<UpdateStatus>(UPDATE_PATH, UPDATE_POLL_MS)
+  const [busy, setBusy] = useState(false)
+  const now = useNow(60000)
+  const u = poll.data
+  const check = async () => {
+    setBusy(true)
+    try {
+      const r = await checkNow()
+      poll.refresh()
+      if (r.offline) toast.message("Could not reach GitHub. Lucidbench tries again later.")
+      else if (r.available) toast.success(`Lucidbench ${r.latest} is out.`)
+      else if (r.enabled && r.latest) toast.success("You have the newest version.")
+    } catch (e) {
+      toast.error(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Section
+      title="Updates"
+      description="Lucidbench asks GitHub at most every six hours whether a newer version is out. It never downloads or installs anything."
+      actions={
+        <Button variant="secondary" size="sm" onClick={() => void check()} disabled={busy || !u?.enabled || !!u?.note?.includes("development build")} data-testid="update-check">
+          <RefreshCw className={cn(busy && "animate-spin")} /> Check for updates
+        </Button>
+      }
+    >
+      {!u ? (
+        <div className="border-t p-5">
+          <Skeleton className="h-5 w-64" />
+        </div>
+      ) : (
+        <dl data-testid="update-status">
+          <Item label="Installed">
+            <span className="font-mono">{u.current}</span>
+          </Item>
+          <Item label="Newest release">
+            {u.latest ? (
+              <>
+                <span className="font-mono">{u.latest}</span>
+                {u.available ? <StatusPill tone="info">update available</StatusPill> : <StatusPill tone="success">up to date</StatusPill>}
+                {u.url && (
+                  <a href={u.url} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline">
+                    Release notes
+                  </a>
+                )}
+                {u.available && u.download_url && (
+                  <a href={u.download_url} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline">
+                    Download
+                  </a>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground">{u.note ?? "Not checked yet."}</span>
+            )}
+          </Item>
+          {u.checked_at && (
+            <Item label="Last checked">
+              <span className="text-muted-foreground" title={absoluteTime(u.checked_at)}>
+                {relativeTime(u.checked_at, now)}
+                {u.offline ? " (GitHub could not be reached)" : ""}
+              </span>
+            </Item>
+          )}
+          <Item label="Turn off">
+            <span className="text-xs text-muted-foreground">
+              {u.enabled ? (
+                <>
+                  Add <code className="font-mono">update_check: false</code> to your config file (or set <code className="font-mono">LUCID_UPDATE_CHECK=false</code>) and restart.
+                </>
+              ) : (
+                <>
+                  Off: <code className="font-mono">update_check: false</code> is set. Remove it and restart to turn checks back on.
+                </>
+              )}
+            </span>
+          </Item>
+        </dl>
+      )}
+    </Section>
+  )
+}
+
 export function General({ focus }: { focus?: string }) {
   const { navigate } = useApp()
   const about = usePoll<About>("/api/about", 60000)
@@ -142,6 +234,8 @@ export function General({ focus }: { focus?: string }) {
           </dl>
         )}
       </Section>
+
+      <UpdatesSection />
 
       <VaultSection dataDir={a?.data_dir} focus={focus === "vault"} />
 

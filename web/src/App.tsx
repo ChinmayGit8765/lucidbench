@@ -6,6 +6,7 @@ import { CelebrationWatcher, Celebrations } from "@/components/Celebrate"
 import { CommandPalette, useCommandPaletteHotkey, type Command } from "@/components/CommandPalette"
 import { ShortcutSheet, useShortcuts } from "@/components/Shortcuts"
 import { Header, Sidebar } from "@/components/Shell"
+import { UpdateBanner } from "@/components/UpdateBanner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { EmptyState, LoadingArt, Skeleton } from "@/components/ui/states"
@@ -132,6 +133,7 @@ function Workbench() {
         <Sidebar current={module?.id} version={health?.version} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Header module={module} health={health} />
+          <UpdateBanner />
           <main className="@container flex-1 overflow-auto">
             <div
               key={module?.id ?? "none"}
