@@ -15,6 +15,7 @@ import {
   NotebookPen,
   PenLine,
   Play,
+  RefreshCw,
   RotateCcw,
   ShieldAlert,
   Sparkles,
@@ -641,7 +642,7 @@ function SessionPage({ id }: { id: string }) {
               </ul>
             </Callout>
           )}
-          {done && s.brief && <BriefCard s={s} onChanged={update} refetch={refetch} />}
+          {done && s.brief && <BriefCard s={s} />}
           <section className="space-y-3">
             {done && <h2 className="pt-2 text-sm font-semibold text-muted-foreground">How the council got here</h2>}
             <Timeline s={s} />
@@ -649,6 +650,7 @@ function SessionPage({ id }: { id: string }) {
         </div>
         <Aside s={s} />
       </div>
+      {(done || s.status === "failed") && <ActionBar s={s} onChanged={update} refetch={refetch} />}
     </div>
   )
 }
@@ -891,52 +893,10 @@ function CostLine({ s }: { s: CouncilSession }) {
   )
 }
 
-function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s: CouncilSession) => void; refetch: () => Promise<void> }) {
+function BriefCard({ s }: { s: CouncilSession }) {
   const { open } = useApp()
-  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
-  const [asking, setAsking] = useState(false)
   const b = useMemo(() => parseBrief(s.brief ?? ""), [s.brief])
   const approved = s.status === "approved"
-
-  // A blocker in the newest critiques is still open: say so, and ask twice.
-  const blockers = latestBlockers(s)
-  const approve = () =>
-    setConfirm({
-      title: blockers.length > 0 ? "A critic still sees a blocker" : "Approve this brief?",
-      description:
-        blockers.length > 0
-          ? `The latest critiques list ${plural(blockers.length, "blocker")} that the brief may not have fixed. Ask again with your notes, or approve anyway: the page in Memory is marked approved and a card is added to Ready${s.project ? `, on ${s.project}` : ""}.`
-          : `The page in Memory is marked approved and a card is added to Ready on the work board${s.project ? `, on ${s.project}` : ""}.`,
-      body:
-        blockers.length > 0 ? (
-          <ul aria-label="Open blockers" className="max-h-56 space-y-1.5 overflow-auto rounded-lg border border-danger/30 bg-danger-soft/60 p-3 text-xs">
-            {blockers.map((b, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-danger" />
-                <span className="min-w-0">
-                  <span className="font-medium text-danger-fg">{label(b.provider)}: </span>
-                  {b.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : undefined,
-      confirmLabel: blockers.length > 0 ? "Approve anyway" : "Approve and add card",
-      danger: blockers.length > 0,
-      run: async () => {
-        try {
-          const card = await approveBrief(s.id, undefined, blockers.length > 0)
-          toast.success("Card added to Ready", {
-            description: card.title,
-            action: { label: "Open card", onClick: () => open("boards", [DEFAULT_BOARD, card.id]) },
-          })
-          await refetch()
-        } catch (e) {
-          toast.error("Could not approve the brief", { description: errorMessage(e) })
-        }
-      },
-    })
-
   return (
     <Card className="overflow-hidden">
       <div className="relative border-b px-6 pb-4 pt-5">
@@ -968,17 +928,131 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t bg-muted/25 px-6 py-3">
         <CostLine s={s} />
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {s.brief_path && (
-            <Button variant="ghost" size="sm" onClick={() => open("memory", s.brief_path!.split("/"))}>
-              <NotebookPen /> Open in Memory
-            </Button>
+        {s.brief_path && (
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => open("memory", s.brief_path!.split("/"))}>
+            <NotebookPen /> Open in Memory
+          </Button>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+/** "Codex: looks good · Grok: 2 concerns": what each critic said in the newest round. */
+function Verdicts({ s }: { s: CouncilSession }) {
+  const last = s.rounds[s.rounds.length - 1]
+  const critiques = (last?.critiques ?? []).filter((c) => !c.skipped && c.verdict)
+  if (critiques.length === 0) return <span className="text-xs text-muted-foreground">{roundsLabel({ rounds: s.rounds.length, max_rounds: s.max_rounds })}</span>
+  return (
+    <ul aria-label="Verdicts" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+      {critiques.map((c) => {
+        const v = VERDICT[c.verdict!]
+        const n = (c.points ?? []).length
+        return (
+          <li key={c.provider} className="inline-flex items-center gap-1.5 text-xs">
+            <ProviderMark provider={c.provider} className="size-3.5" />
+            <span className="text-muted-foreground">{label(c.provider)}</span>
+            <StatusPill tone={v.tone}>
+              {v.label}
+              {n > 0 && c.verdict !== "ok" ? ` · ${plural(n, "point")}` : ""}
+            </StatusPill>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
+ * The bar that stays at the bottom of a finished council: the verdicts in
+ * one line and the next step, so Approve is never below the fold. Approve
+ * is one click; it asks first only when a critic still sees a blocker. Send
+ * back takes your notes for another round; Run again starts a new council
+ * on the same braindump, which spends model calls, so it asks first.
+ */
+function ActionBar({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s: CouncilSession) => void; refetch: () => Promise<void> }) {
+  const { open } = useApp()
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const approved = s.status === "approved"
+  const blockers = latestBlockers(s)
+
+  const doApprove = async (anyway: boolean) => {
+    setBusy(true)
+    try {
+      const card = await approveBrief(s.id, undefined, anyway)
+      toast.success("Approved: card added to Ready", {
+        description: card.title,
+        action: { label: "Open card", onClick: () => open("boards", [DEFAULT_BOARD, card.id]) },
+      })
+      await refetch()
+    } catch (e) {
+      toast.error("Could not approve the brief", { description: errorMessage(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  // A blocker in the newest critiques is still open: say so before approving.
+  const approve = () =>
+    blockers.length === 0
+      ? void doApprove(false)
+      : setConfirm({
+          title: "A critic still sees a blocker",
+          description: `The latest critiques list ${plural(blockers.length, "blocker")} that the brief may not have fixed. Send it back with your notes, or approve anyway: the page in Memory is marked approved and a card is added to Ready${s.project ? `, on ${s.project}` : ""}.`,
+          body: (
+            <ul aria-label="Open blockers" className="max-h-56 space-y-1.5 overflow-auto rounded-lg border border-danger/30 bg-danger-soft/60 p-3 text-xs">
+              {blockers.map((b, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-danger" />
+                  <span className="min-w-0">
+                    <span className="font-medium text-danger-fg">{label(b.provider)}: </span>
+                    {b.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ),
+          confirmLabel: "Approve anyway",
+          danger: true,
+          run: () => doApprove(true),
+        })
+  const calls = maxCalls(s.critics.length, s.max_rounds)
+  const runAgain = () =>
+    setConfirm({
+      title: "Run the council again?",
+      description: `A new council starts on the same braindump, with ${label(s.proposer)} drafting and ${s.critics.length ? joinNames(s.critics.map(label)) : "no critic"} reviewing: up to ${calls} model calls on your own plans. This brief stays as it is.`,
+      confirmLabel: "Run again",
+      run: async () => {
+        try {
+          const next = await startCouncil({ input: s.input, project: s.project, proposer: s.proposer, critics: s.critics, rounds: s.max_rounds })
+          open("council", [next.id])
+        } catch (e) {
+          toast.error("Could not start the council", { description: errorMessage(e) })
+        }
+      },
+    })
+
+  return (
+    <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 py-2.5 backdrop-blur-md md:-mx-8 md:px-8" data-testid="council-actions">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+          {approved ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-success-fg">
+              <CheckCircle2 className="size-4" /> Approved. On the work board · {s.card?.column ?? "Ready"}
+            </span>
+          ) : s.status === "failed" ? (
+            <span className="text-sm text-danger-fg">The council stopped before a brief.</span>
+          ) : (
+            <>
+              <span className="text-sm font-medium">{blockers.length ? `${plural(blockers.length, "blocker")} still open` : "No blocker left"}</span>
+              <Verdicts s={s} />
+            </>
           )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           {approved ? (
             <>
-              <span className="flex items-center gap-1.5 text-xs text-success-fg">
-                <CheckCircle2 className="size-3.5" /> On the work board · {s.card?.column ?? "Ready"}
-              </span>
               <Button variant="secondary" size="sm" onClick={() => open("boards", s.card ? [DEFAULT_BOARD, s.card.id] : [DEFAULT_BOARD])}>
                 <KanbanSquare /> Open card
               </Button>
@@ -990,19 +1064,26 @@ function BriefCard({ s, onChanged, refetch }: { s: CouncilSession; onChanged: (s
             </>
           ) : (
             <>
-              <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
-                <RotateCcw /> Ask again
+              <Button variant="ghost" size="sm" onClick={runAgain} title={`A new council on the same braindump (up to ${calls} calls)`}>
+                <RefreshCw /> Run again
               </Button>
-              <Button size="sm" onClick={approve}>
-                <Check /> Approve
-              </Button>
+              {s.status === "draft" && (
+                <>
+                  <Button variant="secondary" size="sm" onClick={() => setAsking(true)} title="Another round with your notes">
+                    <RotateCcw /> Send back
+                  </Button>
+                  <Button size="sm" onClick={approve} disabled={busy} variant={blockers.length ? "secondary" : "default"}>
+                    {busy ? <Loader2 className="animate-spin" /> : <Check />} Approve
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>
       </div>
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
       <AskAgainDialog key={String(asking)} open={asking} onClose={() => setAsking(false)} s={s} onStarted={onChanged} />
-    </Card>
+    </div>
   )
 }
 

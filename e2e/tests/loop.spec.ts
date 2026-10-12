@@ -39,7 +39,6 @@ test("the whole loop: braindump, council, approve, work, diff, PR, merged, Done"
 
   // Approve → a card in Ready.
   await page.getByRole("button", { name: "Approve", exact: true }).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Approve and add card" }).click()
   await expect(page.getByText(/On the work board · Ready/)).toBeVisible()
   const card = (await cardsOf()).find((c) => c.title === TITLE)
   expect(card?.column).toBe("Ready")
