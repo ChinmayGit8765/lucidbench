@@ -364,6 +364,52 @@ func TestUnblockingBeatsStaleness(t *testing.T) {
 	}
 }
 
+// A need and the card that covers it are one item: "App needs an API client
+// from Lib" and the card "API client for App" on Lib.
+func TestNeedCoveredByACardIsOneItem(t *testing.T) {
+	l := projectList(t)
+	board := func(cards ...boards.Card) Sources {
+		return Sources{
+			Projects: func() (*projects.List, error) { return l, nil },
+			Boards: func() ([]boards.Board, error) {
+				return []boards.Board{{ID: "work", Title: "Work", Columns: boards.DefaultColumns, Cards: cards}}, nil
+			},
+		}
+	}
+
+	v := service(t, board(boards.Card{ID: "c1", Title: "API client for App", Column: "In progress", Project: "lib"})).List(context.Background())
+	got := byID(v.Items)
+	if _, ok := got["need:app/0"]; ok {
+		t.Fatalf("the need should fold into its card: %v", ids(v.Items))
+	}
+	card, ok := got["card:work/c1"]
+	if !ok || len(v.Items) != 1 {
+		t.Fatalf("want the card alone, got %v", ids(v.Items))
+	}
+	if !hasPart(card, "unblocking", "unblocks App") {
+		t.Errorf("the card should carry what the need unblocks: %+v", card.Parts)
+	}
+
+	// The same words on another project's card, a card that misses a word,
+	// and a done card cover nothing: the need stays its own item.
+	for name, c := range map[string]boards.Card{
+		"other project": {ID: "c2", Title: "API client", Column: "Ready", Project: "secret"},
+		"missing word":  {ID: "c3", Title: "Client onboarding notes", Column: "Ready", Project: "lib"},
+		"done":          {ID: "c4", Title: "The API client", Column: "Done", Project: "lib", Done: true},
+	} {
+		v := service(t, board(c)).List(context.Background())
+		if _, ok := byID(v.Items)["need:app/0"]; !ok {
+			t.Errorf("%s: the need should stay listed: %v", name, ids(v.Items))
+		}
+	}
+
+	// A card that holds every word on the needing project counts as well.
+	v = service(t, board(boards.Card{ID: "c5", Title: "Wire up an API client", Column: "Ready", Project: "app"})).List(context.Background())
+	if _, ok := byID(v.Items)["need:app/0"]; ok {
+		t.Errorf("a card on the needing project covers the need too: %v", ids(v.Items))
+	}
+}
+
 func pct(f float64) *float64 { return &f }
 
 func TestUsageHeadroomDemotesSpendingWork(t *testing.T) {

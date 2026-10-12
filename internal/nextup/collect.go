@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/boards"
 	"github.com/ChinmayGit8765/lucidbench/internal/linear"
@@ -603,8 +605,16 @@ func (w *world) collect(now time.Time) []Candidate {
 		out = append(out, cand)
 	}
 
-	// Project needs that are not done.
+	// Project needs that are not done. A need a card already covers ("Tide
+	// needs Release pipeline" and the card "Release pipeline for Tide") is
+	// one piece of work: the card stays, and carries what the need unblocks.
 	if w.list != nil {
+		cards := map[string]int{}
+		for i := range out {
+			if out[i].Kind == KindCard {
+				cards[out[i].ID] = i
+			}
+		}
 		for _, p := range w.list.Projects {
 			if !live(p.Status) {
 				continue
@@ -618,6 +628,12 @@ func (w *world) collect(now time.Time) []Candidate {
 				if n.From != "" && w.project(n.From) != nil {
 					owner = n.From
 					title += " from " + w.projectName(n.From)
+				}
+				if ref, ok := w.coveringCard(n.What, p.ID, owner); ok {
+					if j, listed := cards[ref]; listed && owner != p.ID && !slices.Contains(out[j].sig.unblocks, p.Name) {
+						out[j].sig.unblocks = append(out[j].sig.unblocks, p.Name)
+					}
+					continue
 				}
 				cand := Candidate{
 					ID: fmt.Sprintf("need:%s/%d", p.ID, i), Kind: KindNeed, Source: "projects", Title: title,
@@ -638,6 +654,49 @@ func (w *world) collect(now time.Time) []Candidate {
 				cand.Action, cand.sig.provider = w.workAction(ActStartWork, owner, "", prompt, open)
 				out = append(out, cand)
 			}
+		}
+	}
+	return out
+}
+
+// coveringCard finds an open board card on the need's project (or the
+// project that owes it) whose title holds every word of the need, and
+// returns its candidate id. Done cards cover nothing.
+func (w *world) coveringCard(what, project, owner string) (string, bool) {
+	need := words(what)
+	if len(need) == 0 {
+		return "", false
+	}
+	for _, b := range w.boards {
+		for _, c := range b.Cards {
+			if c.Done || (c.Project != project && c.Project != owner) {
+				continue
+			}
+			have := words(c.Title)
+			all := true
+			for wd := range need {
+				if !have[wd] {
+					all = false
+					break
+				}
+			}
+			if all {
+				return "card:" + b.ID + "/" + c.ID, true
+			}
+		}
+	}
+	return "", false
+}
+
+// fillers are the words a title can drop without changing what it asks for.
+var fillers = map[string]bool{"a": true, "an": true, "the": true, "for": true, "from": true, "to": true, "of": true, "and": true, "on": true, "in": true, "with": true}
+
+// words is the set of lower-case words in s, fillers left out.
+func words(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if !fillers[f] {
+			out[f] = true
 		}
 	}
 	return out
