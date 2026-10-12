@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { CalendarDays, Check, ChevronLeft, FileText, LayoutList, PenLine, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
+import { CalendarDays, Check, ChevronLeft, ChevronRight, FileText, LayoutList, PenLine, Plus, SquareKanban, Vote, SquareTerminal, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader, RefreshButton } from "@/components/Shell"
@@ -261,8 +261,7 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
         </Card>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onStart} onDragOver={onOver} onDragEnd={(e) => void onEnd(e)} onDragCancel={() => setDragging(null)}>
-        <div className="-mx-5 overflow-x-auto px-5 pb-4 md:-mx-8 md:px-8">
-          <div className="flex min-h-[28rem] items-start gap-3">
+        <ColumnScroller>
             {board.columns.map((col, i) => (
               <Column
                 key={col}
@@ -279,8 +278,7 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
                 })}
               </Column>
             ))}
-          </div>
-        </div>
+        </ColumnScroller>
         <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
           {dragging && cards.get(dragging) ? <CardFace card={cards.get(dragging)!} overlay /> : null}
         </DragOverlay>
@@ -294,6 +292,79 @@ export function Kanban({ id, cardId }: { id: string; cardId: string | null }) {
           if (c.column !== columnOf(c.id)) reload()
         }}
       />
+    </div>
+  )
+}
+
+/**
+ * The row of columns. Columns share the width down to a readable minimum;
+ * past that the row scrolls sideways, with a fade on each side that has
+ * more and a "N more" button on the right, so a hidden Done column is never
+ * a surprise. Dragging a card to an edge scrolls the row (dnd-kit's
+ * auto-scroll), so the drop target can be reached.
+ */
+function ColumnScroller({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ left: false, right: false, hidden: 0 })
+  const measure = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const box = el.getBoundingClientRect()
+    const cols = [...el.querySelectorAll<HTMLElement>(":scope > div > section")]
+    const hidden = cols.filter((c) => c.getBoundingClientRect().right > box.right - 24).length
+    setEdges({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2, hidden })
+  }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    el.addEventListener("scroll", measure, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener("scroll", measure)
+    }
+  }, [measure])
+  const step = (dir: number) => {
+    const el = ref.current
+    const col = el?.querySelector<HTMLElement>(":scope > div > section")
+    el?.scrollBy({ left: dir * ((col?.offsetWidth ?? 240) + 12), behavior: "smooth" })
+  }
+  return (
+    <div className="relative -mx-5 md:-mx-8" data-testid="board-columns">
+      <div ref={ref} className="overflow-x-auto px-5 pb-4 [scrollbar-width:thin] md:px-8">
+        <div className="flex min-h-[28rem] items-start gap-3">{children}</div>
+      </div>
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-background to-transparent transition-opacity md:w-14", edges.left ? "opacity-100" : "opacity-0")}
+      />
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-background to-transparent transition-opacity md:w-16", edges.right ? "opacity-100" : "opacity-0")}
+      />
+      {edges.left && (
+        <button
+          type="button"
+          onClick={() => step(-1)}
+          aria-label="Scroll to the earlier columns"
+          className="absolute left-2 top-3 z-10 inline-flex size-7 items-center justify-center rounded-full border bg-elevated text-muted-foreground shadow-sm hover:text-foreground md:left-4"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      )}
+      {edges.right && (
+        <button
+          type="button"
+          onClick={() => step(1)}
+          className="absolute right-2 top-3 z-10 inline-flex h-7 items-center gap-1 rounded-full border bg-elevated pl-2.5 pr-1.5 text-xs font-medium text-muted-foreground shadow-sm hover:text-foreground md:right-4"
+          data-testid="board-scroll-cue"
+        >
+          {edges.hidden > 0 ? `${edges.hidden} more` : "More"} <ChevronRight className="size-4" />
+        </button>
+      )}
     </div>
   )
 }
@@ -328,7 +399,7 @@ function Column({
   return (
     <section
       aria-label={`${name} column`}
-      className={cn("flex max-h-[calc(100vh-15rem)] w-72 shrink-0 flex-col rounded-xl border bg-muted/40 transition-colors", isOver && "border-brand/50 bg-brand-soft/40")}
+      className={cn("flex max-h-[calc(100vh-15rem)] min-w-[12.5rem] max-w-[22rem] flex-1 basis-0 flex-col rounded-xl border bg-muted/40 transition-colors", isOver && "border-brand/50 bg-brand-soft/40")}
     >
       <header className="flex items-center gap-2 px-3 pb-2 pt-3">
         <span className="size-2 rounded-full" style={{ background: tone }} />
