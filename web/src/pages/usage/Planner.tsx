@@ -71,7 +71,7 @@ function PaceGauge({ p }: { p: Pace }) {
       </p>
       <p className="mt-0.5 text-xs text-subtle-foreground">
         {p.burn_per_hour > 0 ? `About ${fmtTokens(p.burn_per_hour)} tokens an hour over the last ${p.hours} h.` : `Nothing spent in the last ${p.hours} h.`}
-        {p.resets_at ? <span title={absoluteTime(p.resets_at)}> Resets {new Date(p.resets_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</span> : null}
+        {p.resets_at ? <span title={absoluteTime(p.resets_at)}> Resets {new Date(p.resets_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}.</span> : null}
       </p>
     </div>
   )
@@ -271,7 +271,7 @@ export function Planner() {
         <>
           {view.paces.length > 0 ? (
             <Card className="overflow-hidden">
-              <div className="grid gap-px bg-border @3xl:grid-cols-2">
+              <div className={cn("grid gap-px bg-border", view.paces.length > 1 && "@3xl:grid-cols-2")}>
                 {view.paces.map((p) => (
                   <PaceGauge key={`${p.provider}/${p.account}/${p.window}`} p={p} />
                 ))}

@@ -5,6 +5,24 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **Usage: pace and plan.** For each provider account, the current window's use, its reset and
+  the burn rate over the last 1, 2 or 6 hours, with the run-out time in plain words ("at this pace
+  codex hits its 5h limit at 14:20, 40 min before it resets"). Codex windows come from its logs;
+  Claude's 5-hour block is estimated from its logs and says so. A **Plan** card lists what you
+  mean to do today, typed in or taken from Next up's top, each with an estimate from your recent
+  runs of the same kind, provider and model, whether it fits before the reset, a suggested
+  provider from headroom and your team, and a warning when a role's `budget_usd` would be
+  exceeded. All local; saved in `<data dir>/usage/plan.json`
+  (see [Usage planning](docs/CONFIG.md#usage-planning)).
+- **Update check:** at most every six hours lucidd asks GitHub Releases whether a newer version is
+  out (semver, prereleases included for prerelease builds) and a quiet banner links to the release
+  notes and the download. Nothing is downloaded or installed. **Check for updates** is in Settings ›
+  General; `update_check: false` turns it off; offline, nothing pops up
+  (see [Update check](docs/CONFIG.md#update-check)).
+- **Assessments:** the game, web app or SaaS, video system, CLI or library and ML, research or
+  experiment questionnaires ask six to nine sharper questions (frame-rate targets, purchases,
+  tenancy, monitoring, latency, encoders, reference clips, operating systems, file writes,
+  success thresholds, a timebox). The new questions are optional, so saved assessments stay valid.
 - **Next up:** a new Workspace page, under Overview, that works out what to work on next. It gathers
   board cards (to do and in progress), briefs to approve or without a card, sessions waiting for
   you or failed, pull requests with failing checks or waiting on review, CI failing on a default

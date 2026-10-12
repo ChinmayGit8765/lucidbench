@@ -78,6 +78,8 @@ is an error that names the file and the key, for example
 | `integrations.stripe.key` | `env:STRIPE_API_KEY` | `LUCID_INTEGRATIONS_STRIPE_KEY` | Secret reference for a Stripe restricted or secret key. See [Payments (Stripe)](#payments-stripe). |
 | `integrations.stripe.api_url` | `https://api.stripe.com` | `LUCID_INTEGRATIONS_STRIPE_API_URL` | Stripe API base URL. Change it only to go through a proxy or a local fake. |
 | `team` | empty (Lucidbench's defaults) | | Your default AI team: a whole `lucid-team.yaml` version 1 document under this key, used by a project with no team of its own. It is checked when a project reads it, not at startup; a team that does not validate is skipped and the Team tab says why. See [AI team](#ai-team) and [TEAM-SPEC.md](TEAM-SPEC.md). |
+| `update_check` | `true` | `LUCID_UPDATE_CHECK` | Ask GitHub Releases, at most every six hours, whether a newer Lucidbench is out, and show a quiet banner. Never downloads or installs. See [Update check](#update-check). |
+| `update_repo` | empty (the build's repository) | `LUCID_UPDATE_REPO` | `owner/name` whose releases the update check reads. |
 
 `LUCID_CLAUDE_DIRS` (a path list) still works and is added to
 `providers.claude.extra_dirs`. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and the
@@ -330,9 +332,15 @@ re-read on every request, so edits show up on the next refresh.
 ### Project assessments
 
 A few preliminary questions judge what kind of project something is (game, web
-app, desktop app, CLI or library, service or API, ML or research, site, video or
-media, coursework) and help manage how it is built. Choose **Assess** on a
-project's card. Each kind has five to seven questions; the answers give:
+app or SaaS, desktop app, CLI or library, service or API, ML, research or
+experiment, site, video system, coursework) and help manage how it is built.
+Choose **Assess** on a project's card. Each kind has five to ten questions. The
+game, product, video system, CLI and experiment kinds ask six to nine sharp
+ones (frame-rate targets and purchases; tenancy and monitoring; latency,
+encoders and reference clips; operating systems and file writes; success
+thresholds and a timebox). Questions added after a kind first shipped are
+optional and can be skipped, so an assessment saved before them stays valid.
+The answers give:
 
 - **done criteria**, each with a proof hint, that Council offers the proposer when
   you brief that project;
@@ -780,6 +788,73 @@ Every model call (a turn or a parse) is recorded in
 `<data dir>/assistant/runs/` and counts on the Usage page as source
 `assistant`. Conversations are `<data dir>/assistant/<id>.jsonl`, one record
 per line (the conversation, each message, each Apply or Skip).
+
+## Usage planning
+
+The Usage page's **Pace and plan** section works out, from the logs and records already on
+this machine, how fast each provider account is using its current limit window and what you can
+still fit in before it resets. It never calls a provider. Tokens here are input, output and cache
+writes; cache reads are left out.
+
+**Pace.** For each account (the provider's default home, and each `extra_dirs` profile under its
+folder name):
+
+- **Codex** writes its windows (5-hour and weekly) into its logs: the share used and the reset
+  time. The window's size in tokens is implied by that share: if T tokens were spent since the
+  window started when Codex said it was U % used, the window holds about T ÷ U. This is
+  *reported*.
+- **Claude Code** does not write its limits down. Lucidbench rebuilds its 5-hour blocks from the
+  logs (a block starts at the hour of the first message after the previous block ended) and
+  measures the current block against the **busiest finished block of the last 30 days**. That
+  is a floor for the real limit, so the projection errs early, and the gauge says *estimated
+  from your logs*. A block busier than any before has no estimate.
+- **Grok and Cursor** have no local source, so they get no pace.
+
+The burn rate is the tokens spent over the last 1, 2 (default) or 6 hours. At that rate the
+section says, in plain words, when the window runs out: "At this pace codex hits its 5h limit at
+14:20, 40 min before it resets", or that it lasts until the reset.
+
+**Plan.** List what you mean to do today, or take Next up's top items with **Add from Next up**
+(the ones whose action would spend: start or resume work, fix CI, run a council). Each item has
+a kind: council, Work turn, section description, Next up ranking or Assistant turn.
+
+- **Estimate:** the median of the last 20 runs of that kind on the same provider and model, else
+  the same provider, else any provider (for a council, the whole council, which overstates one
+  seat; overstating is the safe side). With no runs of the kind, it says so instead of guessing.
+  Cost is shown only where the CLIs reported it.
+- **Fits:** items are taken in order, each spending from its provider's tightest window, so a
+  later item sees what the earlier ones used. Each is *fits*, *after reset*, *too big* (more
+  than a whole window) or *unknown* (no estimate, or no known window). A line per provider says
+  how many planned items fit before its reset.
+- **Provider:** pin one, or let Lucidbench suggest one. It keeps your team's seat for the kind
+  (council: proposer, Work: builder, ranking: scout) unless that provider's window would not
+  hold the item and a signed-in one would; with no seat, a provider with known room comes first.
+- **Budgets:** an item warns when its estimated cost is over the role's `budget_usd` (for a
+  council, over the sum of its seats' budgets, when every seat sets one).
+
+The list is saved in `<data dir>/usage/plan.json` (at most 30 items) and stays until you change it.
+
+## Update check
+
+At most once every six hours, when the UI asks, lucidd reads the repository's GitHub Releases
+(`https://api.github.com/repos/<owner>/<repo>/releases`) and compares the newest release with the
+running version by semver, prereleases included (`0.3.0-beta.10` is newer than `0.3.0-beta.9`,
+and `0.3.0` newer than both). A stable build looks at stable releases only; a prerelease build
+also sees prereleases. Drafts are skipped. When a newer one is out, a quiet line under the header
+says so, with **Release notes** and **Download** links (the installer asset when the release has
+one, else the release page); **×** hides it until the next version. Nothing is downloaded or
+installed.
+
+- The answer is cached in `<data dir>/update.json`. **Check for updates** in Settings › General
+  asks again, at most once a minute.
+- Offline, the last answer stays, Settings says GitHub could not be reached, and nothing pops up;
+  a failed attempt also waits six hours.
+- A development build (`dev`) never asks GitHub.
+- `update_check: false` (or `LUCID_UPDATE_CHECK=false`) turns it off. `update_repo: owner/name`
+  reads another repository's releases; empty means the build's own, set at build time with
+  `-ldflags "-X github.com/ChinmayGit8765/lucidbench/internal/version.Repo=owner/name"`.
+- `LUCID_E2E_UPDATE_URL` replaces the GitHub API base. It exists for the end-to-end tests' fake
+  release server and is not a config key.
 
 ## Docker and Kubernetes
 

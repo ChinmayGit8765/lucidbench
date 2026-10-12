@@ -40,6 +40,8 @@ Everything lives under `config.DataDir()`. Nothing user-specific is ever in the 
   assistant/<id>.jsonl          an Assistant conversation: meta, messages, Apply/Skip outcomes (internal/assistant)
   assistant/runs/*.json         what each Assistant turn and braindump parse cost (internal/assistant)
   bots/<id>.yaml                saved bots (internal/assistant)
+  usage/plan.json               the Usage page's plan for the day: items, kinds, pinned providers (internal/usage)
+  update.json                   the update check's last answer and when it was asked (internal/update)
 ```
 
 A project's checkout may hold `.lucid/team.yaml`, its AI team (docs/TEAM-SPEC.md); Lucidbench
@@ -217,6 +219,9 @@ func Approve(id string, project string) (*boards.Card, error)
   and the `rate_limits.primary/secondary` windows (used %, resets_at).
 - **Lucidbench runs:** read `agentexec.Usage` from council and work records.
 - **Unknown sources:** Grok and Cursor show "not available yet". Do not invent numbers.
+- **Planning:** Codex windows are sized from the share they report; Claude's 5-hour block is
+  estimated from its logs against the busiest block of the last 30 days and labelled as an
+  estimate. A provider with no window gets a burn rate and no projection.
 
 ## HTTP routes (all JSON; every write needs `X-Lucid-Confirm: yes`)
 
@@ -249,6 +254,10 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
 | `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once |
 | `/api/usage/summary?days=` | GET | per provider: tokens, cost, windows |
+| `/api/usage/plan?hours=` | GET | per account: the current window, its reset, the burn rate over the last `hours` (default 2, 0.25-24) and the run-out projection; the saved plan with estimates, the provider to use, fits/after_reset/too_big/unknown and budget warnings. Local records only |
+| `/api/usage/plan` | PUT | `{items[{id?, title, kind: council\|work\|section\|rank\|assistant, provider?, model?, project?, source?, nextup_id?}]}` saves `usage/plan.json` (at most 30 items) and returns the new view |
+| `/api/update` | GET | `{enabled, current, latest, url, download_url, notes_excerpt, prerelease, available, checked_at, next_check, offline, note}`; asks GitHub Releases only when the cached answer is over six hours old; never a 5xx for being offline |
+| `/api/update/check` | POST | asks GitHub now, at most once a minute |
 
 ## Web modules (ids are fixed)
 
@@ -285,9 +294,9 @@ func Approve(id string, project string) (*boards.Card, error)
 - "PRs open" counts draft and open PRs only. Merged and closed PRs are not counted; a PR whose state is not yet known still is.
 
 **Project assessments**
-- `GET /api/assess/kinds` lists the kinds with their questions (`id`, `text`, `type` choice|text|bool, `options`).
+- `GET /api/assess/kinds` lists the kinds with their questions (`id`, `text`, `type` choice|text|bool, `options`, `optional`).
 - `GET /api/projects/{id}/assessment` returns `{assessment, source, suggestion, suggested_kind, can_suggest}`; `assessment` is null until the project is assessed.
-- `PUT /api/projects/{id}/assessment` with `{kind, answers}` confirms it. Every choice and bool question must be answered; `assessed_at` is set by the daemon. It is saved in `<data dir>/assessments/<id>.yaml`; `projects.yaml` is never written.
+- `PUT /api/projects/{id}/assessment` with `{kind, answers}` confirms it. Every choice and bool question must be answered unless it is `optional`; `assessed_at` is set by the daemon. It is saved in `<data dir>/assessments/<id>.yaml`; `projects.yaml` is never written.
 - `POST /api/projects/{id}/assessment/preview` computes the suggestion for answers without saving. `POST .../suggest` asks the user's CLI (no tools, file names only) to guess answers; confidential projects get 403 and nothing is saved.
 - `suggestion` is `{done_criteria, check_commands, risk{level, reasons}}`. `GET /api/projects` carries `assessment`, `risk` and `assessment_from` per project.
 - Council adds the done criteria to the propose prompt. Work adds the check commands to a project's default allowed commands, also when `work.allowed_commands` is set.
