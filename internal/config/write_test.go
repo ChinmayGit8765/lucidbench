@@ -251,3 +251,27 @@ func TestWriteRoutes(t *testing.T) {
 		t.Errorf("file view %+v", v)
 	}
 }
+
+// Backups taken in the same millisecond never overwrite each other, and
+// still sort in the order they were taken.
+func TestBackupsInOneMillisecondStayApart(t *testing.T) {
+	p := writeFile(t, "power:\n  cluster: \"off\"\n")
+	var names []string
+	for i := 0; i < 5; i++ {
+		n, err := writeBackup(p, []byte{byte('a' + i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, n)
+	}
+	for i := 1; i < len(names); i++ {
+		if names[i] <= names[i-1] {
+			t.Fatalf("backup %q does not sort after %q", names[i], names[i-1])
+		}
+	}
+	for i, n := range names {
+		if b, _ := os.ReadFile(n); string(b) != string(rune('a'+i)) {
+			t.Errorf("%s holds %q", n, b)
+		}
+	}
+}

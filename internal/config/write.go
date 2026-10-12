@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -172,8 +173,7 @@ func SaveEdit(path string, set map[string]any, running *Config, getenv func(stri
 		if err != nil {
 			return nil, err
 		}
-		e.Backup = fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405.000"))
-		if err := os.WriteFile(e.Backup, old, 0o600); err != nil {
+		if e.Backup, err = writeBackup(path, old); err != nil {
 			return nil, fmt.Errorf("back up %s: %w", path, err)
 		}
 		pruneBackups(path)
@@ -189,6 +189,32 @@ func SaveEdit(path string, set map[string]any, running *Config, getenv func(stri
 		return nil, err
 	}
 	return e, nil
+}
+
+// writeBackup saves old as <path>.bak-<time>, never over an earlier backup:
+// two saves in the same millisecond get -01, -02, … after the time, which
+// still sorts in time order.
+func writeBackup(path string, old []byte) (string, error) {
+	base := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405.000"))
+	for i := 0; i < 100; i++ {
+		name := base
+		if i > 0 {
+			name = fmt.Sprintf("%s-%02d", base, i)
+		}
+		f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if _, err := f.Write(old); err != nil {
+			f.Close()
+			return "", err
+		}
+		return name, f.Close()
+	}
+	return "", fmt.Errorf("too many backups named %s", base)
 }
 
 // pruneBackups keeps the newest KeepBackups backups of path.
