@@ -201,13 +201,19 @@ function editorPlugins(bridge: Bridge) {
   const suggest = new Plugin({
     view: () => ({
       update: (view) => {
+        // A dismissed menu stays shut only while its "/" or "[[" is still
+        // there: once it is deleted (or the selection is a range), a new one
+        // typed at the same spot opens again.
+        if (bridge.dismissedAt !== null && (!view.state.selection.empty || !detect(view, null))) bridge.dismissedAt = null
         const t = detect(view, bridge.dismissedAt)
-        if (!t && bridge.dismissedAt !== null && !view.state.selection.empty) bridge.dismissedAt = null
         const cur = bridge.trigger
         if (t?.kind !== cur?.kind || t?.query !== cur?.query || t?.from !== cur?.from) bridge.set(t)
       },
     }),
     props: {
+      // Keep the caret clear of the page's sticky path bar (44px) when typing scrolls.
+      scrollMargin: { top: 64, bottom: 32, left: 0, right: 0 },
+      scrollThreshold: { top: 64, bottom: 32, left: 0, right: 0 },
       handleKeyDown: (_, e) => bridge.key(e),
       handleDOMEvents: {
         blur: () => {

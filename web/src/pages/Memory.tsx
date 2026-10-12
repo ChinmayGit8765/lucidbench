@@ -507,6 +507,9 @@ function plainSnippet(s: string): string {
   return s
     .replace(/!?\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
     .replace(/!?\[\[([^\]]+)\]\]/g, "$1")
+    // A link the snippet cuts in half, at its start or its end.
+    .replace(/!?\[\[([^\]|]*)(\|[^\]]*)?$/, "$1")
+    .replace(/^([^[]*?)(\|[^\]]*)?\]\]/, "$1")
     .replace(/(^|\s)#{1,6}\s/g, "$1")
     .replace(/(^|\s)[-*] \[[ xX]\]\s/g, "$1")
     .replace(/\*\*|__|`/g, "")
