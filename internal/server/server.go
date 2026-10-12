@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
@@ -227,6 +228,29 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		MCP:      func() mcp.Matrix { return mcp.Read(mcp.FromConfig(cfg)) },
 		Estimate: func() func(string, string) (float64, int) { return team.Estimator(data) },
 	})
+	// The Usage planner suggests providers from the team and warns on budgets.
+	d.Usage.Team = func(project string) []usage.TeamSeat {
+		t, _, _ := teams.DefaultTeam()
+		if project != "" {
+			if res, err := teams.Resolve(project); err == nil {
+				t = res.Team
+			}
+		}
+		var out []usage.TeamSeat
+		for _, s := range t.Seats() {
+			out = append(out, usage.TeamSeat{Role: s.Name, Provider: s.Role.Provider, Model: s.Role.Model, BudgetUSD: s.Role.BudgetUSD})
+		}
+		return out
+	}
+	d.Usage.Available = func() []string {
+		var out []string
+		for _, p := range accounts.Detect(accounts.FromConfig(cfg)) {
+			if p.Location == accounts.LocHost && p.Status == accounts.StatusLoggedIn && !slices.Contains(out, p.Provider) && slices.Contains(usage.PlanProviders, p.Provider) {
+				out = append(out, p.Provider)
+			}
+		}
+		return out
+	}
 	councilSvc.Team, workSvc.Team = teams.CouncilRoles, teams.WorkBuilder(data)
 	councilSvc.Runner.ProfileDir = func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }
 	sectionStore := &sections.Store{Dir: filepath.Join(data, "sections")}

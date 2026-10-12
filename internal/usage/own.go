@@ -13,7 +13,10 @@ import (
 // Prompt Studio record.
 type ownRun struct {
 	Source string // council | work | studio | sections | nextup | assistant
-	At     time.Time
+	// File is the record the run came from: a council or Work session holds
+	// several runs in one file.
+	File string
+	At   time.Time
 	agentexec.Usage
 }
 
@@ -87,7 +90,7 @@ func readOwn(dataDir string) []ownRun {
 			list = []agentexec.Usage{one}
 		}
 		for _, u := range list {
-			out = append(out, ownRun{Source: src, At: at, Usage: u})
+			out = append(out, ownRun{Source: src, File: p, At: at, Usage: u})
 		}
 	}
 	return out

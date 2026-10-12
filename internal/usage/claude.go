@@ -81,9 +81,9 @@ func addRec(e *claudeEntry, idx map[string]int, r claudeRec) {
 	e.Recs = append(e.Recs, r)
 }
 
-// claudeRoot is a Claude config dir and the home its folder names are
-// shortened against.
-type claudeRoot struct{ Dir, Home string }
+// claudeRoot is a Claude config dir, the home its folder names are
+// shortened against, and the account (profile) name it stands for.
+type claudeRoot struct{ Dir, Home, Account string }
 
 // encodeHome mirrors how Claude Code names a project folder after its path:
 // every character that is not a letter or digit becomes "-".
@@ -120,7 +120,7 @@ func projectName(folder, home string) string {
 // scanClaude brings the cache up to date for every log under the roots and
 // returns the deduplicated records with their project names.
 func scanClaude(roots []claudeRoot, c *cache, now time.Time) (recs []projRec, files int, changed bool) {
-	type job struct{ path, project string }
+	type job struct{ path, project, account string }
 	var jobs []job
 	seenDir := map[string]bool{}
 	for _, r := range roots {
@@ -139,7 +139,7 @@ func scanClaude(roots []claudeRoot, c *cache, now time.Time) (recs []projRec, fi
 			if first == filepath.Base(p) { // a log directly in projects/, no folder
 				first = ""
 			}
-			jobs = append(jobs, job{p, projectName(first, r.Home)})
+			jobs = append(jobs, job{p, projectName(first, r.Home), r.Account})
 		}
 	}
 	cutoff := now.Add(-retention).Unix()
@@ -159,12 +159,12 @@ func scanClaude(roots []claudeRoot, c *cache, now time.Time) (recs []projRec, fi
 		}
 		mu.Unlock()
 	})
-	live := map[string]bool{}
+	live := map[string]string{}
 	for _, j := range jobs {
-		live[j.path] = true
+		live[j.path] = j.account
 	}
 	for p := range c.Claude {
-		if !live[p] {
+		if _, ok := live[p]; !ok {
 			delete(c.Claude, p)
 			changed = true
 		}
@@ -172,10 +172,10 @@ func scanClaude(roots []claudeRoot, c *cache, now time.Time) (recs []projRec, fi
 
 	// Deduplicate across files: a resumed session repeats earlier messages.
 	best := map[string]projRec{}
-	for _, e := range c.Claude {
+	for p, e := range c.Claude {
 		files++
 		for _, r := range e.Recs {
-			pr := projRec{claudeRec: r, Project: e.Project}
+			pr := projRec{claudeRec: r, Project: e.Project, Account: live[p]}
 			if r.ID == "" {
 				recs = append(recs, pr)
 				continue
@@ -194,6 +194,7 @@ func scanClaude(roots []claudeRoot, c *cache, now time.Time) (recs []projRec, fi
 type projRec struct {
 	claudeRec
 	Project string
+	Account string
 }
 
 // refreshClaude returns the up-to-date entry for one file and whether it
