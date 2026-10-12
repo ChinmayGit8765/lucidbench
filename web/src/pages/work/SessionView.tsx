@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import {
   AppWindow,
+  ArrowDown,
   ArrowLeft,
   ChevronRight,
   CircleDollarSign,
@@ -120,11 +121,17 @@ export function SessionView({ id }: { id: string }) {
   const { session, setSession, events, error, missing } = useSession(id)
   const [tab, setTab] = useState("timeline")
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  const [safety, setSafety] = useState(false)
   const running = session?.status === "running"
   const now = useNow(running ? 1000 : 30000)
   const steps = useMemo(() => buildSteps(events, session?.worktree ?? ""), [events, session?.worktree])
   const end = useRef<HTMLDivElement>(null)
-  const pinned = useRef(true)
+  const head = useRef<HTMLDivElement>(null)
+  const [headHeight, setHeadHeight] = useState(0)
+  // Following the bottom: true until the user scrolls up; events that arrive
+  // while they read further up are counted for the "new events" pill.
+  const [atBottom, setAtBottom] = useState(true)
+  const [seen, setSeen] = useState(0)
 
   // A PR that is not merged yet: ask again now and then, so its state and
   // checks follow GitHub. The server asks gh at most once a minute.
@@ -139,19 +146,32 @@ export function SessionView({ id }: { id: string }) {
     return () => clearInterval(t)
   }, [prWatched, id, setSession])
 
-  // While the agent runs, stay at the bottom unless the user scrolled up.
+  // The sticky header's height, so the turn separators stick just below it.
+  const loaded = session !== null
+  useEffect(() => {
+    const el = head.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setHeadHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [loaded])
+
   useEffect(() => {
     const main = end.current?.closest("main")
     if (!main) return
-    const onScroll = () => {
-      pinned.current = main.scrollTop + main.clientHeight >= main.scrollHeight - 160
-    }
+    const onScroll = () => setAtBottom(main.scrollTop + main.clientHeight >= main.scrollHeight - 160)
     main.addEventListener("scroll", onScroll, { passive: true })
     return () => main.removeEventListener("scroll", onScroll)
-  }, [session !== null])
+  }, [loaded])
+  // At the bottom every event is seen; scrolled up, the pill counts the rest.
   useEffect(() => {
-    if (running && tab === "timeline" && pinned.current) end.current?.scrollIntoView({ block: "end" })
-  }, [events.length, running, tab])
+    if (atBottom) setSeen(events.length)
+  }, [atBottom, events.length])
+  useEffect(() => {
+    if (running && tab === "timeline" && atBottom) end.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+  }, [events.length, running, tab, atBottom])
+  const toBottom = () => end.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+  const unseen = tab === "timeline" && !atBottom ? Math.max(0, events.length - seen) : 0
 
   if (missing)
     return (
@@ -176,6 +196,13 @@ export function SessionView({ id }: { id: string }) {
 
   const st = STATUS_INFO[session.status]
   const label = providerInfo(session.provider)?.label ?? session.provider
+  const stopNow = async () => {
+    try {
+      setSession(await stopSession(session.id))
+    } catch (e) {
+      toast.error("Could not stop the session", { description: errorMessage(e) })
+    }
+  }
   const stop = () =>
     setConfirm({
       title: `Stop ${label}?`,
@@ -183,47 +210,35 @@ export function SessionView({ id }: { id: string }) {
         "Lucidbench stops the agent's process and this turn ends. Whatever it already changed stays in the worktree, and the agent waits for your next message; use the refresh on Changes to see anything written after the stop.",
       confirmLabel: "Stop agent",
       danger: true,
-      run: async () => {
-        try {
-          setSession(await stopSession(session.id))
-        } catch (e) {
-          toast.error("Could not stop the session", { description: errorMessage(e) })
-        }
-      },
+      run: stopNow,
     })
+  const commands = session.allowed_commands?.length ?? 0
 
   return (
-    <div className="space-y-5">
-      <div className="sticky top-0 z-20 -mx-5 -mt-3 border-b bg-background/85 px-5 pb-0 pt-3 backdrop-blur-md md:-mx-8 md:px-8">
+    <div className="space-y-4" style={{ "--session-head": `${headHeight}px` } as CSSProperties}>
+      <div ref={head} className="sticky top-0 z-20 -mx-5 -mt-3 border-b bg-background/85 px-5 pb-0 pt-2.5 backdrop-blur-md md:-mx-8 md:px-8" data-testid="session-header">
         <div className="flex items-start gap-3">
-          <ProviderTile provider={session.provider} size="lg" />
+          <ProviderTile provider={session.provider} size="md" className="mt-0.5" />
           <div className="min-w-0 flex-1">
-            <button onClick={() => open("work")} className="mb-0.5 inline-flex items-center gap-1 text-xs font-medium text-subtle-foreground hover:text-foreground">
-              <ArrowLeft className="size-3" /> Work · {session.project}
-            </button>
-            <h1 className="truncate text-xl font-semibold tracking-[-0.02em]" title={session.title}>
+            <div className="flex min-w-0 items-baseline gap-2">
+              <button onClick={() => open("work")} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-subtle-foreground hover:text-foreground" title="All sessions">
+                <ArrowLeft className="size-3" /> Work · {session.project}
+              </button>
+            </div>
+            <h1 className="truncate text-lg font-semibold leading-snug tracking-[-0.015em]" title={session.title}>
               {session.title}
             </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1">
-              <Meta icon={GitBranch} title="Copy branch name" onClick={() => void copyText(session.branch, "Branch copied")}>
-                <span className={cn("truncate font-mono", session.removed && "line-through")}>{session.branch}</span>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+              <Meta icon={GitBranch} title={`${session.branch} (click to copy)`} onClick={() => void copyText(session.branch, "Branch copied")}>
+                <span className={cn("max-w-[16rem] truncate font-mono", session.removed && "line-through")}>{session.branch}</span>
               </Meta>
               <Meta
                 icon={FolderGit2}
                 title={session.removed ? `Worktree removed: ${session.worktree_hint}` : `${session.worktree_hint} (click to copy)`}
                 onClick={() => void copyText(session.worktree, "Path copied")}
               >
-                <span className={cn("max-w-[22rem] truncate font-mono", session.removed && "line-through")}>{session.worktree_hint}</span>
+                <span className={cn("max-w-[11rem] truncate font-mono", session.removed && "line-through")}>{session.worktree_hint.split(/[\\/]/).pop()}</span>
               </Meta>
-              <Meta icon={session.harness === "mine" ? UserCog : ShieldCheck} title={session.harness === "mine" ? "The CLI loaded your own settings, hooks and skills" : "No user settings, hooks or MCP servers"}>
-                {session.harness === "mine" ? "your harness" : "clean harness"}
-                {session.profile ? ` · ${session.profile}` : ""}
-              </Meta>
-              {session.browser && (
-                <Meta icon={AppWindow} title="The agent browser was attached to this session (open Live browser to watch it)">
-                  browser
-                </Meta>
-              )}
               {session.pr_url && session.pr_state && (
                 <Meta icon={GitPullRequest} title={checksLabel(session.pr_checks) || PR_INFO[session.pr_state].label}>
                   <span className={cn(session.pr_state === "merged" && "text-success-fg", session.pr_state === "closed" && "text-danger-fg")}>{PR_INFO[session.pr_state].label}</span>
@@ -245,43 +260,64 @@ export function SessionView({ id }: { id: string }) {
                   idea
                 </Meta>
               )}
+              {session.browser && (
+                <Meta icon={AppWindow} title="The agent browser was attached to this session (open Live browser to watch it)">
+                  browser
+                </Meta>
+              )}
+              <Meta
+                icon={session.harness === "mine" ? UserCog : ShieldCheck}
+                title="How the agent runs: its harness, what it may run without asking, and the sandbox note"
+                onClick={() => setSafety((s) => !s)}
+              >
+                <span aria-expanded={safety}>
+                  {session.harness === "mine" ? "your harness" : "clean harness"}
+                  {session.profile ? ` · ${session.profile}` : ""}
+                  {commands > 0 ? ` · ${plural(commands, "command")} allowed` : ""}
+                </span>
+                <ChevronRight className={cn("transition-transform", safety && "rotate-90")} />
+              </Meta>
             </div>
-            <p className="mt-1 max-w-3xl text-2xs leading-4 text-subtle-foreground">{SANDBOX_NOTICE}</p>
-            {session.allowed_commands && session.allowed_commands.length > 0 && (
-              <details className="group mt-1 max-w-3xl text-2xs text-subtle-foreground">
-                <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 hover:text-foreground">
-                  <Terminal className="size-3" />
-                  May run without asking: {plural(session.allowed_commands.length, "command")}
-                </summary>
-                <ul aria-label="Allowed commands" className="mt-1.5 flex flex-wrap gap-1">
-                  {session.allowed_commands.map((c) => (
-                    <li key={c} className="rounded-full border bg-background/60 px-2 py-0.5 font-mono text-muted-foreground">
-                      {c}
-                    </li>
-                  ))}
-                </ul>
-              </details>
+            {safety && (
+              <div className="mt-1.5 max-w-3xl space-y-1.5 pb-1 text-2xs text-subtle-foreground" data-testid="session-safety">
+                <p className="leading-4">{SANDBOX_NOTICE}</p>
+                <p>{session.harness === "mine" ? "The CLI loaded your own settings, hooks and skills." : "No user settings, hooks or MCP servers."}</p>
+                {commands > 0 && (
+                  <div>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Terminal className="size-3" /> May run without asking:
+                    </span>
+                    <ul aria-label="Allowed commands" className="mt-1 flex flex-wrap gap-1">
+                      {session.allowed_commands!.map((c) => (
+                        <li key={c} className="rounded-full border bg-background/60 px-2 py-0.5 font-mono text-muted-foreground">
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-1">
             <div className="flex items-center gap-2">
-              {running && <StateSprite state="working" className="-my-3 size-10" label="The agent is working" />}
+              {running && <StateSprite state="working" className="-my-3 size-9" label="The agent is working" />}
               <StatusPill tone={st.tone} pulse={running}>
                 {st.label}
               </StatusPill>
-              {(session.turns?.length ?? 0) > 1 && (
-                <span className="font-mono text-2xs tabular-nums text-subtle-foreground" title="Turns in this session">
-                  {session.turns!.length} turns
-                </span>
-              )}
               {running && (
                 <Button variant="secondary" size="sm" onClick={stop} className="border-danger/40 text-danger-fg hover:bg-danger-soft">
                   <Square className="fill-current" /> Stop
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <Meta icon={Timer} title="Elapsed">
+            <div className="flex items-center gap-2.5">
+              {(session.turns?.length ?? 0) > 1 && (
+                <span className="font-mono text-2xs tabular-nums text-subtle-foreground" title="Turns in this session">
+                  {session.turns!.length} turns
+                </span>
+              )}
+              <Meta icon={Timer} title="Time the agent worked">
                 <span className="font-mono tabular-nums">{formatElapsed(elapsedOf(session, now))}</span>
               </Meta>
               <Meta
@@ -301,7 +337,7 @@ export function SessionView({ id }: { id: string }) {
           label="Session view"
           value={tab}
           onChange={setTab}
-          className="mt-3 border-b-0"
+          className="mt-1.5 border-b-0"
           items={[
             { id: "timeline", label: "Timeline", icon: ListTree, count: steps.filter((s) => s.type === "tools").length || undefined },
             ...(session.diff ? [{ id: "changes", label: "Changes", icon: FileDiff, count: session.diff.files.length }] : []),
@@ -312,7 +348,7 @@ export function SessionView({ id }: { id: string }) {
 
       {tab === "timeline" && (
         <>
-          <Timeline session={session} steps={steps} now={now} />
+          <Timeline session={session} steps={steps} now={now} onOpenChanges={session.diff ? () => setTab("changes") : undefined} />
           {session.diff && <Changes session={session} onChange={setSession} setConfirm={setConfirm} />}
         </>
       )}
@@ -320,7 +356,8 @@ export function SessionView({ id }: { id: string }) {
       {tab === "raw" && <RawLog id={session.id} version={events.length} />}
       <div ref={end} />
 
-      <Composer session={session} onChange={setSession} onStop={stop} setConfirm={setConfirm} />
+      <Composer session={session} onChange={setSession} onStop={stop} onStopNow={stopNow} setConfirm={setConfirm} unseen={unseen} onJump={toBottom} />
+      <EndedBar session={session} onChange={setSession} setConfirm={setConfirm} />
 
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
     </div>
@@ -329,21 +366,30 @@ export function SessionView({ id }: { id: string }) {
 
 /* ---------- composer ---------- */
 
+/** A dialog is open: keys belong to it, not to the page behind. */
+const dialogOpen = () => document.querySelector("[role=dialog], [role=alertdialog]") !== null
+
 /**
  * The bottom of a session, like a coding agent's prompt box: write the next
- * message while the agent waits (Enter sends, Shift+Enter is a new line),
- * stop it while it works, or end the session or open its PR.
+ * message while the agent waits (Enter sends, Shift+Enter is a new line, Esc
+ * stops a running turn), or end the session or open its PR.
  */
 function Composer({
   session,
   onChange,
   onStop,
+  onStopNow,
   setConfirm,
+  unseen,
+  onJump,
 }: {
   session: WorkSession
   onChange: (s: WorkSession) => void
   onStop: () => void
+  onStopNow: () => Promise<void>
   setConfirm: (c: ConfirmRequest | null) => void
+  unseen: number
+  onJump: () => void
 }) {
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
@@ -359,6 +405,28 @@ function Composer({
   useEffect(() => {
     if (waiting) area.current?.focus({ preventScroll: true })
   }, [waiting])
+  // The box grows with what is written, up to a few lines.
+  useLayoutEffect(() => {
+    const el = area.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`
+  }, [text])
+  // Esc stops a running turn, as in a coding agent's terminal, unless a
+  // dialog is open or another field has the keyboard.
+  useEffect(() => {
+    if (!running) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || dialogOpen()) return
+      const t = e.target as HTMLElement | null
+      if (t && t !== area.current && t.closest("input, textarea, select, [contenteditable=true]")) return
+      e.preventDefault()
+      toast(`Stopping ${label}…`)
+      void onStopNow()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [running, label, onStopNow])
 
   if (!running && !waiting) return null
 
@@ -406,15 +474,17 @@ function Composer({
     })
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 pb-4 pt-3 backdrop-blur-md md:-mx-8 md:px-8" data-testid="composer">
-      {waiting && (
-        <div className="mb-2 flex items-center gap-2 text-sm text-warning-fg" role="status" data-testid="waiting-banner">
-          <Hourglass className="size-3.5" />
-          <span className="font-medium">{label} is waiting for you.</span>
-          <span className="text-muted-foreground max-[720px]:hidden">Send a follow-up, open a PR, or end the session.</span>
-        </div>
+    <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 pb-2.5 pt-2 backdrop-blur-md md:-mx-8 md:px-8" data-testid="composer">
+      {unseen > 0 && (
+        <button
+          onClick={onJump}
+          className="absolute -top-11 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-elevated px-3 py-1.5 text-xs font-medium shadow-md transition-colors animate-in fade-in-0 slide-in-from-bottom-1 hover:bg-accent"
+          data-testid="new-events"
+        >
+          <ArrowDown className="size-3.5" /> {plural(unseen, "new event")}
+        </button>
       )}
-      <Card className={cn("overflow-hidden transition-colors focus-within:border-border-strong", waiting && "border-warning/40")}>
+      <Card className={cn("flex items-end gap-2 overflow-hidden py-1.5 pl-3 pr-1.5 transition-colors focus-within:border-border-strong", waiting && "border-warning/40")}>
         <label htmlFor="follow-up" className="sr-only">
           Follow-up for the agent
         </label>
@@ -429,53 +499,141 @@ function Composer({
               void send()
             }
           }}
-          rows={2}
+          rows={1}
           maxLength={32000}
           disabled={sending}
-          placeholder={running ? `${label} is working. Write your next message; Send opens once this turn ends, or Stop to step in now.` : `Reply to ${label}…`}
+          placeholder={running ? `${label} is working. Write your next message; it sends once this turn ends, or press Esc to stop.` : `Reply to ${label}…`}
           data-testid="composer-input"
-          className="block max-h-56 min-h-16 w-full resize-none bg-transparent px-4 pt-3 text-[0.9375rem] leading-relaxed outline-none placeholder:text-subtle-foreground/70"
+          className="block max-h-[168px] min-h-9 flex-1 resize-none bg-transparent py-1.5 text-[0.9375rem] leading-6 outline-none placeholder:text-subtle-foreground/70"
         />
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5 pt-1">
-          <span className="inline-flex items-center gap-1.5 rounded-full border bg-background/60 px-2 py-0.5 text-2xs text-muted-foreground" title={model ? `${label} · ${model}` : label} data-testid="composer-chip">
-            <span style={{ color: tintVar(session.provider) }}>
-              <ProviderMark provider={session.provider} className="size-3" />
-            </span>
-            {label}
-            {model && <span className="max-w-40 truncate font-mono">· {model}</span>}
-          </span>
-          <span className="rounded-full border bg-background/60 px-2 py-0.5 font-mono text-2xs tabular-nums text-muted-foreground" data-testid="turn-indicator">
-            turn {turns}
-          </span>
-          <span className="text-2xs text-subtle-foreground max-[720px]:hidden">Enter to send · Shift+Enter for a new line</span>
-          <span className="flex-1" />
-          {running ? (
-            <Button variant="secondary" size="sm" onClick={onStop} className="border-danger/40 text-danger-fg hover:bg-danger-soft" data-testid="composer-stop">
-              <Square className="fill-current" /> Stop
-            </Button>
-          ) : (
-            <>
-              <Button variant="ghost" size="sm" onClick={end} data-testid="end-session">
-                <SquareCheck /> End session
-              </Button>
-              {session.pr_url ? (
-                <Button asChild variant="ghost" size="sm">
-                  <a href={session.pr_url} target="_blank" rel="noreferrer">
-                    <GitPullRequest className="text-success" /> View PR
-                  </a>
-                </Button>
-              ) : (
-                <Button variant="secondary" size="sm" onClick={pr} disabled={!prReady} title={prReady ? "Push the branch and open a draft PR" : "No commits yet: nothing to open a PR with"} data-testid="composer-open-pr">
-                  <GitPullRequest /> Open PR
-                </Button>
-              )}
-            </>
-          )}
-          <Button size="sm" onClick={() => void send()} disabled={!canSend} aria-label="Send follow-up" data-testid="send">
+        {running ? (
+          <Button variant="secondary" size="sm" onClick={onStop} className="mb-0.5 border-danger/40 text-danger-fg hover:bg-danger-soft" title="Stop this turn (Esc)" data-testid="composer-stop">
+            <Square className="fill-current" /> Stop
+          </Button>
+        ) : (
+          <Button size="sm" className="mb-0.5" onClick={() => void send()} disabled={!canSend} aria-label="Send follow-up" title="Send (Enter)" data-testid="send">
             <SendHorizontal /> Send
           </Button>
-        </div>
+        )}
       </Card>
+      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
+        {waiting && (
+          <span className="inline-flex items-center gap-1.5 font-medium text-warning-fg" role="status" data-testid="waiting-banner">
+            <Hourglass className="size-3" />
+            {label} is waiting for you
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1.5 rounded-full border bg-background/60 px-2 py-px text-muted-foreground" title={model ? `${label} · ${model}` : label} data-testid="composer-chip">
+          <span style={{ color: tintVar(session.provider) }}>
+            <ProviderMark provider={session.provider} className="size-3" />
+          </span>
+          {label}
+          {model && <span className="max-w-28 truncate font-mono">· {model}</span>}
+        </span>
+        <span className="rounded-full border bg-background/60 px-2 py-px font-mono tabular-nums text-muted-foreground" data-testid="turn-indicator">
+          turn {turns}
+        </span>
+        <span className="text-subtle-foreground max-[1200px]:hidden">
+          <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line{running && <> · <Kbd>Esc</Kbd> stop</>}
+        </span>
+        <span className="flex-1" />
+        {waiting && (
+          <>
+            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={end} data-testid="end-session">
+              <SquareCheck /> End session
+            </Button>
+            {session.pr_url ? (
+              <Button asChild variant="ghost" size="sm" className="h-6 px-2">
+                <a href={session.pr_url} target="_blank" rel="noreferrer">
+                  <GitPullRequest className="text-success" /> View PR
+                </a>
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" className="h-6 px-2" onClick={pr} disabled={!prReady} title={prReady ? "Push the branch and open a draft PR" : "No commits yet: nothing to open a PR with"} data-testid="composer-open-pr">
+                <GitPullRequest /> Open PR
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="rounded border bg-muted/60 px-1 font-sans text-[0.625rem] text-muted-foreground">{children}</kbd>
+}
+
+/**
+ * The bottom of a session whose PR was merged or closed: nothing waits for a
+ * follow-up any more, so the next step is removing the worktree, in one click.
+ */
+function EndedBar({
+  session,
+  onChange,
+  setConfirm,
+}: {
+  session: WorkSession
+  onChange: (s: WorkSession) => void
+  setConfirm: (c: ConfirmRequest | null) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  if ((session.status !== "merged" && session.status !== "closed") || session.removed) return null
+  const merged = session.status === "merged"
+  const discard = (reason: string) =>
+    setConfirm({
+      title: "Discard the leftover changes?",
+      description: `${reason.trim().replace(/[.;:]$/, "")}. Removing the worktree deletes the folder and anything in it that is not committed; the ${session.branch} branch stays in the repository.`,
+      confirmLabel: "Discard and remove",
+      danger: true,
+      run: async () => {
+        try {
+          onChange(await removeWorktree(session.id, true))
+          toast.success("Worktree removed")
+        } catch (e) {
+          toast.error("Could not remove the worktree", { description: errorMessage(e) })
+        }
+      },
+    })
+  const remove = async () => {
+    setBusy(true)
+    try {
+      onChange(await removeWorktree(session.id, false))
+      toast.success("Worktree removed", { description: `${session.branch} stays in the repository.` })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) discard(e.message)
+      else toast.error("Could not remove the worktree", { description: errorMessage(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 py-2.5 backdrop-blur-md md:-mx-8 md:px-8" data-testid="ended-bar">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-4 py-2.5",
+          merged ? "border-success/40 bg-success-soft/60" : "border-border bg-muted/40",
+        )}
+        role="status"
+      >
+        <GitPullRequest className={cn("size-4 shrink-0", merged ? "text-success" : "text-subtle-foreground")} />
+        <div className="min-w-0 flex-1 text-sm">
+          <span className="font-medium">{merged ? "Merged — remove the worktree?" : "PR closed — remove the worktree?"}</span>{" "}
+          <span className="text-muted-foreground max-[720px]:hidden">
+            {merged ? "The work is on the base branch; the session has ended." : "The PR was closed without merging; reopen it on GitHub to carry on."}
+          </span>
+        </div>
+        {session.pr_url && (
+          <Button asChild variant="ghost" size="sm">
+            <a href={session.pr_url} target="_blank" rel="noreferrer">
+              <ExternalLink /> {merged ? "View merged PR" : "View PR"}
+            </a>
+          </Button>
+        )}
+        <Button size="sm" variant={merged ? "default" : "secondary"} onClick={() => void remove()} disabled={busy} data-testid="remove-worktree">
+          <Trash2 /> Remove worktree
+        </Button>
+      </div>
     </div>
   )
 }
