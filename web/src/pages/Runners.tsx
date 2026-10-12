@@ -123,7 +123,7 @@ function SummaryStrip({ s, runs, now }: { s: CISummary | null; runs: CIRun[]; no
         label="Failing"
         value={
           <span className="flex items-center gap-2">
-            {failingList.length}
+            {runs.length ? failingList.length : "-"}
             {runs.length > 0 && (
               <StateSprite
                 state={failingList.length ? "failure" : "success"}
@@ -136,7 +136,9 @@ function SummaryStrip({ s, runs, now }: { s: CISummary | null; runs: CIRun[]; no
         sub={
           failingList.length
             ? `${failingRepoCount === 1 ? shortRepo(failingList[0].repo) : `${failingRepoCount} repos`} · re-run below`
-            : "all green"
+            : runs.length
+              ? "all green"
+              : "No runs yet"
         }
         tone={failingList.length ? "text-danger-fg" : undefined}
       />

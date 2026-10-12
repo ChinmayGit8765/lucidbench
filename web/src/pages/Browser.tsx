@@ -412,6 +412,8 @@ export default function Browser() {
   const poll = useBrowser(true, fast)
   const st = poll.data
   const starting = busy || st?.state === "starting"
+  // Asleep with a note is docker not answering: Start cannot work until it does.
+  const dockerDown = st?.state === "sleeping" && !!st.note && !busy
   // Look often only while it starts.
   useEffect(() => setFast(starting), [starting])
 
@@ -456,15 +458,22 @@ export default function Browser() {
         <Card>
           <EmptyState
             icon={<AppWindow />}
-            title={starting ? "Starting the browser…" : "The browser is asleep"}
+            title={starting ? "Starting the browser…" : dockerDown ? "Docker is not running" : "The browser is asleep"}
             description={
-              st.note ??
-              `It runs on demand as a Chromium container (${st.image}), pulled the first time you start it, with its own empty profile and nothing from your own browser. It stops by itself after ${st.idle_minutes} idle minutes.`
+              dockerDown
+                ? `The browser runs as a Chromium container, so it needs Docker. Start Docker Desktop (or the docker service) and this page wakes up. Docker said: ${st.note}`
+                : (st.note ??
+                  `It runs on demand as a Chromium container (${st.image}), pulled the first time you start it, with its own empty profile and nothing from your own browser. It stops by itself after ${st.idle_minutes} idle minutes.`)
             }
           >
-            <Button disabled={starting} onClick={() => act(startBrowser, "Could not start the browser")}>
+            <Button disabled={starting || dockerDown} onClick={() => act(startBrowser, "Could not start the browser")} aria-describedby={dockerDown ? "browser-why" : undefined}>
               <Play /> {starting ? "Starting…" : "Start the browser"}
             </Button>
+            {dockerDown && (
+              <p id="browser-why" className="w-full text-xs text-subtle-foreground" data-testid="disabled-reason">
+                Start Docker first.
+              </p>
+            )}
           </EmptyState>
         </Card>
       )}

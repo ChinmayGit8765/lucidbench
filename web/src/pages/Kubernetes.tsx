@@ -319,6 +319,8 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
   const all = [namespaces, nodes, pods, jobs, events]
   const updated = all.map((p) => p.updatedAt).filter((t): t is number => t !== null)
   const down = !asleep && nodes.error && !nodes.data
+  // Why Hello job cannot run now, in a few words; null when it can.
+  const helloBlocked = down ? "No cluster yet" : asleep && power.data?.modes.cluster === "off" ? "Cluster asleep · start it first" : null
   const podList = pods.data ?? []
   const troubled = podList.filter(isTroubled).length
   const warnings = (events.data ?? []).filter((e) => e.type === "Warning").length
@@ -363,10 +365,17 @@ export default function Kubernetes({ subpath }: ModulePageProps) {
                 ))}
               </select>
             </label>
+            {helloBlocked && (
+              <span className="text-2xs text-subtle-foreground" id="hello-why" data-testid="disabled-reason">
+                {helloBlocked}
+              </span>
+            )}
             <Button
               variant="secondary"
               size="sm"
-              disabled={!!down || helloBusy || (asleep && power.data?.modes.cluster === "off")}
+              title={helloBlocked ?? "Run a tiny job on the cluster to check it works"}
+              aria-describedby={helloBlocked ? "hello-why" : undefined}
+              disabled={!!helloBlocked || helloBusy}
               onClick={async () => {
                 setHelloBusy(true)
                 await runHelloJob(asleep)
