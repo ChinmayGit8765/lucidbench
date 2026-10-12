@@ -84,7 +84,8 @@ test.describe("with a newer release", () => {
     const status = page.getByTestId("update-status")
     await expect(status).toContainText("0.3.0-beta.5")
     await expect(status).toContainText("update available")
-    await expect(status).toContainText("update_check: false")
+    // Turning checks off is a switch that saves update_check to config.yaml.
+    await expect(status.getByRole("switch", { name: "Check for updates" })).toHaveAttribute("aria-checked", "true")
     await page.waitForTimeout(1000)
     await page.getByTestId("update-check").click()
     await expect(page.getByText("Lucidbench 0.3.0-beta.5 is out.")).toBeVisible()

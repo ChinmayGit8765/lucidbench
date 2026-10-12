@@ -360,6 +360,10 @@ func statusOf(stage string, sess *council.Session, c *cardRef, ses []work.Sessio
 			return "Diff to review"
 		case work.StatusStopped:
 			return "Session stopped"
+		case work.StatusMerged:
+			return "Merged"
+		case work.StatusClosed:
+			return "PR closed"
 		}
 		return "Session failed"
 	case StageCard:

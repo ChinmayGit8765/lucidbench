@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowRightLeft, CalendarDays, ExternalLink, LayoutList, Plus, X } from "lucide-react"
 import { toast } from "sonner"
 
+import { EnvVarField } from "@/components/ConfigSave"
 import { SetupCard } from "@/components/SetupCard"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Button } from "@/components/ui/button"
@@ -52,7 +53,9 @@ export default function Trello({ subpath }: { subpath: string[] }) {
               Set them as <code>{status.data.key_ref.replace(/^env:/, "")}</code> and <code>{status.data.token_ref.replace(/^env:/, "")}</code> where the daemon starts, then restart Lucidbench.
             </>,
             <>
-              To use different variables, point <code>integrations.trello.key</code> and <code>integrations.trello.token</code> at them, as <code>env:NAME</code>, in your config.
+              Or keep them in other variables: name them here and they are saved to config.yaml (the names only, never the values).
+              <EnvVarField configKey="integrations.trello.key" current={status.data.key_ref} label="Trello API key variable" />
+              <EnvVarField configKey="integrations.trello.token" current={status.data.token_ref} label="Trello token variable" />
             </>,
           ]}
           vars={[

@@ -348,6 +348,9 @@ func (s *Service) Remove(id string, discard bool) (Session, error) {
 		if err != nil {
 			return se, fmt.Errorf("cannot read the worktree: %w", err)
 		}
+		if se.PRState == PRMerged {
+			commits = 0 // they landed with the PR, whatever the remote branch says now
+		}
 		if (commits > 0 || changes > 0) && !discard {
 			return se, errf(ErrConflict, "the worktree has %s and %s; open a PR first, or confirm discarding them", plural(commits, "unpushed commit"), plural(changes, "uncommitted change"))
 		}
