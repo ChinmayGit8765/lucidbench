@@ -101,10 +101,10 @@ function useSession(id: string) {
   return { session, setSession, events, error, missing }
 }
 
-function Meta({ icon: Icon, children, title, onClick }: { icon: typeof Timer; children: ReactNode; title?: string; onClick?: () => void }) {
+function Meta({ icon: Icon, children, title, onClick, expanded }: { icon: typeof Timer; children: ReactNode; title?: string; onClick?: () => void; expanded?: boolean }) {
   const cls = "inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-subtle-foreground"
   return onClick ? (
-    <button onClick={onClick} title={title} className={cn(cls, "rounded px-0.5 hover:text-foreground")}>
+    <button onClick={onClick} title={title} aria-expanded={expanded} className={cn(cls, "rounded px-0.5 hover:text-foreground")}>
       <Icon />
       {children}
     </button>
@@ -271,8 +271,9 @@ export function SessionView({ id }: { id: string }) {
                 icon={session.harness === "mine" ? UserCog : ShieldCheck}
                 title="How the agent runs: its harness, what it may run without asking, and the sandbox note"
                 onClick={() => setSafety((s) => !s)}
+                expanded={safety}
               >
-                <span aria-expanded={safety}>
+                <span>
                   {session.harness === "mine" ? "your harness" : "clean harness"}
                   {session.profile ? ` · ${session.profile}` : ""}
                   {commands > 0 ? ` · ${plural(commands, "command")} allowed` : ""}
@@ -625,13 +626,6 @@ function EndedBar({
             {merged ? "The work is on the base branch; the session has ended." : "The PR was closed without merging; reopen it on GitHub to carry on."}
           </span>
         </div>
-        {session.pr_url && (
-          <Button asChild variant="ghost" size="sm">
-            <a href={session.pr_url} target="_blank" rel="noreferrer">
-              <ExternalLink /> {merged ? "View merged PR" : "View PR"}
-            </a>
-          </Button>
-        )}
         <Button size="sm" variant={merged ? "default" : "secondary"} onClick={() => void remove()} disabled={busy} data-testid="remove-worktree">
           <Trash2 /> Remove worktree
         </Button>

@@ -141,8 +141,13 @@ test("a board at 1024 shows a cue for the columns off-screen", async ({ browser 
   const done = page.getByRole("region", { name: "Done column" })
   await expect(done).not.toBeInViewport({ ratio: 0.9 })
   await page.screenshot({ path: shot("boards-1024-cue") })
-  for (let i = 0; i < 4 && (await cue.isVisible()); i++) await cue.click()
-  await expect(done).toBeInViewport({ ratio: 0.9 })
+  // Each click scrolls one column; the cue goes once nothing is left to the right.
+  for (let i = 0; i < 5 && (await cue.isVisible()); i++) {
+    await cue.click({ timeout: 3000 }).catch(() => undefined)
+    await page.waitForTimeout(500)
+  }
+  await expect(cue).toHaveCount(0)
+  await expect(done).toBeInViewport({ ratio: 0.95 })
   await ctx.close()
 })
 

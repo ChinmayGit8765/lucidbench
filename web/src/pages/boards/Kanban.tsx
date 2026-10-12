@@ -334,8 +334,9 @@ function ColumnScroller({ children }: { children: ReactNode }) {
   }
   return (
     <div className="relative -mx-5 md:-mx-8" data-testid="board-columns">
-      <div ref={ref} className="overflow-x-auto px-5 pb-4 [scrollbar-width:thin] md:px-8">
-        <div className="flex min-h-[28rem] items-start gap-3">{children}</div>
+      <div ref={ref} className="overflow-x-auto pb-4 pl-5 [scrollbar-width:thin] md:pl-8">
+        {/* A trailing spacer: a scroller's right padding is lost once its content overflows. */}
+        <div className="flex min-h-[28rem] items-start gap-3 after:w-2 after:shrink-0 after:content-[''] md:after:w-5">{children}</div>
       </div>
       <div
         aria-hidden
