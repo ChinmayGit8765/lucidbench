@@ -26,7 +26,7 @@ marked `-beta.N`.
   no 503s and no console errors. With ten extensions added and Docker stopped, loading Home went
   from 32 requests (six of them 503s) to 12; cosmetic reads such as the update check now wait
   until the page has settled, and `GET /api/health?docker=1` answers whether the engine is up.
-  The daemon backs off while Docker is unreachable (10 s, doubling to 2 min, one probe per
+  The daemon backs off while Docker is unreachable (10 s, then 20 s, then every 30 s, one probe per
   window): with Home open and Docker stopped, docker was spawned 56 times a minute and now 3.
 - **Next up** lists a project need and the card that covers it ("Tide needs Release pipeline"
   and "Release pipeline for Tide") as one item.

@@ -11,7 +11,7 @@ export class ApiError extends Error {
 
 export async function request(path: string, init?: RequestInit): Promise<Response> {
   // A change may alter any answer: drop the shared ones.
-  if (init?.method && init.method !== "GET" && init.method !== "HEAD") recent.clear()
+  if (init?.method && init.method !== "GET" && init.method !== "HEAD") forgetShared()
   let res: Response
   try {
     res = await fetch(path, init)
@@ -30,6 +30,14 @@ const inflight = new Map<string, Promise<unknown>>()
 /** Answers younger than this are shared too: the shell and the page mount a moment apart. */
 const SHARE_MS = 1500
 const recent = new Map<string, { at: number; body: unknown }>()
+/** Bumped whenever the shared answers are dropped, so a read that started before a change cannot store its old answer after it. */
+let generation = 0
+function forgetShared() {
+  generation++
+  recent.clear()
+  // A read already on its way may carry the old answer: the next one asks again.
+  inflight.clear()
+}
 
 /**
  * GETs JSON. Calls for the same path share one request while it is in
@@ -42,14 +50,17 @@ export function getJSON<T>(path: string): Promise<T> {
   if (r && Date.now() - r.at < SHARE_MS) return Promise.resolve(r.body as T)
   let p = inflight.get(path) as Promise<T> | undefined
   if (!p) {
+    const gen = generation
     p = request(path).then((r) => r.json() as Promise<T>)
+    const mine = p
     inflight.set(path, p)
     void p.then(
       (body) => {
-        inflight.delete(path)
-        recent.set(path, { at: Date.now(), body })
+        if (inflight.get(path) === mine) inflight.delete(path)
+        // A change went out while this read was in flight: its answer may be old.
+        if (gen === generation) recent.set(path, { at: Date.now(), body })
       },
-      () => inflight.delete(path),
+      () => inflight.get(path) === mine && inflight.delete(path),
     )
   }
   return p
@@ -104,7 +115,7 @@ const lastGood = new Map<string, { data: unknown; at: number }>()
 
 /** Asks every mounted poll to reload now (the header refresh button, ⌘K). */
 export function refreshAll() {
-  recent.clear()
+  forgetShared()
   window.dispatchEvent(new Event(REFRESH_EVENT))
 }
 

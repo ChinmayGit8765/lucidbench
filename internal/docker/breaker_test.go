@@ -139,6 +139,26 @@ func TestBreakerIgnoresOrdinaryFailures(t *testing.T) {
 	}
 }
 
+// A probe that gets any answer from the engine, even an error about a
+// container, closes the breaker: the engine is there.
+func TestBreakerClosesOnAnyEngineAnswer(t *testing.T) {
+	clk := newClock()
+	d := &counting{}
+	b := &Breaker{Run: d.run, Now: clk.now}
+	_, _ = b.Do(context.Background(), "ps")
+	if !b.Down() {
+		t.Fatal("the first unreachable error should open the breaker")
+	}
+	clk.add(BackoffMin)
+	d.other = errors.New("docker start: Error response from daemon: No such container: x")
+	if _, err := b.Do(context.Background(), "start", "x"); errors.Is(err, ErrUnreachable) {
+		t.Fatalf("the probe's own error should come back as it was: %v", err)
+	}
+	if b.Down() {
+		t.Fatal("an answer from the engine should close the breaker")
+	}
+}
+
 func TestBreakerLetsOneProbeThrough(t *testing.T) {
 	clk := newClock()
 	gate := make(chan struct{})

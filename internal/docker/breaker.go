@@ -11,10 +11,11 @@ import (
 
 // Backoff bounds for an unreachable engine: the first failure waits
 // BackoffMin before the next real docker call, each further failure doubles
-// the wait, up to BackoffMax.
+// the wait, up to BackoffMax. The cap is short on purpose: once the user
+// starts Docker, pages fill in within half a minute without a reload.
 const (
 	BackoffMin = 10 * time.Second
-	BackoffMax = 2 * time.Minute
+	BackoffMax = 30 * time.Second
 )
 
 // ErrUnreachable marks an error returned without running docker because the
@@ -91,7 +92,8 @@ func (b *Breaker) Do(ctx context.Context, args ...string) ([]byte, error) {
 		b.probing = false
 	}
 	switch {
-	case err == nil:
+	case err == nil, !Unreachable(err) && ctx.Err() == nil:
+		// Any answer from the engine, even "no such container", means it is there.
 		b.failures, b.last = 0, nil
 	case Unreachable(err) && ctx.Err() == nil:
 		b.failures++
