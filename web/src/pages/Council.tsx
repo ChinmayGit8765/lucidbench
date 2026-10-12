@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleDashed,
-  FileClock,
   FileText,
   KanbanSquare,
   Lightbulb,
@@ -19,9 +18,7 @@ import {
   RotateCcw,
   ShieldAlert,
   Sparkles,
-  TriangleAlert,
   Users,
-  Vote,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react"
@@ -29,14 +26,14 @@ import { toast } from "sonner"
 
 import { BriefBody, Inline, parseBrief } from "@/components/Brief"
 import { ProviderMark, ProviderTile, providerInfo, tintVar } from "@/components/ProviderMark"
-import { PageHeader, RefreshButton } from "@/components/Shell"
+import { PageHeader } from "@/components/Shell"
 import { StateSprite } from "@/components/StateSprite"
-import { Badge, StatusPill } from "@/components/ui/badge"
+import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Dialog } from "@/components/ui/dialog"
-import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
+import { ErrorState, Skeleton } from "@/components/ui/states"
 import { ApiError, errorMessage, getJSON, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { DEFAULT_BOARD } from "@/lib/boards"
@@ -44,7 +41,6 @@ import {
   approveBrief,
   askAgain,
   COMPOSE_EVENT,
-  COUNCIL_POLL_MS,
   COUNCIL_PROVIDERS,
   latestBlockers,
   maxCalls,
@@ -62,7 +58,6 @@ import {
   type CouncilRound,
   type CouncilSession,
   type CouncilStep,
-  type CouncilSummary,
   type Severity,
   useCouncilSession,
 } from "@/lib/council"
@@ -74,9 +69,13 @@ import { cn, isMac, plural } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
 import type { Account } from "@/pages/Accounts"
 
+/**
+ * A council session's page. The council has no index of its own: /council
+ * redirects to Ideas, where the composer and the list live.
+ */
 export default function Council({ subpath }: ModulePageProps) {
   const id = subpath[0]
-  return id ? <SessionPage key={id} id={id} /> : <Home />
+  return id ? <SessionPage key={id} id={id} /> : null
 }
 
 const label = (p: string) => providerInfo(p)?.label ?? p
@@ -88,41 +87,6 @@ function joinNames(ps: string[]): string {
   const ls = ps.map(label)
   if (ls.length <= 1) return ls.join("")
   return `${ls.slice(0, -1).join(", ")} and ${ls[ls.length - 1]}`
-}
-
-/* ---------- home: composer and sessions ---------- */
-
-function Home() {
-  // Poll faster while a council runs, so its row moves on by itself.
-  const [live, setLive] = useState(false)
-  const poll = usePoll<CouncilSummary[]>(SESSIONS_PATH, live ? 4000 : COUNCIL_POLL_MS)
-  const shown = poll.data ?? []
-  const anyRunning = shown.some((s) => s.status === "running")
-  useEffect(() => setLive(anyRunning), [anyRunning])
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={<Vote />}
-        title="Council"
-        description="Turn a messy braindump into a clear brief. One model drafts it, two others look for what would go wrong, and you approve the result."
-        actions={<RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />}
-      />
-      <Composer />
-      {poll.loading && !poll.data ? (
-        <Card className="space-y-2 p-5">
-          <Skeleton className="h-10" />
-          <Skeleton className="h-10" />
-          <Skeleton className="h-10" />
-        </Card>
-      ) : poll.error && !poll.data ? (
-        <ErrorState title="Could not load council sessions" message={poll.error.message} onRetry={poll.refresh} />
-      ) : shown.length === 0 ? (
-        <HowItWorks />
-      ) : (
-        <SessionsList list={shown} />
-      )}
-    </div>
-  )
 }
 
 type SignIn = "signed_in" | "expired" | "missing"
@@ -445,69 +409,7 @@ function Callout({ tone, icon: Icon, title, children }: { tone: "info" | "warnin
 
 /* ---------- empty state ---------- */
 
-function HowItWorks() {
-  const steps: { icon: ReactNode; title: string; text: string }[] = [
-    { icon: <PenLine className="size-3.5" />, title: "You braindump", text: "Messy is fine. Name a project if it is for one." },
-    {
-      icon: <ProviderMark provider="claude" className="size-3.5" />,
-      title: "A proposer drafts the brief",
-      text: "Problem, outcome, done criteria each with a proof, risks, first steps, open questions.",
-    },
-    {
-      icon: (
-        <span className="flex -space-x-1">
-          <ProviderMark provider="codex" className="size-3.5" />
-          <ProviderMark provider="grok" className="size-3.5" />
-        </span>
-      ),
-      title: "Two critics look for what would go wrong",
-      text: "In parallel, each returns a verdict and points by severity.",
-    },
-    { icon: <RotateCcw className="size-3.5" />, title: "The draft is revised", text: "A second round runs only while a critic still sees a blocker." },
-    { icon: <KanbanSquare className="size-3.5" />, title: "You approve", text: "The brief is saved in Memory and a card lands in Ready on your work board." },
-  ]
-  return (
-    <Card className="overflow-hidden">
-      <div className="grid @3xl:grid-cols-[1fr_1.25fr]">
-        <EmptyState
-          className="py-10"
-          icon={<Vote />}
-          satellites={(["claude", "codex", "grok"] as const).map((p) => (
-            <ProviderTile key={p} provider={p} size="sm" />
-          ))}
-          title="No briefs yet"
-          description="The council turns what is on your mind into a brief you could start from tomorrow. It runs on your own signed-in CLIs, and confidential projects never reach a provider."
-        />
-        <ol className="relative space-y-3.5 border-t bg-muted/25 p-5 @3xl:border-l @3xl:border-t-0">
-          <span aria-hidden className="absolute bottom-8 left-[34px] top-8 w-px bg-border" />
-          {steps.map((s, i) => (
-            <li key={s.title} className="relative flex items-start gap-3">
-              <span className="relative z-[1] flex size-7 shrink-0 items-center justify-center rounded-lg border bg-elevated text-muted-foreground shadow-card">
-                {s.icon}
-              </span>
-              <div className="min-w-0 pt-0.5">
-                <div className="text-sm font-medium">
-                  <span className="mr-1.5 font-mono text-2xs text-subtle-foreground">{i + 1}</span>
-                  {s.title}
-                </div>
-                <div className="text-xs text-muted-foreground">{s.text}</div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </Card>
-  )
-}
-
 /* ---------- sessions list ---------- */
-
-const STATUS_ICON: Record<CouncilSummary["status"], { icon: LucideIcon; cls: string }> = {
-  running: { icon: Loader2, cls: "text-info [&_svg]:animate-spin" },
-  draft: { icon: FileClock, cls: "text-warning" },
-  approved: { icon: CheckCircle2, cls: "text-success" },
-  failed: { icon: TriangleAlert, cls: "text-danger" },
-}
 
 function ProviderStack({ providers }: { providers: string[] }) {
   return (
@@ -519,76 +421,14 @@ function ProviderStack({ providers }: { providers: string[] }) {
   )
 }
 
-function SessionsList({ list }: { list: CouncilSummary[] }) {
-  const { open } = useApp()
-  const now = useNow(15000)
-  const waiting = list.filter((s) => s.status === "draft").length
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between px-5 pb-3 pt-4">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          Sessions
-          <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">{list.length}</span>
-        </h2>
-        {waiting > 0 && (
-          <StatusPill tone="warning">
-            {waiting} waiting for approval
-          </StatusPill>
-        )}
-      </div>
-      <ul className="divide-y border-t">
-        {list.map((s) => {
-          const si = STATUS_ICON[s.status]
-          return (
-            <li key={s.id}>
-              <button
-                onClick={() => open("council", [s.id])}
-                className="flex w-full items-center gap-3.5 px-5 py-3 text-left outline-none transition-colors hover:bg-accent/30 focus-visible:bg-accent/40"
-              >
-                <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg border bg-background/60 [&_svg]:size-4", si.cls)}>
-                  <si.icon />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">{s.title || (s.status === "running" ? "Drafting a brief…" : "Untitled braindump")}</span>
-                    {s.project && <Badge className="shrink-0 font-mono">{s.project}</Badge>}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">{s.status === "failed" && s.error ? s.error : s.input}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-4 text-xs tabular-nums text-subtle-foreground">
-                  <ProviderStack providers={[s.proposer, ...s.critics]} />
-                  <span className="w-16 max-[900px]:hidden">
-                    {plural(s.rounds, "round")}
-                  </span>
-                  <span className="w-12 text-right font-mono text-2xs max-[900px]:hidden" title={`${tokens(s.input_tokens)} in · ${tokens(s.output_tokens)} out`}>
-                    {usd(s.cost_usd)}
-                  </span>
-                  <span className="w-40 max-[1100px]:hidden">
-                    <StatusPill tone={STATUS[s.status].tone} pulse={s.status === "running"}>
-                      {STATUS[s.status].label}
-                    </StatusPill>
-                  </span>
-                  <time dateTime={s.created} title={absoluteTime(s.created)} className="w-16 text-right text-muted-foreground">
-                    {relativeTime(s.created, now)}
-                  </time>
-                </div>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </Card>
-  )
-}
-
 /* ---------- one session ---------- */
 
 function SessionPage({ id }: { id: string }) {
   const { open } = useApp()
   const { session, error, update } = useCouncilSession(id)
   const back = (
-    <button onClick={() => open("council")} className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-      <ArrowLeft className="size-3.5" /> Council
+    <button onClick={() => open("ideas")} className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+      <ArrowLeft className="size-3.5" /> Ideas
     </button>
   )
   if (error)
@@ -618,9 +458,14 @@ function SessionPage({ id }: { id: string }) {
   const refetch = () => getJSON<CouncilSession>(`${SESSIONS_PATH}/${s.id}`).then(update)
   return (
     <div className="space-y-5">
-      {back}
       <PageHeader
-        eyebrow={s.status === "running" && title ? "Working title" : undefined}
+        icon={<Lightbulb />}
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            {back}
+            {s.status === "running" && title && <span>· Working title</span>}
+          </span>
+        }
         title={title || (s.status === "failed" ? "The council could not finish" : "Drafting a brief…")}
         description={<span className="line-clamp-2">{s.input}</span>}
         actions={

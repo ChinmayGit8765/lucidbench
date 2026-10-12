@@ -94,10 +94,10 @@ export function familyOf(m: ModuleDef | undefined): ModuleDef[] {
   return kids.length > 0 && root.tab ? [root, ...kids] : []
 }
 
-/** The breadcrumb: the parent's title, or "Extensions" for an extension, then the module's own. */
+/** The breadcrumb: the parent's title, or "Extensions" for an extension, then the page as its tab names it. */
 export function breadcrumb(m: ModuleDef | undefined): string[] {
   if (!m) return ["Not found"]
-  if (m.parent) return [moduleById(m.parent)?.title ?? m.parent, m.title]
+  if (m.parent) return [moduleById(m.parent)?.title ?? m.parent, m.tab ?? m.title]
   if (m.kind === "extension") return [moduleById("extensions")?.title ?? "Extensions", m.title]
   return [m.title]
 }

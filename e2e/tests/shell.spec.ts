@@ -47,7 +47,7 @@ test("old addresses redirect, and the breadcrumb names the parent", async ({ pag
     ["/settings/extensions", "/extensions", "Extensions"],
     ["/settings/extensions/cloud", "/extensions/cloud", "Extensions"],
     ["/assistant/braindump", "/ideas/new/split", "Ideas"],
-    ["/boards", "/boards/work", "Work›Boards"],
+    ["/boards", "/boards/work", "Work›Board"],
     ["/system", "/system", "Settings›System"],
     ["/studio", "/studio", "Settings›Prompt Studio"],
     ["/settings", "/settings", "Settings"],

@@ -273,8 +273,8 @@ func Approve(id string, project string) (*boards.Card, error)
 
 `council`, `memory`, `boards`, `work`, `usage`. Each replaces its "soon" placeholder in
 `web/src/modules/` and keeps its section. Each one provides:
-- **Overview tiles:** Council: drafts waiting for approval. Work: running sessions. Boards: Ready
-  count. Usage: window bars.
+- **Home tiles** (Home shows at most four, below Needs your move and Next up): Council: drafts
+  waiting for approval. Work: running sessions. Boards: Ready count. Usage: window bars.
 - **Needs attention entries:** a brief to approve, the sessions waiting for you (one entry, "2
   sessions waiting for you"), a session finished with a diff to review, a usage window above 80 %.
 - **Palette commands:** "New braindump…", "New page…", "Add card…", "Start work on card…".

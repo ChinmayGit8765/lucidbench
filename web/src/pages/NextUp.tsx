@@ -554,6 +554,8 @@ function SidePanel({ view, projects, onChange }: { view: NextView; projects: Pro
     }
   }
   const togglePin = (id: string) => save({ ...s, pinned: s.pinned.includes(id) ? s.pinned.filter((p) => p !== id) : [...s.pinned, id] })
+  // The pins fold into one line; the chips show only while editing.
+  const [editPins, setEditPins] = useState(false)
   return (
     <div className="space-y-4">
       <Card className="space-y-4 p-4">
@@ -574,6 +576,17 @@ function SidePanel({ view, projects, onChange }: { view: NextView; projects: Pro
             ))}
           </select>
           {list.length > 0 && (
+            <button
+              onClick={() => setEditPins((e) => !e)}
+              aria-expanded={editPins}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              data-testid="nextup-pins"
+            >
+              <Pin className="size-3" />
+              {s.pinned.length} pinned · {editPins ? "done" : "edit"}
+            </button>
+          )}
+          {list.length > 0 && editPins && (
             <div className="mt-2 flex flex-wrap gap-1">
               {list.map((p) => {
                 const on = s.pinned.includes(p.id)

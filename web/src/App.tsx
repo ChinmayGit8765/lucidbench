@@ -19,7 +19,7 @@ import { useHealth } from "@/lib/health"
 import { PrefsProvider, usePrefs } from "@/lib/prefs"
 import { SETUP_PATH, SETUP_ROUTE, type SetupStatus } from "@/lib/setup"
 import { MODULES } from "@/modules"
-import { isAdded, isOpenable, matchPath, moduleById, navOrder, navOwner, needsDocker, pathFor, redirectPath } from "@/modules/registry"
+import { breadcrumb, isAdded, isOpenable, matchPath, moduleById, navOrder, navOwner, needsDocker, pathFor, redirectPath } from "@/modules/registry"
 import type { ModuleDef } from "@/modules/types"
 
 const Setup = lazy(() => import("@/pages/Setup"))
@@ -325,7 +325,7 @@ function Palette({ open, onClose, current }: { open: boolean; onClose: () => voi
     .filter((m) => isOpenable(m, prefs) && !(m.parent && !m.tab))
     .map((m) => ({
       id: `go-${m.id}`,
-      label: m.parent ? `${moduleById(m.parent)?.title ?? m.parent} › ${m.title}` : m.title,
+      label: m.parent ? breadcrumb(m).join(" › ") : m.title,
       group: "Go to",
       icon: m.icon,
       hint: current === m.id ? "current page" : undefined,
