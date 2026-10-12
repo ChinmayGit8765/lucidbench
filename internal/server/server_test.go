@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/ci"
+	"github.com/ChinmayGit8765/lucidbench/internal/hostinfo"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 )
 
@@ -25,6 +28,37 @@ func TestHealth(t *testing.T) {
 	}
 	if got.Status != "ok" || got.Version != version.Version {
 		t.Fatalf("unexpected body %+v", got)
+	}
+}
+
+// ?docker=1 adds the engine's state from the host tools check; without it
+// the body stays as it was.
+func TestHealthAnswersDockerOnRequest(t *testing.T) {
+	asked := 0
+	det := &hostinfo.Detector{
+		LookPath: func(string) (string, error) { return "", errors.New("not here") },
+		Getenv:   func(string) string { return "" },
+		DockerUp: func(context.Context) bool { asked++; return false },
+	}
+	get := func(target string) map[string]any {
+		rec := httptest.NewRecorder()
+		healthWith(det).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		var body map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %v", target, rec.Code, err)
+		}
+		return body
+	}
+	if b := get("/api/health"); b["docker"] != nil || asked != 0 {
+		t.Fatalf("plain health must not check docker: %v (asked %d)", b, asked)
+	}
+	if b := get("/api/health?docker=1"); b["docker"] != false || b["status"] != "ok" {
+		t.Fatalf("docker=1: %v", b)
+	}
+	// The check is cached: polling health does not probe docker each time.
+	get("/api/health?docker=1")
+	if asked != 1 {
+		t.Errorf("docker probed %d times, want 1", asked)
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 )
 
 // VolumeLabel is the Docker label that marks a profile volume; its value is
@@ -65,15 +67,15 @@ func ParseVolumes(out string) []Profile {
 }
 
 // ListVolumes lists profile volumes through the docker CLI. If docker is
-// missing or fails, it returns nil: volumes are simply skipped.
+// missing or fails, it returns nil: volumes are simply skipped. It goes
+// through docker.Exec, so a stopped engine is not asked on every poll.
 func ListVolumes() []Profile {
-	path, err := exec.LookPath("docker")
-	if err != nil {
+	if _, err := exec.LookPath("docker"); err != nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, path, VolumeListArgs...).Output()
+	out, err := docker.Exec(ctx, VolumeListArgs...)
 	if err != nil {
 		return nil
 	}
