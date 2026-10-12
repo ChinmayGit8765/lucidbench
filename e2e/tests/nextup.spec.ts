@@ -39,7 +39,9 @@ test.afterAll(async () => d?.stop())
 const listTitles = (page: Page) => page.getByTestId("nextup-item-title").allInnerTexts()
 
 test("Next up ranks the seeded work and explains each score", async ({ page }) => {
+  // Next up lives on Home now; the old address still lands there.
   await page.goto("/nextup")
+  await expect(page).toHaveURL(`${BASE}/`)
   await expect(page.getByTestId("nextup-hero-title")).toHaveText("Write the release notes")
   // Due tomorrow (20) beats in progress and small (18); the confidential
   // card and the need score nothing (ties go by id); the blocked card is last.
@@ -55,22 +57,29 @@ test("Next up ranks the seeded work and explains each score", async ({ page }) =
   await page.waitForTimeout(400)
   await page.screenshot({ path: shot("nextup-page") })
 
-  // The palette finds it.
-  await page.goto("/")
+  // The palette finds it, from any page.
+  await page.goto("/memory")
   await page.keyboard.press("Control+k")
   await page.keyboard.type("What should I work on")
   await page.keyboard.press("Enter")
-  await expect(page).toHaveURL(/\/nextup$/)
+  await expect(page).toHaveURL(`${BASE}/`)
+  await expect(page.getByTestId("nextup-section")).toBeVisible()
 })
 
-test("Overview's tile opens the confirm dialog for the top pick", async ({ page }) => {
-  await page.goto("/")
-  await expect(page.getByTestId("nextup-tile-title")).toHaveText("Write the release notes")
-  await page.waitForTimeout(600)
-  await page.screenshot({ path: shot("nextup-overview-tile") })
-  await page.getByTestId("nextup-tile-start").click()
-  await expect(page).toHaveURL(/\/nextup$/)
+test("An old Start link opens the confirm dialog for the top pick on Home", async ({ page }) => {
+  const top = ((await (await fetch(`${BASE}/api/nextup`)).json()) as { items: { id: string; title: string }[] }).items[0]
+  expect(top.title).toBe("Write the release notes")
+  await page.goto(`/nextup/start/${top.id}`)
+  // The confirm opens once the list is in, and the address goes back to Home.
   const dialog = page.getByRole("dialog")
+  await expect(dialog).toContainText("Start work: Write the release notes?")
+  await expect(page).toHaveURL(`${BASE}/`)
+  await page.screenshot({ path: shot("nextup-home-start") })
+  await dialog.getByRole("button", { name: "Cancel" }).click()
+  await expect(dialog).toHaveCount(0)
+
+  // Home's own Start does the same.
+  await page.getByTestId("nextup-start").click()
   await expect(dialog).toContainText("Start work: Write the release notes?")
   await expect(dialog).toContainText("card")
   await page.waitForTimeout(300)

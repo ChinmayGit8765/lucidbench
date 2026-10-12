@@ -90,7 +90,8 @@ test("Settings: the Customise page, and a feature becomes a braindump", async ({
   await page.screenshot({ path: shot("customise-page"), fullPage: true })
   await page.getByLabel("Describe a feature").fill("A weekly digest of what shipped and what it cost")
   await page.getByRole("button", { name: "Open in the Council" }).click()
-  await expect(page).toHaveURL(/\/council$/)
+  // The Council's composer is the braindump composer in Ideas now.
+  await expect(page).toHaveURL(/\/ideas$/)
   const dump = page.locator("#braindump")
   await expect(dump).toHaveValue(/This is a feature request for Lucidbench itself/)
   await expect(dump).toHaveValue(/A weekly digest of what shipped/)

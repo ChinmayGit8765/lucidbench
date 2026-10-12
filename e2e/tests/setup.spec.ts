@@ -102,7 +102,8 @@ test("first-run setup: accounts, a new vault, imported projects, a theme, power,
   // The last step opens the sample braindump in the council, without starting it.
   await page.goto("/setup/try")
   await page.getByTestId("setup-try").click()
-  await expect(page).toHaveURL(/\/council/)
+  // The braindump composer lives in Ideas now; the old Council address lands there.
+  await expect(page).toHaveURL(/\/ideas$/)
   await expect(page.getByRole("textbox").first()).toHaveValue(/side projects still build/)
   await expect(page.getByRole("button", { name: /Convene council/ })).toBeEnabled()
 })

@@ -114,6 +114,10 @@ func dockerCmd(s *dockerState, args []string) int {
 		return 0
 	}
 	switch args[0] {
+	case "version":
+		// The daemon's "is the engine up" check: a running engine answers.
+		fmt.Println("27.0.0-fake")
+		return 0
 	case "ps":
 		filterName, filterLabel := "", ""
 		all := false

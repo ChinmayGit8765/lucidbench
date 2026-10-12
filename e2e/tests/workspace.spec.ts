@@ -113,7 +113,8 @@ test("Theme: switch from the mascot launcher, and the shortcuts sheet", async ({
   await page.keyboard.press("w")
   await expect(page).toHaveURL(/\/work/)
   await page.keyboard.press("n")
-  await expect(page).toHaveURL(/\/council/)
+  // n opens the one braindump composer, at the top of Ideas.
+  await expect(page).toHaveURL(/\/ideas\/new$/)
   // n puts the cursor in the composer; typed keys belong to it from then on.
   await expect(page.getByRole("textbox", { name: "New braindump" })).toBeFocused()
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
