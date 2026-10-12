@@ -350,7 +350,7 @@ function ColumnScroller({ children }: { children: ReactNode }) {
           type="button"
           onClick={() => step(-1)}
           aria-label="Scroll to the earlier columns"
-          className="absolute left-2 top-3 z-10 inline-flex size-7 items-center justify-center rounded-full border bg-elevated text-muted-foreground shadow-sm hover:text-foreground md:left-4"
+          className="absolute left-2 top-40 z-10 inline-flex size-7 items-center justify-center rounded-full border bg-elevated text-muted-foreground shadow-sm hover:text-foreground md:left-4"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -359,7 +359,7 @@ function ColumnScroller({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={() => step(1)}
-          className="absolute right-2 top-3 z-10 inline-flex h-7 items-center gap-1 rounded-full border bg-elevated pl-2.5 pr-1.5 text-xs font-medium text-muted-foreground shadow-sm hover:text-foreground md:right-4"
+          className="absolute right-2 top-40 z-10 inline-flex h-7 items-center gap-1 rounded-full border bg-elevated pl-2.5 pr-1.5 text-xs font-medium text-muted-foreground shadow-sm hover:text-foreground md:right-4"
           data-testid="board-scroll-cue"
         >
           {edges.hidden > 0 ? `${edges.hidden} more` : "More"} <ChevronRight className="size-4" />

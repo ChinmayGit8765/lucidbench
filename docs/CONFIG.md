@@ -35,6 +35,46 @@ lucid config show          # effective config, with where each value came from
 The running daemon also serves the effective non-secret config at
 `GET /api/config` for the UI.
 
+## Saving settings from the UI
+
+A few settings save to `config.yaml` from the UI itself: the power modes, idle times and poll
+interval (Settings › Infrastructure), the vault folder and the update check (Settings ›
+General), and the environment variable each connector reads its secret from (Linear, Trello,
+Payments). Everything else stays a hand edit.
+
+- **What is written.** Only the keys you changed. A file in plain block style is edited line by
+  line, so comments, blank lines, key order and keys Lucidbench does not know stay byte for byte;
+  a value keeps the comment on its line. A missing key goes at the end of its block, a missing
+  block at the end of the file. Anything else (flow style such as `power: {cluster: off}`,
+  multi-line values) is set through the YAML node tree, which still keeps comments and unknown
+  keys but may reformat the file.
+- **Before writing.** Save shows the diff first. The new file must load like any config (a bad
+  mode or a literal secret is refused, and the file is left alone), and an invalid file is never
+  rewritten: fix it by hand.
+- **Backups.** The old file is copied to `config.yaml.bak-<date>-<time>` next to it; the newest
+  five are kept. The new file replaces the old one atomically.
+- **Secrets.** A connector field takes a variable name and saves `env:NAME`. The value is never
+  sent, saved or echoed.
+- **When it applies.** The engine reads its config when it starts, and there is no restart
+  button yet: a saved change applies after you quit Lucidbench (or stop `lucidd`) and start it
+  again. Until then the page says "Saved. Restart Lucidbench to apply". A key an environment
+  variable sets (`LUCID_POWER_CLUSTER`, `LUCID_VAULT_PATH`, …) still wins over the file, and the
+  save says so.
+- **Routes.** `GET /api/config/file` returns the saved values and which ones wait for a restart;
+  `POST /api/config/preview {set: {key: value}}` returns the diff without writing;
+  `POST /api/config/save` writes it (it needs `X-Lucid-Confirm: yes`).
+
+## Work sessions
+
+A Work session runs a turn (`running`), then waits for your follow-up (`waiting`) until you end
+it (`done`). A first turn that fails ends it as `failed`. When the session's PR is merged on
+GitHub it ends as `merged`, and as `closed` when the PR is closed without merging; a turn still
+running finishes first. A reopened PR brings a `closed` session back to `waiting`. The PR state is
+read with `gh` at most once a minute while a page shows the session. A merged session offers to
+remove its worktree in one click: its commits landed, so only uncommitted files ask for a
+discard. Next up, the Overview, the Work counters and the phone count only `waiting` sessions as
+waiting for you.
+
 ## Load order
 
 1. Built-in defaults

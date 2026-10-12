@@ -168,7 +168,9 @@ export function SessionView({ id }: { id: string }) {
     if (atBottom) setSeen(events.length)
   }, [atBottom, events.length])
   useEffect(() => {
-    if (running && tab === "timeline" && atBottom) end.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+    // Following is instant: a smooth scroll still under way when the next
+    // event lands would read as the user scrolling up and stop the follow.
+    if (running && tab === "timeline" && atBottom) end.current?.scrollIntoView({ block: "end" })
   }, [events.length, running, tab, atBottom])
   const toBottom = () => end.current?.scrollIntoView({ block: "end", behavior: "smooth" })
   const unseen = tab === "timeline" && !atBottom ? Math.max(0, events.length - seen) : 0

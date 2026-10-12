@@ -164,7 +164,8 @@ func Approve(id string, project string) (*boards.Card, error)
 
 ### `internal/work`
 - **Sessions:** `{id, provider, profile, harness, project, repo_path, branch, worktree, prompt,
-  card, status: running|waiting|done|failed|stopped, started, ended, usage, turns, resume_id}`.
+  card, status: running|waiting|done|failed|stopped|merged|closed, started, ended, usage, turns,
+  resume_id, pr_url, pr_state: draft|open|merged|closed}`.
 - **Turns and states:** a session is a conversation of turns, each one run of the CLI in the same
   worktree.
   - `running`: a turn runs. When it ends cleanly, or the user stops it, the session is `waiting`:
@@ -172,6 +173,11 @@ func Approve(id string, project string) (*boards.Card, error)
   - `waiting` → `running` with `POST …/followup {prompt}`; `waiting` → `done` with `POST …/end`
     (or when its worktree is removed). A first turn that fails makes the session `failed`; a later
     turn that fails leaves it `waiting`, with the turn marked failed.
+  - `waiting` → `merged` (or `closed`) when gh reports the session's PR merged (or closed); a
+    turn running at the time finishes first, then the session ends the same way. A session saved
+    `waiting` on an already merged PR ends on load. A `closed` session whose PR is reopened waits
+    again. Follow-ups and End refuse both with `409`; `remove` needs no `discard` for a merged
+    session's commits (they landed), only for uncommitted files.
   - `stopped` is only on sessions saved before follow-ups.
   - `turns[]` is `{n, prompt (the follow-up; "" for turn 1), mode: first|resume|summary, status:
     running|done|failed|stopped|interrupted, started, ended, usage, answer, error, event}`, where
@@ -252,7 +258,10 @@ func Approve(id string, project string) (*boards.Card, error)
 | `/api/work/sessions/{id}/end` | POST | ends a `waiting` session (`done`); `409` while a turn runs or once it has ended |
 | `/api/work/sessions/{id}/remove` | POST | `{discard}` removes the worktree; unpushed or uncommitted work needs `discard: true` |
 | `/api/work/sessions/{id}/pr` | POST | push branch + draft PR |
-| `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once |
+| `/api/work/sessions/{id}/pr/refresh` | POST | read the PR's state from gh now; a merged PR moves its card to Done once and ends a waiting session as `merged` (a closed one as `closed`) |
+| `/api/config/file` | GET | `{path, found, values, sources, pending}`: the keys the UI may save, as config.yaml sets them, and those a restart still has to apply |
+| `/api/config/preview` | POST | `{set: {key: value}}` returns `{path, created, changed, diff[{op, text}], overridden, restart}`; writes nothing |
+| `/api/config/save` | POST | the same, written: backup `config.yaml.bak-<time>` (newest five kept), only the keys sent, atomic replace; `400` for a key the UI may not write, a bad value or a literal secret |
 | `/api/usage/summary?days=` | GET | per provider: tokens, cost, windows |
 | `/api/usage/plan?hours=` | GET | per account: the current window, its reset, the burn rate over the last `hours` (default 2, 0.25-24) and the run-out projection; the saved plan with estimates, the provider to use, fits/after_reset/too_big/unknown and budget warnings. Local records only |
 | `/api/usage/plan` | PUT | `{items[{id?, title, kind: council\|work\|section\|rank\|assistant, provider?, model?, project?, source?, nextup_id?}]}` saves `usage/plan.json` (at most 30 items) and returns the new view |
