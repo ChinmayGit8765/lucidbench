@@ -25,6 +25,20 @@ questions:
   - id: platforms
     text: Which platforms does it target?
     type: text
+  - id: performance
+    text: What frame rate must it hold on the weakest machine or device you target?
+    type: choice
+    options: [no-target, 30-fps, 60-fps-or-more]
+    optional: true
+  - id: monetisation
+    text: How does it make money, if at all?
+    type: choice
+    options: [free, paid-up-front, in-app-purchases, ads]
+    optional: true
+  - id: content
+    text: Is most of the work content (levels, art, dialogue) rather than code?
+    type: bool
+    optional: true
 rules:
   - criteria:
       - "The game starts, reaches the main loop and quits cleanly — proof: a recorded run or screenshot of the main loop on the target platform"
@@ -60,6 +74,27 @@ rules:
     risk:
       level: medium
       reason: Strangers will play it, so crashes and missing assets are public
+  - when: {performance: [30-fps, 60-fps-or-more]}
+    criteria:
+      - "The frame rate holds on the weakest target device through the busiest scene — proof: a profiler capture or a frame-time graph from that device"
+    risk:
+      level: medium
+      reason: Performance problems found late force cuts to content or engine changes
+  - when: {monetisation: in-app-purchases}
+    criteria:
+      - "A sandbox purchase is granted once, survives a reinstall through restore, and a refund removes it — proof: a store sandbox run of all three"
+    risk:
+      level: high
+      reason: Purchases bring store rules, receipts and refunds, and a lost purchase is a support case
+  - when: {monetisation: ads}
+    criteria:
+      - "Ads never cover controls and the game plays on when an ad fails to load — proof: a run with the network off"
+    risk:
+      level: medium
+      reason: Ad SDKs collect data and add consent duties in many countries
+  - when: {content: "true"}
+    criteria:
+      - "New content is checked by a script for missing assets and broken references — proof: the script and its clean run"
   - when: {stage: prototype, audience: just-me}
     risk:
       level: low

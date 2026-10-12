@@ -199,6 +199,14 @@ type Config struct {
 	// defaults. internal/team reads and checks it.
 	Team string `json:"team,omitempty"`
 
+	// UpdateCheck lets the daemon ask GitHub Releases, at most once every
+	// six hours, whether a newer Lucidbench is out. It never downloads or
+	// installs anything.
+	UpdateCheck bool `json:"update_check"`
+	// UpdateRepo is the owner/name the releases are read from; "" means the
+	// repository the build came from (version.Repo).
+	UpdateRepo string `json:"update_repo"`
+
 	// File is the config file path that was consulted; FileFound says whether
 	// it existed.
 	File      string `json:"-"`
@@ -230,7 +238,8 @@ func Default() *Config {
 			Trello: TrelloConfig{Key: DefaultTrelloKey, Token: DefaultTrelloToken, APIURL: DefaultTrelloAPI},
 			Stripe: StripeConfig{Key: DefaultStripeKey, APIURL: DefaultStripeAPI},
 		},
-		sources: map[string]string{},
+		UpdateCheck: true,
+		sources:     map[string]string{},
 	}
 	for _, p := range Providers {
 		c.Providers[p] = ProviderConfig{Enabled: true, ExtraDirs: []string{}}
@@ -252,7 +261,7 @@ func Keys() []string {
 		"power.cluster", "power.cluster_idle_minutes", "power.runners", "power.runner_idle_minutes", "power.stacks", "power.poll_seconds",
 		"integrations.linear.token", "integrations.linear.api_url",
 		"integrations.trello.key", "integrations.trello.token", "integrations.trello.api_url",
-		"integrations.stripe.key", "integrations.stripe.api_url", "team")
+		"integrations.stripe.key", "integrations.stripe.api_url", "team", "update_check", "update_repo")
 }
 
 // Source reports where a key's effective value came from: "default", "file"
@@ -467,6 +476,12 @@ func (c *Config) applyFile(path string, data []byte) ([]string, error) {
 			err = d.integrations(e)
 		case "team":
 			err = d.team(e)
+		case "update_check":
+			c.UpdateCheck, err = d.boolean(e.node, "update_check")
+			c.sources["update_check"] = "file"
+		case "update_repo":
+			c.UpdateRepo, err = d.str(e.node, "update_repo")
+			c.sources["update_repo"] = "file"
 		default:
 			d.warnUnknown(e.node, e.key)
 		}
@@ -734,6 +749,8 @@ var envSpecs = map[string][]string{
 
 	"power.cluster": {"LUCID_POWER_CLUSTER"},
 	"power.runners": {"LUCID_POWER_RUNNERS"},
+
+	"update_repo": {"LUCID_UPDATE_REPO"},
 }
 
 // integrationEnv is the environment variable of an integrations key:
@@ -759,6 +776,8 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 
 		"power.cluster": &c.Power.Cluster,
 		"power.runners": &c.Power.Runners,
+
+		"update_repo": &c.UpdateRepo,
 	}
 	for key, names := range envSpecs {
 		for _, n := range names {
@@ -767,6 +786,14 @@ func (c *Config) applyEnv(getenv func(string) string) error {
 				c.sources[key] = "env:" + n
 			}
 		}
+	}
+	if v := getenv("LUCID_UPDATE_CHECK"); v != "" {
+		b, ok := parseBool(v)
+		if !ok {
+			return fmt.Errorf("env LUCID_UPDATE_CHECK: update_check: must be true or false")
+		}
+		c.UpdateCheck = b
+		c.sources["update_check"] = "env:LUCID_UPDATE_CHECK"
 	}
 	if v := getenv("LUCID_CI_GITHUB_REPOS"); v != "" {
 		// Comma or whitespace separated owner/name list.
@@ -937,6 +964,9 @@ func (c *Config) validate() error {
 	if strings.ContainsAny(c.CI.Runners.ComposeProject, " \t") {
 		return c.bad("ci.runners.compose_project", "must not contain spaces")
 	}
+	if c.UpdateRepo != "" && !repoRE.MatchString(c.UpdateRepo) {
+		return c.bad("update_repo", fmt.Sprintf("%q must be owner/name", c.UpdateRepo))
+	}
 	for _, p := range c.Docker.AllowedProjects {
 		if !composeProjectRE.MatchString(p) {
 			return c.bad("docker.allowed_projects", fmt.Sprintf("%q must be a compose project name (lowercase letters, digits, dashes, underscores)", p))
@@ -1053,6 +1083,10 @@ func (c *Config) value(key string) string {
 		return fmt.Sprint(c.Power.RunnerIdleMinutes)
 	case "power.poll_seconds":
 		return fmt.Sprint(c.Power.PollSeconds)
+	case "update_check":
+		return fmt.Sprint(c.UpdateCheck)
+	case "update_repo":
+		return c.UpdateRepo
 	case "team":
 		if c.Team == "" {
 			return ""

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/ChinmayGit8765/lucidbench/internal/accounts"
@@ -45,6 +46,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/team"
 	"github.com/ChinmayGit8765/lucidbench/internal/themes"
 	"github.com/ChinmayGit8765/lucidbench/internal/trello"
+	"github.com/ChinmayGit8765/lucidbench/internal/update"
 	"github.com/ChinmayGit8765/lucidbench/internal/usage"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 	"github.com/ChinmayGit8765/lucidbench/internal/webui"
@@ -226,6 +228,29 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		MCP:      func() mcp.Matrix { return mcp.Read(mcp.FromConfig(cfg)) },
 		Estimate: func() func(string, string) (float64, int) { return team.Estimator(data) },
 	})
+	// The Usage planner suggests providers from the team and warns on budgets.
+	d.Usage.Team = func(project string) []usage.TeamSeat {
+		t, _, _ := teams.DefaultTeam()
+		if project != "" {
+			if res, err := teams.Resolve(project); err == nil {
+				t = res.Team
+			}
+		}
+		var out []usage.TeamSeat
+		for _, s := range t.Seats() {
+			out = append(out, usage.TeamSeat{Role: s.Name, Provider: s.Role.Provider, Model: s.Role.Model, BudgetUSD: s.Role.BudgetUSD})
+		}
+		return out
+	}
+	d.Usage.Available = func() []string {
+		var out []string
+		for _, p := range accounts.Detect(accounts.FromConfig(cfg)) {
+			if p.Location == accounts.LocHost && p.Status == accounts.StatusLoggedIn && !slices.Contains(out, p.Provider) && slices.Contains(usage.PlanProviders, p.Provider) {
+				out = append(out, p.Provider)
+			}
+		}
+		return out
+	}
 	councilSvc.Team, workSvc.Team = teams.CouncilRoles, teams.WorkBuilder(data)
 	councilSvc.Runner.ProfileDir = func(provider, profile string) (string, error) { return hostProfileDir(cfg, provider, profile) }
 	sectionStore := &sections.Store{Dir: filepath.Join(data, "sections")}
@@ -267,6 +292,14 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 		})
 		remote.Register(mux, d.Remote)
 	}
+	// The update check: GitHub Releases at most once every six hours, never
+	// a download. A dev build asks only a test feed (update.FeedEnv).
+	updateRepo := cfg.UpdateRepo
+	if updateRepo == "" {
+		updateRepo = version.Repo
+	}
+	update.Register(mux, &update.Service{Enabled: cfg.UpdateCheck, Repo: updateRepo, Current: version.Version,
+		BaseURL: os.Getenv(update.FeedEnv), DataDir: data})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
 	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
 	mux.Handle("/api/", http.NotFoundHandler())

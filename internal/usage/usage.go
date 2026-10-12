@@ -112,6 +112,12 @@ type Service struct {
 	// Loc buckets events into days; nil means the machine's local zone.
 	Loc *time.Location
 	Now func() time.Time
+	// Team returns a project's team seats ("" for the default team), for the
+	// planner's provider suggestions and budget warnings; nil means none.
+	Team func(project string) []TeamSeat
+	// Available lists the providers signed in on this machine; nil means
+	// every planning provider.
+	Available func() []string
 
 	mu    sync.Mutex
 	cache *cache
@@ -122,11 +128,77 @@ func NewService(cfg *config.Config, dataDir string) *Service {
 	return &Service{Roots: func() accounts.Roots { return accounts.FromConfig(cfg) }, DataDir: dataDir}
 }
 
-// sample is one counted event, whatever its source.
+// sample is one counted event, whatever its source. Account is the profile
+// whose logs it came from ("default" for the provider's own home).
 type sample struct {
 	TS              int64
 	Model, Project  string
 	In, Out, CR, CW int64
+	Account         string
+}
+
+// scanned is what one pass over the provider logs found.
+type scanned struct {
+	claudeOn, codexOn bool
+	claude            []sample
+	claudeFiles       int
+	codex             []codexHit
+}
+
+// scan brings the parse cache up to date and returns every sample. The
+// caller holds s.mu.
+func (s *Service) scan(now time.Time) scanned {
+	roots := s.Roots()
+	cachePath := filepath.Join(s.DataDir, "usage-cache.gob")
+	if s.cache == nil {
+		s.cache = loadCache(cachePath)
+	}
+	var out scanned
+	dirty := false
+	if roots.On("claude") {
+		out.claudeOn = true
+		cr := []claudeRoot{{filepath.Join(roots.Home, ".claude"), roots.Home, "default"}}
+		for _, d := range roots.ExtraClaudeDirs {
+			if d != "" {
+				cr = append(cr, claudeRoot{d, roots.Home, filepath.Base(d)})
+			}
+		}
+		recs, files, changed := scanClaude(cr, s.cache, now)
+		dirty = dirty || changed
+		for _, r := range recs {
+			out.claude = append(out.claude, sample{TS: r.TS, Model: r.Model, Project: r.Project, In: r.In, Out: r.Out, CR: r.CR, CW: r.CW, Account: r.Account})
+		}
+		out.claudeFiles = files
+	}
+	if roots.On("codex") {
+		out.codexOn = true
+		home := roots.CodexHome
+		if home == "" {
+			home = filepath.Join(roots.Home, ".codex")
+		}
+		dirs := []codexDir{{home, "default"}}
+		for _, d := range roots.ExtraDirs["codex"] {
+			dirs = append(dirs, codexDir{d, filepath.Base(d)})
+		}
+		entries, changed := scanCodex(dirs, roots.Home, s.cache, now)
+		dirty = dirty || changed
+		out.codex = entries
+	}
+	if dirty {
+		_ = s.cache.save(cachePath) // a cache that cannot be saved only costs speed
+	}
+	return out
+}
+
+// codexSamples flattens Codex entries into samples.
+func codexSamples(entries []codexHit) []sample {
+	var ss []sample
+	for _, e := range entries {
+		for _, ev := range e.Events {
+			ss = append(ss, sample{TS: ev.TS, Model: ev.Model, Project: e.Project, In: ev.In, Out: ev.Out, CR: ev.CR, CW: ev.CW, Account: e.Account})
+		}
+	}
+	return ss
 }
 
 // Summary computes the usage of the last days days, today included.
@@ -146,32 +218,14 @@ func (s *Service) Summary(days int) *Summary {
 	if loc == nil {
 		loc = time.Local
 	}
-	roots := s.Roots()
-	cachePath := filepath.Join(s.DataDir, "usage-cache.gob")
-	if s.cache == nil {
-		s.cache = loadCache(cachePath)
-	}
+	sc := s.scan(now)
 	out := &Summary{GeneratedAt: now.UTC(), Days: days}
-	dirty := false
 
 	// Claude Code.
 	cl := Provider{ID: "claude", Label: "Claude", Status: "disabled", WindowNote: "Not exposed locally. Run /usage in Claude Code."}
-	if roots.On("claude") {
-		def := filepath.Join(roots.Home, ".claude")
-		cr := []claudeRoot{{def, roots.Home}}
-		for _, d := range roots.ExtraClaudeDirs {
-			if d != "" {
-				cr = append(cr, claudeRoot{d, roots.Home})
-			}
-		}
-		recs, files, changed := scanClaude(cr, s.cache, now)
-		dirty = dirty || changed
-		var ss []sample
-		for _, r := range recs {
-			ss = append(ss, sample{r.TS, r.Model, r.Project, r.In, r.Out, r.CR, r.CW})
-		}
-		cl = fill(cl, ss, files, days, now, loc)
-		if files == 0 {
+	if sc.claudeOn {
+		cl = fill(cl, sc.claude, sc.claudeFiles, days, now, loc)
+		if sc.claudeFiles == 0 {
 			cl.Status, cl.Note = "missing", "No Claude Code logs found on this machine."
 		}
 	}
@@ -179,25 +233,15 @@ func (s *Service) Summary(days int) *Summary {
 
 	// Codex.
 	cx := Provider{ID: "codex", Label: "Codex", Status: "disabled"}
-	if roots.On("codex") {
-		home := roots.CodexHome
-		if home == "" {
-			home = filepath.Join(roots.Home, ".codex")
-		}
-		dirs := append([]string{home}, roots.ExtraDirs["codex"]...)
-		entries, changed := scanCodex(dirs, roots.Home, s.cache, now)
-		dirty = dirty || changed
-		var ss []sample
+	if sc.codexOn {
+		entries := sc.codex
 		var latest *codexEntry
 		for _, e := range entries {
-			for _, ev := range e.Events {
-				ss = append(ss, sample{ev.TS, ev.Model, e.Project, ev.In, ev.Out, ev.CR, ev.CW})
-			}
 			if (e.Primary != nil || e.Secondary != nil) && (latest == nil || e.RLTS > latest.RLTS) {
-				latest = e
+				latest = e.codexEntry
 			}
 		}
-		cx = fill(cx, ss, len(entries), days, now, loc)
+		cx = fill(cx, codexSamples(entries), len(entries), days, now, loc)
 		if len(entries) == 0 {
 			cx.Status, cx.Note = "missing", "No Codex sessions found on this machine."
 		}
@@ -229,9 +273,6 @@ func (s *Service) Summary(days int) *Summary {
 		}
 	}
 
-	if dirty {
-		_ = s.cache.save(cachePath) // a cache that cannot be saved only costs speed
-	}
 	out.Lucidbench = summariseOwn(readOwn(s.DataDir), days, now, loc)
 	return out
 }
@@ -380,7 +421,8 @@ func summariseOwn(runs []ownRun, days int, now time.Time, loc *time.Location) Ow
 	return o
 }
 
-// Register adds GET /api/usage/summary?days=N (1 to 90, default 7).
+// Register adds GET /api/usage/summary?days=N (1 to 90, default 7) and the
+// plan routes (GET and PUT /api/usage/plan).
 func Register(mux *http.ServeMux, s *Service) {
 	mux.HandleFunc("GET /api/usage/summary", func(w http.ResponseWriter, r *http.Request) {
 		days := 7
@@ -395,4 +437,5 @@ func Register(mux *http.ServeMux, s *Service) {
 		w.Header().Set("Cache-Control", "no-store")
 		apiutil.WriteJSON(w, http.StatusOK, s.Summary(days))
 	})
+	registerPlan(mux, s)
 }

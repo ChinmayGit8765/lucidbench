@@ -175,18 +175,31 @@ func refreshCodex(p string, old *codexEntry, cutoff int64, home string) (*codexE
 	return e, true
 }
 
-// scanCodex brings the cache up to date for the rollout logs under dir and
-// returns the entries.
-func scanCodex(dirs []string, home string, c *cache, now time.Time) (entries []*codexEntry, changed bool) {
+// codexDir is a Codex home and the account (profile) name it stands for.
+type codexDir struct{ Dir, Account string }
+
+// codexHit is a parsed log and the account whose home it is under.
+type codexHit struct {
+	*codexEntry
+	Account string
+}
+
+// scanCodex brings the cache up to date for the rollout logs under the
+// homes and returns the entries.
+func scanCodex(dirs []codexDir, home string, c *cache, now time.Time) (entries []codexHit, changed bool) {
 	var files []string
+	account := map[string]string{}
 	seen := map[string]bool{}
 	for _, d := range dirs {
-		d = filepath.Clean(d)
-		if seen[d] {
+		dir := filepath.Clean(d.Dir)
+		if seen[dir] {
 			continue
 		}
-		seen[d] = true
-		files = append(files, walkJSONL(filepath.Join(d, "sessions"), "rollout-")...)
+		seen[dir] = true
+		for _, p := range walkJSONL(filepath.Join(dir, "sessions"), "rollout-") {
+			files = append(files, p)
+			account[p] = d.Account
+		}
 	}
 	cutoff := now.Add(-retention).Unix()
 	var mu sync.Mutex
@@ -215,8 +228,8 @@ func scanCodex(dirs []string, home string, c *cache, now time.Time) (entries []*
 			changed = true
 		}
 	}
-	for _, e := range c.Codex {
-		entries = append(entries, e)
+	for p, e := range c.Codex {
+		entries = append(entries, codexHit{e, account[p]})
 	}
 	return entries, changed
 }

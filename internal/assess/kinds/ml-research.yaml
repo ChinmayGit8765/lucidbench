@@ -1,6 +1,6 @@
 id: ml-research
-name: ML or research
-blurb: An experiment that trains models or tests an idea with data.
+name: ML, research or experiment
+blurb: An experiment that tests an idea, trains a model or measures something with data.
 order: 6
 types: [ml-research]
 questions:
@@ -25,6 +25,15 @@ questions:
   - id: question
     text: What is the question, in one sentence?
     type: text
+  - id: threshold
+    text: Did you write down, before running, what result would count as success and what as failure?
+    type: bool
+    optional: true
+  - id: timebox
+    text: How long will you give it before deciding?
+    type: choice
+    options: [a-day, a-week, a-month, open-ended]
+    optional: true
 rules:
   - commands: [python, pytest]
     criteria:
@@ -50,6 +59,18 @@ rules:
     risk:
       level: medium
       reason: Your own data may still contain other people's details
+  - when: {threshold: "false"}
+    criteria:
+      - "The success and failure thresholds are written down before the main run — proof: the dated note with both thresholds"
+    risk:
+      level: medium
+      reason: Without a threshold set first, any result can be read as success
+  - when: {timebox: open-ended}
+    criteria:
+      - "The experiment has a stop date and a decision to make on it — proof: the date and the decision in the results note"
+    risk:
+      level: medium
+      reason: An open-ended experiment keeps spending time without forcing a decision
   - when: {compute: [one-gpu, rented-cluster]}
     criteria:
       - "A run has a time or cost cap — proof: the cap in the run config"

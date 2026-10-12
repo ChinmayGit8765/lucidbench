@@ -11,7 +11,7 @@ func TestKindsLoadAndValidate(t *testing.T) {
 	var got []string
 	for _, k := range Kinds() {
 		got = append(got, k.ID)
-		if n := len(k.Questions); n < 5 || n > 7 {
+		if n := len(k.Questions); n < MinQuestions || n > MaxQuestions {
 			t.Errorf("%s has %d questions", k.ID, n)
 		}
 		if len(k.Rules) == 0 {
@@ -69,6 +69,9 @@ questions:
 		"risk needs reason": base + "rules:\n  - risk: {level: low}\n",
 		"unknown field":     base + "surprise: 1\n",
 		"too few questions": strings.Replace(base, "  - {id: d, text: D, type: bool}\n", "", 1),
+		"too many questions": strings.Replace(base, "questions:\n",
+			"questions:\n  - {id: f, text: F, type: bool}\n  - {id: g, text: G, type: bool}\n  - {id: h, text: H, type: bool}\n  - {id: i, text: I, type: bool}\n  - {id: j, text: J, type: bool}\n  - {id: k, text: K, type: bool}\n", 1),
+		"optional text has options": strings.Replace(base, "{id: a, text: A, type: bool}", "{id: a, text: A, type: text, options: [x, y]}", 1),
 	}
 	for name, src := range cases {
 		if _, err := parseKind([]byte(src)); err == nil {
@@ -161,5 +164,97 @@ func TestKindForType(t *testing.T) {
 		if got := KindForType(typ); got != want {
 			t.Errorf("KindForType(%q) = %q, want %q", typ, got, want)
 		}
+	}
+}
+
+// The project types the preliminary questionnaire must cover: game, product
+// (web/SaaS), video system, CLI or library, and research or experiment. Each
+// loads with six to ten questions, and a full answer set validates and
+// assesses into proof-carrying criteria and the expected risk.
+func TestProjectTypeKindsAssess(t *testing.T) {
+	cases := []struct {
+		kind     string
+		answers  map[string]string
+		level    string
+		criteria []string
+	}{
+		{"game", map[string]string{
+			"engine": "godot", "stage": "prototype", "audience": "friends", "multiplayer": "false", "saves": "true", "platforms": "windows",
+			"performance": "60-fps-or-more", "monetisation": "in-app-purchases", "content": "true",
+		}, "high", []string{"frame rate holds", "sandbox purchase", "missing assets", "restores the same state"}},
+		{"web-app", map[string]string{
+			"users": "paying-customers", "accounts": "true", "payments": "false", "data": "false", "tests": "some", "deploy": "ci-pipeline",
+			"tenancy": "many-customers-shared", "monitoring": "a-user-tells-me",
+		}, "high", []string{"customer B's records", "deliberate test error", "rolled back"}},
+		{"video-media", map[string]string{
+			"role": "stream-or-play", "input": "my-own", "size": "minutes", "pipeline": "false",
+			"latency": "live-under-seconds", "engine": "hardware-or-gpu-encoders", "reference-clips": "false",
+		}, "high", []string{"30-minute run", "hardware encoding turned off", "awkward clips", "target player"}},
+		{"cli-library", map[string]string{
+			"shape": "command", "language": "go", "consumers": "just-me", "stable-api": "false", "published": "false", "docs": "readme",
+			"platforms": "several", "writes-files": "true",
+		}, "medium", []string{"CI matrix", "temporary home folder", "--help"}},
+		{"ml-research", map[string]string{
+			"goal": "learn-something", "data": "public-dataset", "compute": "laptop", "reproducible": "true", "baseline": "true",
+			"threshold": "false", "timebox": "open-ended",
+		}, "medium", []string{"thresholds are written down", "stop date"}},
+	}
+	for _, c := range cases {
+		k, ok := Get(c.kind)
+		if !ok {
+			t.Fatalf("kind %s missing", c.kind)
+		}
+		if n := len(k.Questions); n < 6 || n > MaxQuestions {
+			t.Errorf("%s has %d questions, want 6 to %d", c.kind, n, MaxQuestions)
+		}
+		a := Assessment{Kind: c.kind, Answers: c.answers}
+		if err := Validate(a); err != nil {
+			t.Errorf("%s: %v", c.kind, err)
+			continue
+		}
+		s := Suggest(a)
+		if s.Risk.Level != c.level || len(s.Risk.Reasons) == 0 {
+			t.Errorf("%s risk = %+v, want %s", c.kind, s.Risk, c.level)
+		}
+		joined := strings.Join(s.DoneCriteria, "\n")
+		for _, want := range c.criteria {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%s criteria missing %q:\n%s", c.kind, want, joined)
+			}
+		}
+		for _, cr := range s.DoneCriteria {
+			if !strings.Contains(cr, "proof:") {
+				t.Errorf("%s criterion without a proof hint: %q", c.kind, cr)
+			}
+		}
+	}
+}
+
+// Questions added after a kind shipped are optional, so an assessment saved
+// before them still validates; a wrong answer to one is still refused.
+func TestOptionalQuestionsKeepOldAssessmentsValid(t *testing.T) {
+	old := Assessment{Kind: "game", Answers: map[string]string{
+		"engine": "godot", "stage": "prototype", "audience": "just-me", "multiplayer": "false", "saves": "false",
+	}}
+	if err := Validate(old); err != nil {
+		t.Fatalf("assessment saved before the new questions: %v", err)
+	}
+	if s := Suggest(old); s.Risk.Level != "low" {
+		t.Errorf("unanswered optional questions changed the risk: %+v", s.Risk)
+	}
+	old.Answers["performance"] = "120-fps"
+	if err := Validate(old); err == nil || !strings.Contains(err.Error(), "answers.performance") {
+		t.Errorf("bad optional answer: %v", err)
+	}
+	old.Answers["performance"] = ""
+	old.Answers["content"] = "maybe"
+	if err := Validate(old); err == nil || !strings.Contains(err.Error(), "answers.content") {
+		t.Errorf("bad optional bool: %v", err)
+	}
+	// Required questions stay required.
+	delete(old.Answers, "content")
+	delete(old.Answers, "engine")
+	if err := Validate(old); err == nil || !strings.Contains(err.Error(), "answers.engine: required") {
+		t.Errorf("required question: %v", err)
 	}
 }

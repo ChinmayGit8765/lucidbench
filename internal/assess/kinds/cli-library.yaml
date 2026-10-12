@@ -26,6 +26,15 @@ questions:
     text: Does it have usage documentation?
     type: choice
     options: [none, readme, full]
+  - id: platforms
+    text: Which operating systems must it run on?
+    type: choice
+    options: [one, several]
+    optional: true
+  - id: writes-files
+    text: Does it write, move or delete files on the user's machine?
+    type: bool
+    optional: true
 rules:
   - when: {language: go}
     commands: [go test, go vet, gofmt]
@@ -65,6 +74,18 @@ rules:
     risk:
       level: medium
       reason: Strangers depend on it, so bugs and breaking changes have a wide reach
+  - when: {platforms: several}
+    criteria:
+      - "The tests run on every supported operating system — proof: a CI matrix run with one job per OS"
+    risk:
+      level: medium
+      reason: Paths, line endings, shells and file locking differ between operating systems
+  - when: {writes-files: "true"}
+    criteria:
+      - "It writes only where it is told to, and destructive actions ask first or offer --dry-run — proof: a test run against a temporary home folder"
+    risk:
+      level: medium
+      reason: A wrong path in a file-writing tool damages the user's own files
   - when: {docs: none}
     criteria:
       - "The README shows install and one working example — proof: a fresh reader follows it without help"

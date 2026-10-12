@@ -74,6 +74,7 @@ function AnswerInput({ q, value, suggested, onChange }: { q: Question; value: st
           aria-label={q.text}
         />
       )}
+      {q.optional && q.type !== "text" && <p className="text-xs text-subtle-foreground">Optional. Skip it if it does not apply.</p>}
       {suggested && value && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Sparkles className="size-3.5 text-brand" /> Suggested from the project's files. Change it if it is wrong.
@@ -215,7 +216,7 @@ function Flow({ project, kinds, onClose, onSaved }: { project: Project; kinds: K
     }
   }
 
-  const answered = (q: Question) => q.type === "text" || !!answers[q.id]
+  const answered = (q: Question) => q.type === "text" || !!q.optional || !!answers[q.id]
   const pos = step.at === "kind" ? 0 : step.at === "question" ? step.i + 1 : qs.length + 1
   const total = qs.length + 1 // the questions, then the review
 
