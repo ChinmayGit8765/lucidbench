@@ -16,7 +16,12 @@
 //   - codex, grok: critics; they always answer "ok".
 //   - gh: `pr create` prints a PR URL; `pr view` reports the state written
 //     in $LUCID_E2E_STATE/pr-state (OPEN unless a test wrote MERGED).
-//   - docker: there is no engine.
+//   - docker: there is no engine, unless a spec wrote $LUCID_E2E_STATE/docker.json;
+//     then it is a small stateful one (see docker.go).
+//   - vercel: signed out, unless a spec wrote $LUCID_E2E_STATE/vercel.json with
+//     the whoami, projects and deployments answers (see vercel.go).
+//   - gh: `auth token` prints a fake token, so the CI page can authenticate
+//     against a fake GitHub API.
 //
 // Every call is appended to $LUCID_E2E_STATE/calls.log.
 package main
@@ -42,6 +47,9 @@ func out(v any) {
 func main() {
 	name := strings.TrimSuffix(strings.ToLower(filepath.Base(os.Args[0])), ".exe")
 	args := os.Args[1:]
+	if name == "docker" && len(args) == 3 && args[0] == "__serve" {
+		os.Exit(serve(args[1], args[2]))
+	}
 	logCall(name, args)
 	if len(args) > 0 && (args[0] == "--version" || args[0] == "version") && name != "docker" {
 		fmt.Printf("%s 0.0.0-fake\n", name)
@@ -57,8 +65,13 @@ func main() {
 	case "gh":
 		os.Exit(gh(args))
 	case "docker":
+		if st, ok := loadDocker(); ok {
+			os.Exit(dockerCmd(st, args))
+		}
 		fmt.Fprintln(os.Stderr, "Cannot connect to the Docker daemon (fake docker for tests)")
 		os.Exit(1)
+	case "vercel":
+		os.Exit(vercel(args))
 	default:
 		fmt.Fprintf(os.Stderr, "fakecli: unknown name %q\n", name)
 		os.Exit(2)
@@ -67,7 +80,9 @@ func main() {
 
 func stateDir() string { return os.Getenv("LUCID_E2E_STATE") }
 
-func logCall(name string, args []string) {
+func logCall(name string, args []string) { logLine(name + " " + strings.Join(args, " ")) }
+
+func logLine(line string) {
 	dir := stateDir()
 	if dir == "" {
 		return
@@ -77,7 +92,7 @@ func logCall(name string, args []string) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s %s\n", name, strings.Join(args, " "))
+	fmt.Fprintln(f, line)
 }
 
 const okCritique = `{"verdict": "ok", "points": [{"severity": "minor", "text": "Say which build command each project uses when it has several."}]}`
@@ -273,6 +288,10 @@ func codex(args []string) int {
 }
 
 func gh(args []string) int {
+	if len(args) >= 2 && args[0] == "auth" && args[1] == "token" {
+		fmt.Println("gho_fake_token_for_tests")
+		return 0
+	}
 	if len(args) >= 2 && args[0] == "pr" && args[1] == "create" {
 		fmt.Println("Creating draft pull request\n\nhttps://github.com/example/demo/pull/7")
 		return 0

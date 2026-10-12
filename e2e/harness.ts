@@ -26,7 +26,7 @@ export const fakesBin = path.join(fakesDir, "bin")
 export const lucidd = path.join(fakesDir, `lucidd${exe}`)
 
 /** The names the fakes answer to; each must resolve into fakesBin. */
-export const FAKE_NAMES = ["claude", "codex", "grok", "gh", "docker"]
+export const FAKE_NAMES = ["claude", "codex", "grok", "gh", "docker", "vercel"]
 
 /** The OS's own lookup tool, by absolute path, so it searches whatever PATH a test sets. */
 function lookupTool(): string {
@@ -93,6 +93,8 @@ export interface Seed {
   projects?: string
   /** Extra environment for lucidd (config overrides, secret values). */
   env?: Record<string, string>
+  /** The whole config file (LUCID_CONFIG), for what env overrides cannot hold. */
+  config?: string
   /** Extension ids added to the sidebar (they are opt-in). */
   extensions?: string[]
 }
@@ -194,6 +196,7 @@ export async function startDaemon(seed?: (d: Daemon) => Seed | void): Promise<Da
   const s = seed?.(d) ?? {}
   if (s.prefs) writeFileSync(path.join(data, "ui.json"), JSON.stringify({ theme: "midnight", overrides: {}, modules: {}, extensions: Object.fromEntries((s.extensions ?? []).map((id, i) => [id, { added: true, order: i }])), sprite_board: false }))
   if (s.projects !== undefined) writeFileSync(path.join(data, "projects.yaml"), s.projects)
+  if (s.config !== undefined) writeFileSync(env.LUCID_CONFIG!, s.config)
   Object.assign(env, s.env)
 
   const logFile = path.join(root, "lucidd.log")
@@ -229,6 +232,16 @@ export function calls(d: Daemon): string {
   } catch {
     return ""
   }
+}
+
+/** Writes a JSON file into the fakes' state folder (docker.json, vercel.json). */
+export function writeState(d: Daemon, name: string, value: unknown) {
+  writeFileSync(path.join(d.state, name), JSON.stringify(value, null, 2))
+}
+
+/** Reads the fake docker's state back. */
+export function readDocker(d: Daemon): { containers: { name: string; state: string }[] } {
+  return JSON.parse(readFileSync(path.join(d.state, "docker.json"), "utf8"))
 }
 
 /** Where screenshots for the report go (gitignored). */
