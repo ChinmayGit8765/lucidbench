@@ -155,6 +155,7 @@ func fixture(t *testing.T) Sources {
 				{ID: "s4", Title: "Green PR", Status: work.StatusDone, Project: "lib", PR: "https://github.com/you/lib/pull/4", PRState: work.PROpen, PRChecks: &work.PRChecks{Passing: 3}, Started: now.Add(-24 * time.Hour), Ended: ended(20 * time.Hour)},
 				{ID: "s5", Title: "Merged PR", Status: work.StatusDone, Project: "app", PR: "https://github.com/you/app/pull/5", PRState: work.PRMerged, Started: now.Add(-24 * time.Hour)},
 				{ID: "s6", Title: "Busy", Status: work.StatusRunning, Project: "app", Card: "c9", Board: "work", Started: now.Add(-time.Minute)},
+				{ID: "s7", Title: "Landed", Status: work.StatusMerged, Project: "lib", Provider: "claude", PR: "https://github.com/you/lib/pull/7", PRState: work.PRMerged, Started: now.Add(-4 * time.Hour), Ended: ended(time.Hour)},
 			}
 		},
 		CI: func(context.Context) ([]FailingRun, error) {
@@ -236,9 +237,10 @@ func TestCollectEverySource(t *testing.T) {
 		}
 	}
 	// Done, Review, a card a running session covers, a running council, an
-	// approved brief with its card, a merged PR, a Linear issue already on a
-	// card and an archived project's need are all left out.
-	for _, id := range []string{"card:work/c4", "card:work/c5", "card:work/c9", "brief:b4", "brief:b5", "pr:s5", "linear:ENG-7", "need:old/0", "work:s6"} {
+	// approved brief with its card, a merged PR, a session that ended with its
+	// merged PR, a Linear issue already on a card and an archived project's
+	// need are all left out.
+	for _, id := range []string{"card:work/c4", "card:work/c5", "card:work/c9", "brief:b4", "brief:b5", "pr:s5", "linear:ENG-7", "need:old/0", "work:s6", "work:s7", "pr:s7"} {
 		if _, ok := got[id]; ok {
 			t.Errorf("%s should not be listed", id)
 		}
