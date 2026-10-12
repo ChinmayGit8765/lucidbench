@@ -143,7 +143,8 @@ const PLACEHOLDER = `Dump the idea as it is. For example:
 
 the app leaves temp folders behind when something crashes, and they pile up. want them cleaned up on start, but never while a run is still using one…`
 
-function Composer() {
+/** The council side of the one braindump composer (components/BraindumpComposer), also used here. */
+export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const { open } = useApp()
   const accounts = usePoll<Account[]>("/api/accounts", 30000)
   const projects = usePoll<ProjectList>("/api/projects", PROJECTS_POLL_MS)
@@ -165,7 +166,7 @@ function Composer() {
       setInput(h.text.slice(0, 20000))
       if (h.project) setProject(h.project)
     }
-    area.current?.focus()
+    if (autoFocus || h) area.current?.focus()
     const onCompose = () => area.current?.focus()
     window.addEventListener(COMPOSE_EVENT, onCompose)
     return () => window.removeEventListener(COMPOSE_EVENT, onCompose)
