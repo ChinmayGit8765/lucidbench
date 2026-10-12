@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { copyText, CopyCommand } from "@/components/CopyCommand"
+import { DockerDown } from "@/components/DockerDown"
 import { PowerCard } from "@/components/Power"
 import { PageHeader } from "@/components/Shell"
 import { Badge, StatusPill, type Tone } from "@/components/ui/badge"
@@ -399,9 +400,10 @@ function JobsCard({
 }
 
 export default function System({ subpath }: ModulePageProps) {
-  const { health } = useApp()
-  const cluster = usePoll<ClusterInfo>("/api/cluster")
-  const jobs = usePoll<Job[]>("/api/jobs")
+  const { health, dockerUp } = useApp()
+  // The cluster and its jobs live in docker: asked only while it answers.
+  const cluster = usePoll<ClusterInfo>(dockerUp ? "/api/cluster" : null)
+  const jobs = usePoll<Job[]>(dockerUp ? "/api/jobs" : null)
   const power = usePower()
   // A stopped node that a job may wake: on demand or always, not off.
   const nodeDown = !!power.data && isAsleep(power.data.cluster)
@@ -414,16 +416,18 @@ export default function System({ subpath }: ModulePageProps) {
   return (
     <div className="space-y-6">
       <PageHeader icon={<Activity />} title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
-      <Tiles health={health} cluster={cluster} jobs={jobs} asleep={nodeDown} />
-      {cluster.error && !cluster.data && (
-        <ErrorState
-          title={cluster.error.status === 503 ? "Docker is not reachable" : "Could not load cluster status"}
-          message={cluster.error.message}
-          onRetry={cluster.refresh}
-        />
+      {dockerUp === false ? (
+        <DockerDown what="The cluster and its jobs" />
+      ) : dockerUp === undefined ? (
+        <Skeleton className="h-28 rounded-xl" />
+      ) : (
+        <>
+          <Tiles health={health} cluster={cluster} jobs={jobs} asleep={nodeDown} />
+          {cluster.error && !cluster.data && <ErrorState title="Could not load cluster status" message={cluster.error.message} onRetry={cluster.refresh} />}
+        </>
       )}
       <PowerCard focus={focusPower} />
-      <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} asleep={asleep} stoppedManual={nodeDown && !asleep} />
+      {dockerUp && <JobsCard jobs={jobs} clusterRunning={cluster.data?.running} asleep={asleep} stoppedManual={nodeDown && !asleep} />}
     </div>
   )
 }

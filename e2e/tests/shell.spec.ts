@@ -156,6 +156,36 @@ test("with docker down, Home calls no docker endpoint, gets no 503 and logs no e
   expect(spawned).toBeLessThanOrEqual(3)
 })
 
+test("with docker down, each docker page shows the one calm state and polls nothing of docker", async ({ page }) => {
+  const requests: string[] = []
+  const bad: string[] = []
+  const errors: string[] = []
+  page.on("request", (r) => r.url().includes("/api/") && requests.push(new URL(r.url()).pathname))
+  page.on("response", (r) => r.status() >= 400 && bad.push(`${r.status()} ${new URL(r.url()).pathname}`))
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()))
+  for (const [p, name] of [
+    ["/containers", "Containers"],
+    ["/kubernetes", "Kubernetes"],
+    ["/runners", "Runners & CI"],
+  ]) {
+    await page.goto(p)
+    await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible()
+    await expect(page.getByTestId("docker-down")).toContainText("Docker isn't running")
+    await page.waitForTimeout(2500)
+  }
+  // Retry asks the health check again, and still nothing of docker.
+  await page.getByTestId("docker-down").getByRole("button", { name: "Retry" }).click()
+  await expect(page.getByTestId("docker-down")).toContainText("Still not answering")
+  await page.screenshot({ path: shot("docker-down-runners") })
+  // Settings › System shows the same state for the cluster and its jobs.
+  await page.goto("/system")
+  await expect(page.getByTestId("docker-down")).toBeVisible()
+  await page.waitForTimeout(1500)
+  expect(bad).toEqual([])
+  expect(errors).toEqual([])
+  expect(requests.filter((p) => /^\/api\/(docker|ci|k8s|cluster|jobs|databases|browser)(\/|$)/.test(p))).toEqual([])
+})
+
 test("a new install asks Home for twelve things at most, and nothing about docker", async ({ page }) => {
   // What a new install saves: the current version, and no extensions.
   expect((await put("/api/prefs", { version: 2, theme: "midnight", overrides: {}, modules: {}, extensions: {}, sprite_board: false })).status).toBe(200)

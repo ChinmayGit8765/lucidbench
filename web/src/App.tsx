@@ -4,8 +4,9 @@ import { Toaster as SonnerToaster, toast } from "sonner"
 
 import { CelebrationWatcher, Celebrations } from "@/components/Celebrate"
 import { CommandPalette, useCommandPaletteHotkey, type Command } from "@/components/CommandPalette"
+import { DockerDown } from "@/components/DockerDown"
 import { ShortcutSheet, useShortcuts } from "@/components/Shortcuts"
-import { FamilyTabs, Header, Sidebar } from "@/components/Shell"
+import { FamilyTabs, Header, PageHeader, Sidebar } from "@/components/Shell"
 import { UpdateBanner } from "@/components/UpdateBanner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -72,8 +73,8 @@ function Workbench() {
   const { prefs, base, loaded } = usePrefs()
   const { module, subpath } = matchPath(path)
   // Whether docker is up rides on the health poll, and only while an added
-  // extension needs it.
-  const wantDocker = needsDocker(prefs)
+  // extension needs it or the page open shows docker state.
+  const wantDocker = needsDocker(prefs) || !!module?.requires?.docker || !!module?.checksDocker
   // The first check waits for ui.json, so it asks about docker only if it needs to.
   const health = useHealth(10000, wantDocker, loaded)
   const dockerUp = wantDocker ? health?.docker : undefined
@@ -247,7 +248,7 @@ function BoardsIndex({ children }: { children: React.ReactNode }) {
 /** Renders a module, or says plainly why it cannot be shown. */
 function ModuleView({ module, subpath }: { module?: ModuleDef; subpath: string[] }) {
   const { prefs, update } = usePrefs()
-  const { open } = useApp()
+  const { open, dockerUp } = useApp()
   if (!module) {
     return (
       <Card className="border-dashed">
@@ -290,6 +291,17 @@ function ModuleView({ module, subpath }: { module?: ModuleDef; subpath: string[]
           </Button>
         </EmptyState>
       </Card>
+    )
+  }
+  // A docker page opens only once the engine answers: until then nothing
+  // of it mounts, so it polls nothing and logs no 503.
+  if (module.requires?.docker && dockerUp !== true) {
+    if (dockerUp === undefined) return <PageSkeleton title={module.title} />
+    return (
+      <div className="space-y-6">
+        <PageHeader icon={<Icon />} title={module.title} description={module.description} />
+        <DockerDown what={module.title} />
+      </div>
     )
   }
   const Page = module.component
