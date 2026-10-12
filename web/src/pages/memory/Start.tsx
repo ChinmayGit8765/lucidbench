@@ -2,10 +2,12 @@ import { useEffect, useState } from "react"
 import { ArrowRight, BookOpenText, FilePlus2, FileText, FolderCog, Link2, Lock, NotebookPen, Search } from "lucide-react"
 
 import { copyText } from "@/components/CopyCommand"
+import { PageHeader } from "@/components/Shell"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/states"
 import { allPages, baseName, dirOf, type Entry } from "@/lib/memory"
 import { relativeTime, useNow } from "@/lib/time"
+import { plural } from "@/lib/utils"
 
 /** The empty vault: what Memory is, where the files live, how to start. */
 export function Onboarding({ root, onNewPage, onUseVault }: { root: string | null; onNewPage: () => void; onUseVault: () => void }) {
@@ -20,7 +22,7 @@ export function Onboarding({ root, onNewPage, onUseVault }: { root: string | nul
       <div className="flex size-14 items-center justify-center rounded-2xl border border-border-strong bg-elevated text-brand shadow-pop">
         <NotebookPen className="size-6" />
       </div>
-      <h1 className="mt-6 text-[2.25rem] font-bold leading-tight tracking-[-0.025em]">Your memory starts here</h1>
+      <h1 className="mt-6 text-2xl font-semibold tracking-[-0.02em]">Your memory starts here</h1>
       <p className="mt-2 max-w-xl text-base text-muted-foreground">
         Memory is where briefs, notes and decisions live, so Council, Boards and Work can build on them. It is a folder of Markdown pages you
         own, with a Notion-style editor on top.
@@ -78,18 +80,21 @@ export function Home({ onNewPage, onSearch, openPath, pages }: { onNewPage: () =
   }, [])
   return (
     <div className="mx-auto max-w-3xl px-10 py-12">
-      <h1 className="text-[2rem] font-bold tracking-[-0.025em]">Memory</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {pages} {pages === 1 ? "page" : "pages"} in your vault. Pick one on the left, or start something new.
-      </p>
-      <div className="mt-6 flex flex-wrap gap-2">
-        <Button onClick={onNewPage}>
-          <FilePlus2 /> New page
-        </Button>
-        <Button variant="secondary" onClick={onSearch}>
-          <Search /> Search memory
-        </Button>
-      </div>
+      <PageHeader
+        icon={<NotebookPen />}
+        title="Memory"
+        description={`${plural(pages, "page")} in your vault. Pick one on the left, or start something new.`}
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={onSearch}>
+              <Search /> Search
+            </Button>
+            <Button size="sm" onClick={onNewPage}>
+              <FilePlus2 /> New page
+            </Button>
+          </>
+        }
+      />
       <h2 className="mt-10 text-xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">Recently edited</h2>
       {recent === null ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">

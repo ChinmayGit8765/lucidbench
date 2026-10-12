@@ -41,7 +41,7 @@ export default function Linear() {
       <PageHeader
         icon={<Waypoints />}
         title="Linear"
-        description="Your Linear issues as a board, grouped by state. Linear owns them: every card opens the issue there, and nothing here is synced back."
+        description="Your Linear issues as a board by state. Linear owns them; nothing here syncs back."
         actions={<RefreshButton refreshing={status.refreshing} updatedAt={status.updatedAt} />}
       />
       {status.error && !status.data ? (

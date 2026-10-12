@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
-import { plainError } from "@/lib/api"
+import { isDockerDown, plainError } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
   allItems,
@@ -254,11 +254,18 @@ export function PowerCard({ focus, inSettings }: { focus?: boolean; inSettings?:
       )}
       {p && (
         <>
-          {p.errors.map((e) => (
-            <div key={e} className="flex items-center gap-2 border-t px-5 py-2 text-xs text-danger-fg">
-              <TriangleAlert className="size-3.5" /> {plainError(e)}
-            </div>
-          ))}
+          {p.errors.map((e) =>
+            // Docker being off is a state, not a failure: said once, calmly.
+            isDockerDown(e) ? (
+              <div key={e} className="flex items-center gap-2 border-t px-5 py-2 text-xs text-muted-foreground">
+                <Container className="size-3.5" /> Docker isn't running, so nothing here can start or stop until it is.
+              </div>
+            ) : (
+              <div key={e} className="flex items-center gap-2 border-t px-5 py-2 text-xs text-danger-fg">
+                <TriangleAlert className="size-3.5" /> {plainError(e)}
+              </div>
+            ),
+          )}
           {items.length === 0 ? (
             <div className="border-t">
               <EmptyState icon={<Container />} title="Nothing to manage yet" description="Create the cluster, add runner containers or list compose stacks in power.stacks." />

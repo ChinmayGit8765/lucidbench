@@ -1,5 +1,6 @@
 import { sendJSON } from "@/lib/api"
 import type { Project } from "@/lib/projects"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/work and internal/agentexec: keep these in step with the Go structs. */
 
@@ -164,13 +165,13 @@ export const removeWorktree = (id: string, discard: boolean) =>
 export const defaultHarness = (p: WorkProvider): Harness => (p === "claude" ? "mine" : "clean")
 
 export const STATUS_INFO: Record<WorkStatus, { label: string; tone: "info" | "success" | "warning" | "danger" | "neutral" }> = {
-  running: { label: "Running", tone: "info" },
-  waiting: { label: "Waiting for you", tone: "warning" },
-  done: { label: "Done", tone: "success" },
-  failed: { label: "Failed", tone: "danger" },
-  stopped: { label: "Stopped", tone: "neutral" },
-  merged: { label: "Merged", tone: "success" },
-  closed: { label: "PR closed", tone: "neutral" },
+  running: { label: "Running", tone: STATUS_TONE.running },
+  waiting: { label: "Waiting for you", tone: STATUS_TONE.waiting },
+  done: { label: "Done", tone: STATUS_TONE.merged },
+  failed: { label: "Failed", tone: STATUS_TONE.failed },
+  stopped: { label: "Stopped", tone: STATUS_TONE.idle },
+  merged: { label: "Merged", tone: STATUS_TONE.merged },
+  closed: { label: "PR closed", tone: STATUS_TONE.idle },
 }
 
 /** A finished session whose diff still waits for a PR or a cleanup. */
@@ -187,10 +188,11 @@ export const hasDiffToReview = (s: WorkSession) =>
 export const prIsOpen = (s: WorkSession) => !!s.pr_url && !s.removed && s.pr_state !== "merged" && s.pr_state !== "closed"
 
 export const PR_INFO: Record<PRState, { label: string; tone: "success" | "info" | "neutral" | "danger" }> = {
-  draft: { label: "Draft PR", tone: "neutral" },
-  open: { label: "PR open", tone: "info" },
-  merged: { label: "PR merged", tone: "success" },
-  closed: { label: "PR closed", tone: "danger" },
+  draft: { label: "Draft PR", tone: STATUS_TONE.idle },
+  open: { label: "PR open", tone: STATUS_TONE.running },
+  merged: { label: "PR merged", tone: STATUS_TONE.merged },
+  // Closed without a merge: over, not an error (the session reads "PR closed" too).
+  closed: { label: "PR closed", tone: STATUS_TONE.idle },
 }
 
 /** "2 passing · 1 failing · 1 pending", or "no checks". */

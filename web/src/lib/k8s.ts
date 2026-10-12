@@ -1,4 +1,5 @@
 import type { Tone } from "@/components/ui/badge"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/k8s: keep these in step with the Go structs. */
 
@@ -62,10 +63,10 @@ export const PHASE_TONE: Record<string, Tone> = {
 }
 
 export const JOB_TONE: Record<string, Tone> = {
-  Completed: "success",
-  Running: "info",
-  Failed: "danger",
-  Pending: "warning",
+  Completed: STATUS_TONE.merged,
+  Running: STATUS_TONE.running,
+  Failed: STATUS_TONE.failed,
+  Pending: STATUS_TONE.idle,
 }
 
 /** Waiting reasons that mean a pod is in trouble even while "Running". */

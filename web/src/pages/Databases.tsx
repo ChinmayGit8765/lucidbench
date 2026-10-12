@@ -596,7 +596,7 @@ export default function Databases({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<DatabaseIcon />}
         title="Databases"
-        description="The Postgres, MySQL, Redis and MongoDB databases on this machine: health, tables and a read-only query box."
+        description="The Postgres, MySQL, Redis and MongoDB databases here: health, tables and read-only queries."
         actions={
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 text-xs text-subtle-foreground max-[1100px]:hidden">

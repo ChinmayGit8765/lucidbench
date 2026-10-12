@@ -170,7 +170,12 @@ export function Sidebar({ current, version }: { current?: string; version?: stri
         ))}
       </nav>
 
-      {!rail && <SidebarMascot />}
+      {/* A short window keeps its room for the nav: Settings stays in view with the extensions open. */}
+      {!rail && (
+        <div className="[@media(max-height:760px)]:hidden">
+          <SidebarMascot />
+        </div>
+      )}
 
       <div className={cn("flex items-center border-t py-3", rail ? "justify-center" : "justify-between px-1")}>
         {!rail && version && <span className="font-mono text-2xs text-subtle-foreground">lucidd {version}</span>}

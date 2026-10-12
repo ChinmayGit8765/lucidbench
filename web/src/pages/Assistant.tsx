@@ -48,7 +48,7 @@ export default function Assistant({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<MessageCircle />}
         title="Assistant"
-        description="Talk to Claude, Codex, Grok or one of your bots. It answers with no tools and may propose actions; nothing happens until you click Apply."
+        description="Ask Claude, Codex, Grok or a bot. It has no tools; nothing happens until you click Apply."
         actions={
           <Button size="sm" variant="secondary" onClick={() => newBraindump(open, "split")} data-testid="assistant-braindump">
             <WandSparkles /> Braindump

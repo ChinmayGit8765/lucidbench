@@ -68,7 +68,7 @@ function IdeaList({ compose }: { compose?: BraindumpMode }) {
       <PageHeader
         icon={<Lightbulb />}
         title="Ideas"
-        description="Dump what is on your mind, then follow each idea to a merged PR: the brief the council wrote, the card it became, the agent sessions and the pull requests."
+        description="Dump what is on your mind, then follow each idea from brief to card, session and merged PR."
         actions={<RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />}
       />
 

@@ -2,6 +2,7 @@ import type { Tone } from "@/components/ui/badge"
 import type { Card } from "@/lib/boards"
 import type { CouncilSession } from "@/lib/council"
 import type { PRChecks, PRState, WorkStatus, WorkUsage } from "@/lib/work"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/ideas: keep these in step with the Go structs. */
 
@@ -9,12 +10,12 @@ export type Stage = "braindump" | "brief" | "card" | "work" | "pr" | "merged"
 export const STAGES: Stage[] = ["braindump", "brief", "card", "work", "pr", "merged"]
 
 export const STAGE_INFO: Record<Stage, { label: string; tone: Tone; blurb: string }> = {
-  braindump: { label: "Braindump", tone: "neutral", blurb: "The council has it, or it stopped before a brief" },
-  brief: { label: "Brief", tone: "warning", blurb: "A brief waits for approval" },
-  card: { label: "Card", tone: "info", blurb: "On the board, no agent yet" },
-  work: { label: "Work", tone: "info", blurb: "An agent ran on it" },
-  pr: { label: "PR", tone: "success", blurb: "A pull request is open" },
-  merged: { label: "Merged", tone: "success", blurb: "The PR is merged" },
+  braindump: { label: "Braindump", tone: STATUS_TONE.idle, blurb: "The council has it, or it stopped before a brief" },
+  brief: { label: "Brief", tone: STATUS_TONE.waiting, blurb: "A brief waits for approval" },
+  card: { label: "Card", tone: STATUS_TONE.running, blurb: "On the board, no agent yet" },
+  work: { label: "Work", tone: STATUS_TONE.running, blurb: "An agent ran on it" },
+  pr: { label: "PR", tone: STATUS_TONE.running, blurb: "A pull request is open" },
+  merged: { label: "Merged", tone: STATUS_TONE.merged, blurb: "The PR is merged" },
 }
 
 export interface IdeaSummary {

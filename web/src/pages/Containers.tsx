@@ -381,7 +381,7 @@ export default function Containers({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<ContainerIcon />}
         title="Containers"
-        description="Every container on this machine's Docker engine, grouped by compose project. Lucidbench controls only its own project, runner containers, kind nodes and the projects you allow."
+        description="Every container on this machine's Docker engine, grouped by compose project."
         actions={<RefreshButton refreshing={all.some((p) => p.refreshing)} updatedAt={updated.length ? Math.min(...updated) : null} />}
       />
 

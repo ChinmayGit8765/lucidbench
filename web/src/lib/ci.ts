@@ -2,6 +2,7 @@ import { toast } from "sonner"
 
 import { errorMessage, postAction } from "@/lib/api"
 import type { Tone } from "@/components/ui/badge"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/ci: keep these in step with the Go structs. */
 
@@ -101,13 +102,14 @@ export function runState(r: Pick<CIRun, "status" | "conclusion">): RunState {
 }
 
 export const RUN_STATE: Record<RunState, { tone: Tone; label: string }> = {
-  success: { tone: "success", label: "Passed" },
-  failure: { tone: "danger", label: "Failed" },
-  cancelled: { tone: "neutral", label: "Cancelled" },
-  skipped: { tone: "neutral", label: "Skipped" },
-  running: { tone: "info", label: "Running" },
-  queued: { tone: "warning", label: "Queued" },
-  other: { tone: "neutral", label: "Done" },
+  success: { tone: STATUS_TONE.merged, label: "Passed" },
+  failure: { tone: STATUS_TONE.failed, label: "Failed" },
+  cancelled: { tone: STATUS_TONE.idle, label: "Cancelled" },
+  skipped: { tone: STATUS_TONE.idle, label: "Skipped" },
+  running: { tone: STATUS_TONE.running, label: "Running" },
+  // Queued waits for a runner, not for you.
+  queued: { tone: STATUS_TONE.idle, label: "Queued" },
+  other: { tone: STATUS_TONE.idle, label: "Done" },
 }
 
 /** Run time in ms: start to last update, or to now while still running. */

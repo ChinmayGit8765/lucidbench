@@ -90,13 +90,13 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-5 w-9 shrink-0 rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "relative h-5 w-9 shrink-0 rounded-full border p-0 transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         checked ? "border-transparent bg-primary" : "bg-muted",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 size-3.5 rounded-full shadow-card transition-transform duration-200",
+          "absolute left-0 top-0.5 size-3.5 rounded-full shadow-card transition-transform duration-200",
           checked ? "translate-x-[18px] bg-white" : "translate-x-0.5 bg-foreground/60",
         )}
       />

@@ -31,7 +31,7 @@ function BoardList() {
       <PageHeader
         icon={<SquareKanban />}
         title="Boards"
-        description="Task boards for your projects. Each board is a Kanban file in your Memory vault, so the Obsidian Kanban plugin opens it too."
+        description="Task boards for your projects, each a Kanban file in your Memory vault that Obsidian opens too."
         actions={
           <>
             <RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />

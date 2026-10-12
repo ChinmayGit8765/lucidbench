@@ -67,7 +67,7 @@ function SessionList() {
       <PageHeader
         icon={<SquareTerminal />}
         title="Work"
-        description="Hand a task to Claude Code, Codex or Grok. Each session gets its own git worktree and branch; you review the diff and open the PR."
+        description="Hand a task to Claude Code, Codex or Grok in its own worktree; review the diff, then open the PR."
         actions={
           <>
             <RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />
@@ -135,7 +135,8 @@ function SessionList() {
                     <th className="px-5 py-2 font-medium">Task</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">Agent</th>
-                    <th className="px-3 py-2 font-medium">Branch</th>
+                    {/* The branch is the first column to go on a narrow window: the task needs the room. */}
+                    <th className="px-3 py-2 font-medium max-@4xl:hidden">Branch</th>
                     <th className="px-3 py-2 text-right font-medium">Started</th>
                     <th className="px-3 py-2 pr-5 text-right font-medium">Cost</th>
                   </tr>
@@ -192,7 +193,7 @@ function SessionList() {
                             </span>
                           </span>
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-2.5 max-@4xl:hidden">
                           <Badge className={cn("max-w-full font-mono", s.removed && "line-through opacity-60")} title={s.removed ? "worktree removed" : s.branch}>
                             <GitBranch />
                             <span className="truncate">{s.branch}</span>

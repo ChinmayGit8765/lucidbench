@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import type { Tone } from "@/components/ui/badge"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/projects: keep these in step with the Go structs. */
 
@@ -103,9 +104,9 @@ export const STATUSES = Object.keys(STATUS) as ProjectStatus[]
 
 export const NEED: Record<NeedStatus, { tone: Tone; label: string; color: string }> = {
   todo: { tone: "neutral", label: "To do", color: "var(--neutral)" },
-  doing: { tone: "info", label: "Doing", color: "var(--info)" },
-  done: { tone: "success", label: "Done", color: "var(--success)" },
-  blocked: { tone: "warning", label: "Blocked", color: "var(--warning)" },
+  doing: { tone: STATUS_TONE.running, label: "Doing", color: "var(--info)" },
+  done: { tone: STATUS_TONE.merged, label: "Done", color: "var(--success)" },
+  blocked: { tone: STATUS_TONE.blocked, label: "Blocked", color: "var(--warning)" },
 }
 
 export const TYPES: Record<string, { label: string; icon: LucideIcon }> = {

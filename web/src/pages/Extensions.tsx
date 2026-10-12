@@ -11,7 +11,7 @@ export default function Extensions({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<Blocks />}
         title="Extensions"
-        description="Everything beyond the core loop. Add one and it appears under Extensions in the sidebar; each checks what it needs on this machine before you add it."
+        description="Everything beyond the core loop. Each checks what it needs before you add it to the sidebar."
       />
       <Gallery focus={subpath[0]} />
     </div>

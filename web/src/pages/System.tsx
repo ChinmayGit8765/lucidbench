@@ -30,12 +30,13 @@ import { isAsleep, usePower } from "@/lib/power"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
+import { STATUS_TONE } from "@/lib/status"
 
 const JOB_TONE: Record<string, Tone> = {
-  Completed: "success",
-  Running: "info",
-  Failed: "danger",
-  Pending: "warning",
+  Completed: STATUS_TONE.merged,
+  Running: STATUS_TONE.running,
+  Failed: STATUS_TONE.failed,
+  Pending: STATUS_TONE.idle,
 }
 
 const CLUSTER_UP = "lucid cluster up"
@@ -417,7 +418,7 @@ export default function System({ subpath }: ModulePageProps) {
     <div className="space-y-6">
       <PageHeader icon={<Activity />} title="System" description="The Lucidbench daemon, the local kind cluster and the jobs it runs." />
       {dockerUp === false ? (
-        <DockerDown what="The cluster and its jobs" />
+        <DockerDown what="The cluster" />
       ) : dockerUp === undefined ? (
         <Skeleton className="h-28 rounded-xl" />
       ) : (

@@ -39,13 +39,14 @@ import {
 import { newBraindump } from "@/lib/council"
 import { cn } from "@/lib/utils"
 import { CardSheet } from "@/pages/boards/CardSheet"
+import { STATUS_TONE, toneColor } from "@/lib/status"
 
 const COLUMN_TONE: Record<string, string> = {
-  Inbox: "var(--neutral)",
+  Inbox: toneColor(STATUS_TONE.idle),
   Ready: "var(--brand)",
-  "In progress": "var(--info)",
-  Review: "var(--warning)",
-  Done: "var(--success)",
+  "In progress": toneColor(STATUS_TONE.running),
+  Review: toneColor(STATUS_TONE.waiting),
+  Done: toneColor(STATUS_TONE.merged),
 }
 const toneOf = (col: string, i: number) => COLUMN_TONE[col] ?? ["var(--neutral)", "var(--brand)", "var(--info)", "var(--warning)", "var(--success)"][i % 5]
 

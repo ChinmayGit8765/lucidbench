@@ -559,7 +559,7 @@ export default function Runners() {
       <PageHeader
         icon={<Workflow />}
         title="Runners & CI"
-        description="Your self-hosted GitHub Actions runners, the containers behind them, and every recent workflow run."
+        description="Your self-hosted GitHub Actions runners, their containers and every recent workflow run."
         actions={<RefreshButton refreshing={refreshing} updatedAt={Number.isFinite(updatedAt) ? updatedAt : null} />}
       />
 

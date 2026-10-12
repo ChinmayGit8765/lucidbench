@@ -358,7 +358,7 @@ function SummaryStrip({ ps, tab, onTab }: { ps: Project[]; tab: Category | "all"
   const done = needs.filter((n) => n.status === "done").length
   const blocked = needs.filter((n) => n.status === "blocked").length
   return (
-    <Card className="grid grid-cols-3 divide-x overflow-hidden @3xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.7fr)] max-@3xl:divide-y">
+    <Card className="grid grid-cols-3 divide-x overflow-hidden @5xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.7fr)] max-@5xl:divide-y">
       {CATEGORIES.map((c) => {
         const n = ps.filter((p) => p.category === c.id).length
         const on = tab === c.id
@@ -653,7 +653,7 @@ export default function Projects({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<FolderKanban />}
         title="Projects"
-        description="Everything you build, what kind of thing it is, and what needs what. Read from your own projects file; it never lives in the repository."
+        description="Everything you build, what kind of thing it is and what needs what, from your projects file."
         actions={
           <>
             {data?.configured && (
