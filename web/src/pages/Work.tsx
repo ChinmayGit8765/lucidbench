@@ -16,7 +16,10 @@ import {
   elapsedOf,
   formatCost,
   formatElapsed,
+  hasDiffToReview,
+  isWaiting,
   needsReview,
+  prIsOpen,
   sessionsPath,
   STATUS_INFO,
   WORK_POLL_MS,
@@ -38,7 +41,7 @@ export default function Work({ subpath }: ModulePageProps) {
 
 function Cell({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="min-w-0 px-4 py-3.5">
+    <div className="min-w-0 bg-card px-4 py-3">
       <div className="text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">{label}</div>
       <div className="mt-1 truncate text-xl font-semibold tabular-nums tracking-tight">{value}</div>
       {sub && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</div>}
@@ -51,9 +54,13 @@ function SessionList() {
   const now = useNow(1000)
   const poll = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS)
   const list = poll.data ?? []
+  // Each counter is a state the rows show: a merged PR is no longer a draft,
+  // and a waiting session with a diff and no PR is still something to review.
   const running = list.filter((s) => s.status === "running")
-  const review = list.filter(needsReview)
-  const prs = list.filter((s) => s.pr_url)
+  const waiting = list.filter(isWaiting)
+  const review = list.filter(hasDiffToReview)
+  const prs = list.filter(prIsOpen)
+  const merged = list.filter((s) => s.status === "merged" || s.pr_state === "merged")
   const spent = list.reduce((n, s) => n + (s.usage?.cost_usd ?? 0), 0)
   return (
     <div className="space-y-6">
@@ -103,10 +110,12 @@ function SessionList() {
         </Card>
       ) : (
         <>
-          <Card className="grid grid-cols-2 divide-x divide-y overflow-hidden @3xl:grid-cols-4 @3xl:divide-y-0">
+          <Card className="grid grid-cols-3 gap-px overflow-hidden bg-border @4xl:grid-cols-6" data-testid="work-counters">
             <Cell label="Running" value={running.length} sub={running.length ? running.map((s) => s.title).join(" · ") : "no agent working"} />
-            <Cell label="To review" value={review.length} sub="finished, no PR yet" />
-            <Cell label="Draft PRs" value={prs.length} sub="opened from Work" />
+            <Cell label="Waiting for you" value={waiting.length} sub={waiting.length ? "a reply runs the next turn" : "nothing waits on you"} />
+            <Cell label="To review" value={review.length} sub="changes, no PR yet" />
+            <Cell label="Open PRs" value={prs.length} sub="draft or open on GitHub" />
+            <Cell label="Merged" value={merged.length} sub="landed from Work" />
             <Cell label="Spent" value={formatCost(spent)} sub="as the CLIs report it" />
           </Card>
 

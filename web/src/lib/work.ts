@@ -3,8 +3,12 @@ import type { Project } from "@/lib/projects"
 
 /* Mirrors internal/work and internal/agentexec: keep these in step with the Go structs. */
 
-/** A session runs a turn, then waits for your follow-up until you end it. "stopped" is only on sessions from before follow-ups. */
-export type WorkStatus = "running" | "waiting" | "done" | "failed" | "stopped"
+/**
+ * A session runs a turn, then waits for your follow-up until you end it. A
+ * waiting session whose PR is merged (or closed) on GitHub ends as "merged"
+ * (or "closed"). "stopped" is only on sessions from before follow-ups.
+ */
+export type WorkStatus = "running" | "waiting" | "done" | "failed" | "stopped" | "merged" | "closed"
 export type Harness = "mine" | "clean"
 export type WorkProvider = "claude" | "codex" | "grok"
 
@@ -165,10 +169,16 @@ export const STATUS_INFO: Record<WorkStatus, { label: string; tone: "info" | "su
   done: { label: "Done", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
   stopped: { label: "Stopped", tone: "neutral" },
+  merged: { label: "Merged", tone: "success" },
+  closed: { label: "PR closed", tone: "neutral" },
 }
 
 /** A finished session whose diff still waits for a PR or a cleanup. */
 export const needsReview = (s: WorkSession) => (s.status === "done" || s.status === "failed") && !s.pr_url && !s.removed
+
+/** A session with changes in its worktree and no PR yet, whether or not it still waits for you: the Work list's "To review". */
+export const hasDiffToReview = (s: WorkSession) =>
+  s.status !== "running" && s.status !== "merged" && s.status !== "closed" && !s.pr_url && !s.removed && !!s.diff && s.diff.files.length > 0
 
 /**
  * A PR that is still open on GitHub. When its state is not known (no gh, or
