@@ -17,8 +17,8 @@ test.afterAll(async () => d?.stop())
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0])
 
 test("Lumi fills a loading area, and the Projects empty state leads to import", async ({ page }) => {
-  // Hold the CI runs answer back so Overview's activity card is still loading.
-  await page.route("**/api/ci/runs", async (route) => {
+  // Hold the Next up answer back so Home's Next up section is still loading.
+  await page.route("**/api/nextup", async (route) => {
     await new Promise((r) => setTimeout(r, 4000))
     await route.continue()
   })

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ArrowUpCircle, X } from "lucide-react"
 
-import { usePoll } from "@/lib/api"
+import { useAfterSettle, usePoll } from "@/lib/api"
 import { dismissedVersion, dismissVersion, UPDATE_PATH, UPDATE_POLL_MS, type UpdateStatus } from "@/lib/update"
 
 /**
@@ -10,7 +10,8 @@ import { dismissedVersion, dismissVersion, UPDATE_PATH, UPDATE_POLL_MS, type Upd
  * A failed check shows nothing at all: being offline is not news.
  */
 export function UpdateBanner() {
-  const poll = usePoll<UpdateStatus>(UPDATE_PATH, UPDATE_POLL_MS)
+  // A background check (the daemon asks GitHub at most every six hours): after the page.
+  const poll = usePoll<UpdateStatus>(useAfterSettle() ? UPDATE_PATH : null, UPDATE_POLL_MS)
   const [hidden, setHidden] = useState(dismissedVersion)
   const u = poll.data
   if (!u?.available || !u.latest || hidden === u.latest) return null

@@ -2,35 +2,55 @@
 
 Every page in the UI is a **module**: one file in `web/src/modules/` that
 describes it. The sidebar, the router, the command palette (`Ctrl K` / `⌘K`),
-the Overview tiles and the Settings › Extensions gallery are all generated
+Home's tiles and attention list and the Extensions gallery are all generated
 from the list in `web/src/modules/index.ts` plus the user's prefs. Adding a
-module is one file and one line.
+module is one file and one line; nothing about the sidebar is hard-coded.
 
 ## Core modules and extensions
 
 | | Core module | Extension |
 |---|---|---|
 | `kind` | `"core"` | `"extension"` |
-| In the sidebar | always; the user can reorder it | only once added in Settings › Extensions |
-| `section` | `workspace`, `ai`, `infrastructure` (pinned to the bottom) or `settings` | ignored: extensions sit under "Extensions" |
+| In the sidebar | its own entry when it has a `group`, else under its `parent` | only once added from the Extensions gallery, under the Extensions entry |
+| `group` | `workspace` (the top group) or `tools` (below the divider); leave it out for a module that lives under its parent | ignored |
+| `parent`, `tab` | the module it belongs to, and its label in that family's tab strip | not used |
+| `order` | position within its group, or among its parent's tabs | position under Extensions |
 | `defaultEnabled` | `true` | whether a new user has it added |
-| Extra fields | | `category`, `requires` |
+| Extra fields | `aliases` (older top-level paths that still open it) | `category`, `requires` |
 
 Make something core when every user needs it and it works with nothing but
 the engine. Make it an extension when it depends on a tool, account or
 service the user may not have (Docker, a cloud CLI, an MCP server).
 
-Today's modules:
+The sidebar is nine entries, in two groups:
 
-- **Workspace (core):** Overview, Work, Projects, Ideas, Memory, Boards, Prompt Studio
-- **AI (core):** Accounts, MCP servers, Assistant, Council, Usage
-- **Bottom (core):** System, Settings
-- **Extensions:** Runners & CI, Containers and Kubernetes (added by default),
-  Cloud, Databases, Picture and Live browser (added from the gallery), Linear, Trello and Payments (connectors that need credentials)
+- **Workspace:** Home, Ideas, Work, Projects, Memory
+- **Tools:** Assistant, Accounts, Extensions, Settings
+
+and the modules without an entry of their own live under one, as tabs at the
+top of the page (each tab is still its own page with its own address, and the
+breadcrumb reads "Parent › Page"):
+
+- **Home** took over Next up (`aliases: ["/nextup"]`).
+- **Ideas** holds the braindump composer and the council's briefs; Council
+  (`parent: "ideas"`, no tab) keeps `/council/<id>` for one session.
+- **Work** has the tabs Sessions and Board (`boards`).
+- **Accounts** has the tabs Accounts, Usage and MCP servers.
+- **Settings** has the tabs Settings, System and Prompt Studio.
+- **Extensions:** Runners & CI, Containers, Kubernetes, Cloud, Databases,
+  Picture, Live browser, Linear, Trello and Payments, all added from the
+  gallery. (Runners & CI, Containers and Kubernetes were on for everyone
+  before; a `ui.json` from then keeps them, a new install starts without.)
+
+Addresses that moved redirect in `redirectPath` (`web/src/modules/registry.ts`):
+`/nextup` → `/`, `/council` → `/ideas`, `/assistant/braindump` →
+`/ideas/new/split`, `/settings/extensions/*` → `/extensions/*`, and `/boards`
+goes straight to the board when there is only one. Add a line there when you
+move a page, so bookmarks keep working.
 
 A module with `status: "soon"` shows in the sidebar or gallery but cannot be
 opened or added. Opening an extension the user has not added leads to its
-card in Settings › Extensions, so links between modules never dead-end.
+card in the Extensions gallery, so links between modules never dead-end.
 
 ## A module in one file
 
@@ -45,7 +65,6 @@ export const notes: ModuleDef = {
   title: "Notes",
   icon: NotebookPen,
   route: "/notes",                // /notes/anything arrives as props.subpath
-  section: "workspace",
   kind: "extension",
   category: "productivity",
   order: 20,
@@ -62,8 +81,8 @@ Then add `notes` to the `MODULES` array in `web/src/modules/index.ts`.
 The page component receives `{ subpath: string[] }` and reads everything else
 from two hooks:
 
-- `useApp()` (`@/lib/app`): `open(id, subpath?)`, `navigate(path)`,
-  `health`, `addAccount()`, `openPalette()`.
+- `useApp()` (`@/lib/app`): `open(id, subpath?)`, `navigate(path, replace?)`,
+  `health`, `dockerUp`, `addAccount()`, `openPalette()`.
 - `usePrefs()` (`@/lib/prefs`): the active theme, the user's prefs and
   `label(key, fallback)` for theme-renamed strings.
 
@@ -74,18 +93,25 @@ Concurrent polls of the same path share one request.
 
 ### Optional parts
 
-- `overviewTile`: a component, usually a `StatTile` from
-  `@/components/StatTile`, whose `onOpen` calls `open("<id>")`. It appears
-  on the Overview in sidebar order while the module is in the sidebar.
+- `overviewTile` and `tileRank`: a component, usually a `StatTile` from
+  `@/components/StatTile`, whose `onOpen` calls `open("<id>")`, and its
+  place on Home (lower first). Home shows at most four tiles, only of
+  modules that are **live**: added, and for an extension that `requires`
+  docker, with the engine up. Prefer a tile that reads what Home already
+  fetches; every tile is another request on the first page people see.
 - `useCommands(paletteOpen)`: a hook returning palette commands. It runs on
   every render for every module, in a fixed order, so fetch only while
   `paletteOpen` is true. A command with `children` opens a nested list.
-- `useAttention()`: a hook returning Overview's "Needs attention" entries
-  (`AttentionItem[]`, or `null` until its first load answers). Each entry has
-  a `severity`: `danger` (something broke), `warning` (something will block
-  you) or `info` (your move in the loop). Overview sorts all modules' entries
-  by severity and shows only those of modules in the sidebar. Like
-  `useCommands`, it runs on every Overview render for every module.
+- `useAttention(live)`: a hook returning Home's "Needs your move" entries
+  (`AttentionItem[]`, or `null` until its first load answers). It runs on
+  every Home render for every module, in a fixed order, and `live` says
+  whether the module is live: when it is false the hook must fetch nothing
+  (pass a `null` path to `usePoll`) and return `[]`, so a module that is not
+  added, or whose docker engine is down, costs no request and no 503. Each
+  entry has a `severity` (`danger`, `warning` or `info`) and a `kind`:
+  `move` (the default: the user's own next step) or `infra` (what the
+  machine needs: docker down, a runner offline). Home lists every move
+  before any infra entry, each part most urgent first.
 - `requires`: `clis` (an entry `"a|b"` is satisfied by either), `mcp`
   (matched against the MCP servers page), `env` (presence of a variable,
   never its value), `docker`, `anyOf` (any one requirement is enough) and
@@ -121,7 +147,7 @@ something once.
 ## Sections
 
 The second way to customise, after themes and before writing a module: a
-section is a widget on the Overview or on every project's page, kept as JSON
+section is a widget on Home or on every project's page, kept as JSON
 in `<data dir>/sections/`. It names one route from an allowlist of read-only
 Lucidbench GET routes, the rows and fields to show from its answer, and a view
 (`stat`, `list`, `table`, `bars` or `markdown`). It carries no code, no URL and

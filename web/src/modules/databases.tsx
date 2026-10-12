@@ -54,14 +54,15 @@ function DatabasesTile() {
 }
 
 /** Needs attention: a saved connection that does not answer. */
-function useDatabaseAttention(): AttentionItem[] | null {
+function useDatabaseAttention(live: boolean): AttentionItem[] | null {
   const { open } = useApp()
-  const added = useDatabasesAdded()
+  const added = useDatabasesAdded() && live
   const poll = useDatabases(added)
   if (!added) return []
   if (!poll.data && !poll.error) return null
   return healthCountsDown(poll.data?.saved ?? []).map((s) => ({
     key: `databases-${s.id}`,
+    kind: "infra" as const,
     severity: "danger" as const,
     icon: <DatabaseZap className="size-4" />,
     title: (
@@ -85,9 +86,9 @@ export const databases: ModuleDef = {
   title: "Databases",
   icon: Database,
   route: "/databases",
-  section: "infrastructure",
   kind: "extension",
   order: 11,
+  tileRank: 45,
   defaultEnabled: false,
   category: "data",
   description: "Postgres, MySQL, Redis and Mongo on this machine: discover containers, check health, browse tables and run read-only queries.",

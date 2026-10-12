@@ -16,6 +16,7 @@ import (
 	"github.com/ChinmayGit8765/lucidbench/internal/apiutil"
 	"github.com/ChinmayGit8765/lucidbench/internal/cluster"
 	"github.com/ChinmayGit8765/lucidbench/internal/config"
+	"github.com/ChinmayGit8765/lucidbench/internal/docker"
 	"github.com/ChinmayGit8765/lucidbench/internal/version"
 )
 
@@ -94,8 +95,11 @@ func NewDetector() *Detector {
 	return &Detector{
 		LookPath: exec.LookPath,
 		Getenv:   os.Getenv,
+		// Through docker.Exec, so an engine that is down is asked once per
+		// backoff window, not on every detection.
 		DockerUp: func(ctx context.Context) bool {
-			return exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}").Run() == nil
+			_, err := docker.Exec(ctx, "version", "--format", "{{.Server.Version}}")
+			return err == nil
 		},
 	}
 }

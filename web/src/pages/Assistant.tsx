@@ -3,7 +3,6 @@ import { Bot as BotIcon, MessageCircle, Plus, SendHorizontal, ShieldAlert, Spark
 import { toast } from "sonner"
 
 import { BotAvatar } from "@/components/assistant/BotAvatar"
-import { BraindumpParse } from "@/components/assistant/BraindumpParse"
 import { ProposalCard, useApplyProposals, type Outcome } from "@/components/assistant/Proposals"
 import { ProviderMark } from "@/components/ProviderMark"
 import { PageHeader } from "@/components/Shell"
@@ -14,6 +13,7 @@ import { EmptyState } from "@/components/ui/states"
 import { Tabs } from "@/components/ui/tabs"
 import { errorMessage, getJSON, refreshAll, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
+import { newBraindump } from "@/lib/council"
 import {
   ASSISTANT_PROVIDERS,
   BOTS_PATH,
@@ -37,17 +37,23 @@ import { Bots } from "@/pages/assistant/Bots"
 
 /**
  * /assistant is the chat (/assistant/c/<id> one conversation, /assistant/bot/<id>
- * a new one with a bot), /assistant/bots the bots, /assistant/braindump the parser.
+ * a new one with a bot) and /assistant/bots the bots. A braindump goes to the
+ * one composer in Ideas (/assistant/braindump redirects there).
  */
 export default function Assistant({ subpath }: ModulePageProps) {
   const { open } = useApp()
-  const tab = subpath[0] === "bots" ? "bots" : subpath[0] === "braindump" ? "braindump" : "chat"
+  const tab = subpath[0] === "bots" ? "bots" : "chat"
   return (
     <div className="space-y-5">
       <PageHeader
         icon={<MessageCircle />}
         title="Assistant"
         description="Talk to Claude, Codex, Grok or one of your bots. It answers with no tools and may propose actions; nothing happens until you click Apply."
+        actions={
+          <Button size="sm" variant="secondary" onClick={() => newBraindump(open, "split")} data-testid="assistant-braindump">
+            <WandSparkles /> Braindump
+          </Button>
+        }
       />
       <Tabs
         label="Assistant"
@@ -56,15 +62,10 @@ export default function Assistant({ subpath }: ModulePageProps) {
         items={[
           { id: "chat", label: "Chat", icon: MessageCircle },
           { id: "bots", label: "Bots", icon: BotIcon },
-          { id: "braindump", label: "Parse a braindump", icon: WandSparkles },
         ]}
       />
       {tab === "bots" ? (
         <Bots />
-      ) : tab === "braindump" ? (
-        <Card className="p-5">
-          <BraindumpParse />
-        </Card>
       ) : (
         <Chat key={subpath.join("/")} conversationId={subpath[0] === "c" ? subpath[1] : undefined} botId={subpath[0] === "bot" ? subpath[1] : undefined} />
       )}

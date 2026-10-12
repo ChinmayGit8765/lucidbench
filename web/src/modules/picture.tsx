@@ -8,7 +8,6 @@ export const picture: ModuleDef = {
   title: "Picture",
   icon: PenTool,
   route: "/picture",
-  section: "infrastructure",
   kind: "extension",
   order: 13,
   defaultEnabled: false,

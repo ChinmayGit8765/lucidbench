@@ -202,6 +202,14 @@ func TestListDerivesStagesAndCosts(t *testing.T) {
 	}
 }
 
+func TestColumnStatusReadsOnce(t *testing.T) {
+	for col, want := range map[string]string{"Ready": "In Ready", "Inbox": "In Inbox", "In progress": "In progress", "in review": "in review"} {
+		if got := columnStatus(col); got != want {
+			t.Errorf("columnStatus(%q) = %q, want %q", col, got, want)
+		}
+	}
+}
+
 func TestGetBuildsTheStructure(t *testing.T) {
 	f := newFixture(t)
 	idea, err := f.svc.Get("20260501-090000-aaaaaa")

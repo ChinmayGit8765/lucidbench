@@ -41,8 +41,18 @@ type ExtensionPref struct {
 	Order int  `json:"order"`
 }
 
+// Version is the current ui.json layout. Version 2 made Runners & CI,
+// Containers and Kubernetes opt-in like every other extension; a file from
+// before keeps them in the sidebar unless the user removed them.
+const Version = 2
+
+// legacyDefaults are the extensions version 1 added for everyone, with the
+// order they had.
+var legacyDefaults = map[string]int{"runners": 0, "containers": 1, "kubernetes": 2}
+
 // Prefs is the content of ui.json.
 type Prefs struct {
+	Version     int                      `json:"version,omitempty"`
 	Theme       string                   `json:"theme"`
 	Overrides   Overrides                `json:"overrides"`
 	Modules     map[string]ModulePref    `json:"modules"`
@@ -78,6 +88,9 @@ func (p *Prefs) Validate() error {
 	if !sidebars[o.Sidebar] {
 		return errors.New("overrides.sidebar: must be expanded or rail")
 	}
+	if p.Version < 0 || p.Version > Version {
+		return fmt.Errorf("version: must be 0-%d", Version)
+	}
 	if len(p.Modules) > 100 || len(p.Extensions) > 100 {
 		return errors.New("too many modules")
 	}
@@ -110,7 +123,25 @@ func Default(legacyTheme string) Prefs {
 	case "system":
 		t = "system"
 	}
-	return Prefs{Theme: t, Modules: map[string]ModulePref{}, Extensions: map[string]ExtensionPref{}}
+	return Prefs{Version: Version, Theme: t, Modules: map[string]ModulePref{}, Extensions: map[string]ExtensionPref{}}
+}
+
+// upgrade brings prefs written before Version up to date: an extension that
+// used to be on by default and has no saved choice is written down as added,
+// so an existing user's sidebar does not change under them.
+func (p *Prefs) upgrade() {
+	if p.Version >= Version {
+		return
+	}
+	if p.Extensions == nil {
+		p.Extensions = map[string]ExtensionPref{}
+	}
+	for id, order := range legacyDefaults {
+		if _, saved := p.Extensions[id]; !saved {
+			p.Extensions[id] = ExtensionPref{Added: true, Order: order}
+		}
+	}
+	p.Version = Version
 }
 
 // Store reads and writes ui.json.
@@ -130,9 +161,11 @@ func (s *Store) Load() (Prefs, error) {
 		return Prefs{}, err
 	}
 	p := Default(s.LegacyTheme)
+	p.Version = 0 // a file without a version predates it
 	if err := json.Unmarshal(b, &p); err != nil {
 		return Prefs{}, fmt.Errorf("%s: %w", FileName, err)
 	}
+	p.upgrade()
 	if p.Modules == nil {
 		p.Modules = map[string]ModulePref{}
 	}
@@ -158,6 +191,8 @@ func (s *Store) Save(p Prefs) error {
 	if p.Extensions == nil {
 		p.Extensions = map[string]ExtensionPref{}
 	}
+	// A body without a version comes from an older client: read it as one.
+	p.upgrade()
 	body, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err

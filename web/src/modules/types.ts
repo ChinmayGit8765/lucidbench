@@ -3,8 +3,13 @@ import type { LucideIcon } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 
-/** Where a module sits in the sidebar. Extensions always sit under "Extensions". */
-export type Section = "workspace" | "ai" | "infrastructure" | "settings"
+/**
+ * Where a core module sits in the sidebar: the workspace group at the top,
+ * or the tools group under the divider. A core module with no group has no
+ * sidebar entry of its own: it opens as a tab of its parent, from a link, or
+ * from the command palette. Extensions always sit under "Extensions".
+ */
+export type NavGroup = "workspace" | "tools"
 
 /** Core modules are always present; extensions are added from Settings › Extensions. */
 export type ModuleKind = "core" | "extension"
@@ -37,11 +42,18 @@ export interface ModuleDef {
   id: string
   title: string
   icon: LucideIcon
-  /** URL path, e.g. "/containers". Overview is "/". */
+  /** URL path, e.g. "/containers". Home is "/". */
   route: string
-  section: Section
+  /** Older top-level paths that still open this module, e.g. "/nextup" for Home. */
+  aliases?: string[]
+  /** Core modules: the sidebar group; leave it out for a module that lives under its parent. */
+  group?: NavGroup
+  /** The module this one belongs to: its sidebar entry lights up, and the breadcrumb reads "Parent › Title". */
+  parent?: string
+  /** The label of this module in its family's tab strip (the parent's own tab included); without one it gets no tab. */
+  tab?: string
   kind: ModuleKind
-  /** Default position within its sidebar group; the user can reorder. */
+  /** Default position within its sidebar group (or its parent's tabs); the user can reorder the sidebar. */
   order: number
   /** Core: always true. Extensions: whether a new user has it in the sidebar. */
   defaultEnabled: boolean
@@ -62,14 +74,22 @@ export interface ModuleDef {
    * is called for every module on every render, so keep it cheap when closed.
    */
   useCommands?: (paletteOpen: boolean) => Command[]
-  /** A stat tile for the Overview grid; it should link back to the module. */
+  /** A stat tile for Home; it should link back to the module. */
   overviewTile?: ComponentType
   /**
-   * Overview's "Needs attention" entries. A hook, called for every module on
-   * every Overview render in a fixed order; Overview keeps only the entries
-   * of modules that can be opened. Return null until the first load is in.
+   * The tile's place on Home, lower first. Home shows at most four tiles,
+   * and only of modules that are live (added, and for a docker extension,
+   * with the engine up). A module without a rank shows no tile.
    */
-  useAttention?: () => AttentionItem[] | null
+  tileRank?: number
+  /**
+   * Home's "Needs your move" entries. A hook, called for every module on
+   * every Home render in a fixed order. live is false when the module is not
+   * in the sidebar or what it needs is down: the hook must then fetch nothing
+   * (pass a null path to usePoll) and return []. Return null until the first
+   * load is in.
+   */
+  useAttention?: (live: boolean) => AttentionItem[] | null
 }
 
 /** How urgent an attention entry is: broken, about to block you, or your move. */
@@ -77,11 +97,20 @@ export type AttentionSeverity = "danger" | "warning" | "info"
 
 export const SEVERITY_RANK: Record<AttentionSeverity, number> = { danger: 0, warning: 1, info: 2 }
 
+/**
+ * Whose move an entry is. The user's own moves (a brief to approve, a diff
+ * to review, a reply an agent waits for) come before the machine's (Docker
+ * is not reachable, a runner is offline), whatever their severity.
+ */
+export type AttentionKind = "move" | "infra"
+
 /** One "Needs attention" row on Overview. */
 export interface AttentionItem {
   /** Unique across modules; prefix it with the module id. */
   key: string
   severity: AttentionSeverity
+  /** Default "move"; infrastructure trouble ranks below every move. */
+  kind?: AttentionKind
   icon: ReactNode
   title: ReactNode
   meta: ReactNode

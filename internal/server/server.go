@@ -57,17 +57,34 @@ import (
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
+	// Docker answers GET /api/health?docker=1: whether the engine is up, from
+	// the host tools check (cached, and backed off while docker is down). The
+	// UI asks only while an extension that needs docker is added, so it never
+	// calls a docker endpoint just to learn the engine is not there.
+	Docker *bool `json:"docker,omitempty"`
 }
 
 // HealthHandler reports daemon liveness and version.
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+	healthWith(nil)(w, r)
+}
+
+// healthWith is HealthHandler, answering ?docker=1 from det when it is set.
+func healthWith(det *hostinfo.Detector) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body := HealthResponse{Status: "ok", Version: version.Version}
+		if det != nil && r.URL.Query().Get("docker") == "1" {
+			up := det.Detect(r.Context()).Docker
+			body.Docker = &up
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Version: version.Version})
 }
 
 // New returns the root handler: /api/* routes plus the embedded UI. An
@@ -118,7 +135,8 @@ func DataDir() string {
 // NewWith is New with a config and caller-built services.
 func NewWith(cfg *config.Config, d Deps) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", HealthHandler)
+	tools := hostinfo.NewDetector()
+	mux.HandleFunc("/api/health", healthWith(tools))
 	mux.Handle("/api/accounts", accounts.HandlerFor(func() accounts.Roots { return accounts.FromConfig(cfg) }))
 	mux.HandleFunc("/api/cluster", cluster.Handler)
 	mux.Handle("/api/config", config.Handler(cfg, nil))
@@ -302,7 +320,7 @@ func NewWith(cfg *config.Config, d Deps) http.Handler {
 	update.Register(mux, &update.Service{Enabled: cfg.UpdateCheck, Repo: updateRepo, Current: version.Version,
 		BaseURL: os.Getenv(update.FeedEnv), DataDir: data})
 	mux.Handle("GET /api/about", hostinfo.AboutHandler(cfg, runtime.GOOS))
-	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(hostinfo.NewDetector()))
+	mux.Handle("GET /api/host/tools", hostinfo.ToolsHandler(tools))
 	mux.Handle("/api/", http.NotFoundHandler())
 	mux.Handle("/", webui.Handler())
 	return mux

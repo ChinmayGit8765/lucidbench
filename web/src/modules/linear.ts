@@ -13,7 +13,6 @@ export const linear: ModuleDef = {
   title: "Linear",
   icon: Waypoints,
   route: "/linear",
-  section: "infrastructure",
   kind: "extension",
   order: 15,
   defaultEnabled: false,

@@ -130,14 +130,21 @@ export interface StartRequest {
 export const COUNCIL_POLL_MS = 15000
 export const SESSIONS_PATH = "/api/council/sessions"
 
-/** Asks the Council page to focus its composer (the palette's "New braindump…"). */
+/** Asks the braindump composer to focus (and switch to a mode, in the event's detail). */
 export const COMPOSE_EVENT = "lucidbench:council-compose"
 
-/** Opens Council with the composer focused, from anywhere in the app. */
-export function newBraindump(open: (id: string, sub?: string[]) => void) {
-  open("council")
-  // The page may already be open; ask it to focus the composer.
-  setTimeout(() => window.dispatchEvent(new Event(COMPOSE_EVENT)), 50)
+/** What the one braindump composer does with the text: brief it with the council, or split it into items. */
+export type BraindumpMode = "brief" | "split"
+
+/**
+ * Opens the one braindump composer, at the top of Ideas, focused. Every
+ * entry point uses this: Home, Ideas, the palette, the launcher, the n
+ * shortcut, the Assistant and the board.
+ */
+export function newBraindump(open: (id: string, sub?: string[]) => void, mode: BraindumpMode = "brief") {
+  open("ideas", mode === "split" ? ["new", "split"] : ["new"])
+  // Ideas may already be open; ask the composer to focus.
+  setTimeout(() => window.dispatchEvent(new CustomEvent<BraindumpMode>(COMPOSE_EVENT, { detail: mode })), 50)
 }
 
 export const STATUS: Record<CouncilStatus, { tone: Tone; label: string }> = {

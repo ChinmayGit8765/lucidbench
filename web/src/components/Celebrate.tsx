@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import { StateSprite } from "@/components/StateSprite"
-import { usePoll } from "@/lib/api"
+import { useAfterSettle, usePoll } from "@/lib/api"
 import { useWorkBoard } from "@/lib/boards"
 import { sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
 
@@ -122,8 +122,10 @@ export function Celebrations() {
  * already finished at the first look is remembered, not celebrated.
  */
 export function CelebrationWatcher() {
-  const wb = useWorkBoard()
-  const sessions = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 2)
+  // Celebrations are a treat, not news: they start watching after the page settles.
+  const settled = useAfterSettle()
+  const wb = useWorkBoard(undefined, settled)
+  const sessions = usePoll<WorkSession[]>(settled ? sessionsPath : null, WORK_POLL_MS * 2)
   const primed = useRef({ cards: false, prs: false })
 
   useEffect(() => {

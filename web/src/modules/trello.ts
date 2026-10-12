@@ -9,7 +9,6 @@ export const trello: ModuleDef = {
   title: "Trello",
   icon: LayoutList,
   route: "/trello",
-  section: "infrastructure",
   kind: "extension",
   order: 16,
   defaultEnabled: false,

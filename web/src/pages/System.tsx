@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Sheet } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
-import { ApiError, request, usePoll, type Polled } from "@/lib/api"
+import { ApiError, plainError, request, usePoll, type Polled } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
@@ -118,7 +118,7 @@ function Tiles({
         label="Cluster"
         loading={clusterLoading}
         value={c ? (asleep ? "Asleep" : c.running ? "Running" : "Stopped") : "Unavailable"}
-        sub={c ? <span className="font-mono">kind · {c.name}</span> : cluster.error?.message}
+        sub={c ? <span className="font-mono">kind · {c.name}</span> : plainError(cluster.error?.message)}
         status={
           c ? (
             <StatusPill tone={c.running && !asleep ? "success" : "neutral"}>{asleep ? "stopped" : c.running ? "up" : "down"}</StatusPill>

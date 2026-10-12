@@ -17,7 +17,7 @@ import { StatTile } from "@/components/StatTile"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
-import { getJSON, refreshAll, usePoll } from "@/lib/api"
+import { getJSON, plainError, refreshAll, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
   CI_POLL_MS,
@@ -172,13 +172,14 @@ function StartContainerButton({ container: ct }: { container: CIContainer }) {
 }
 
 /** Needs attention: failed runs, offline runners, stopped runner containers and CI setup problems. */
-function useRunnerAttention(): AttentionItem[] | null {
+function useRunnerAttention(live: boolean): AttentionItem[] | null {
   const { open } = useApp()
   const now = useNow(5000)
-  const summary = usePoll<CISummary>("/api/ci/summary", CI_POLL_MS)
-  const runners = usePoll<CIRunners>("/api/ci/runners", CI_POLL_MS)
-  const runsPoll = usePoll<CIRuns>("/api/ci/runs", CI_POLL_MS)
-  const power = usePower()
+  const summary = usePoll<CISummary>(live ? "/api/ci/summary" : null, CI_POLL_MS)
+  const runners = usePoll<CIRunners>(live ? "/api/ci/runners" : null, CI_POLL_MS)
+  const runsPoll = usePoll<CIRuns>(live ? "/api/ci/runs" : null, CI_POLL_MS)
+  const power = usePower(undefined, live)
+  if (!live) return []
   const answered = (p: { data: unknown; error: unknown }) => p.data !== null || p.error !== null
   if (!answered(summary) || !answered(runsPoll)) return null
   // A runner asleep on demand is stopped on purpose: not something to fix.
@@ -225,6 +226,7 @@ function useRunnerAttention(): AttentionItem[] | null {
   for (const r of (runners.data?.runners ?? []).filter((x) => x.status !== "online" && !(x.container && asleep.has(x.container)))) {
     out.push({
       key: `runner-${r.repo}-${r.id}`,
+      kind: "infra",
       severity: "warning",
       icon: <RunnerDot status="offline" />,
       title: (
@@ -239,6 +241,7 @@ function useRunnerAttention(): AttentionItem[] | null {
   for (const ct of (runners.data?.containers ?? []).filter((x) => x.state !== "running" && !asleep.has(x.name))) {
     out.push({
       key: `ct-${ct.name}`,
+      kind: "infra",
       severity: "warning",
       icon: <ContainerIcon className="size-3.5 text-warning" />,
       title: (
@@ -253,6 +256,7 @@ function useRunnerAttention(): AttentionItem[] | null {
   if (s && !s.configured) {
     out.push({
       key: "ci-setup",
+      kind: "infra",
       severity: "info",
       icon: <Workflow className="size-3.5 text-info" />,
       title: "Watch your CI",
@@ -266,6 +270,7 @@ function useRunnerAttention(): AttentionItem[] | null {
   } else if (s?.token_source === "none") {
     out.push({
       key: "ci-token",
+      kind: "infra",
       severity: "warning",
       icon: <KeyRound className="size-3.5 text-warning" />,
       title: "No GitHub token",
@@ -285,10 +290,11 @@ function useRunnerAttention(): AttentionItem[] | null {
     if (e.source === "docker") {
       out.push({
         key: `err-docker-${e.message}`,
+        kind: "infra",
         severity: "danger",
         icon: <TriangleAlert className="size-3.5 text-danger" />,
         title: "Docker is not reachable",
-        meta: e.message,
+        meta: plainError(e.message),
       })
       continue
     }
@@ -300,6 +306,7 @@ function useRunnerAttention(): AttentionItem[] | null {
   for (const [cause, repos] of byCause) {
     out.push({
       key: `err-${cause}`,
+      kind: "infra",
       severity: "danger",
       icon: <TriangleAlert className="size-3.5 text-danger" />,
       title: repos.length === 1 ? `Cannot read ${repos[0]}` : `Cannot read ${repos.length} repositories`,
@@ -315,11 +322,11 @@ export const runners: ModuleDef = {
   title: "Runners & CI",
   icon: ServerCog,
   route: "/runners",
-  section: "infrastructure",
   kind: "extension",
   category: "devops",
   order: 0,
-  defaultEnabled: true,
+  tileRank: 41,
+  defaultEnabled: false,
   description: "Self-hosted GitHub Actions runners, their containers, and every recent workflow run.",
   requires: { docker: true, optional: { clis: ["gh"] } },
   keywords: "ci github actions workflow runs runners",

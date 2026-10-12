@@ -3,7 +3,7 @@ import { ArrowLeft, Check, MessageCircle, Moon, Palette, PenLine, Plus, ScrollTe
 
 import { spriteLabel, StateSprite, useThemeSprite, type SpriteState } from "@/components/StateSprite"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
-import { usePoll } from "@/lib/api"
+import { useAfterSettle, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { DEFAULT_BOARD, requestBoards } from "@/lib/boards"
 import { COUNCIL_POLL_MS, newBraindump, SESSIONS_PATH, type CouncilSummary } from "@/lib/council"
@@ -12,6 +12,7 @@ import { usePrefs } from "@/lib/prefs"
 import { resolveThemeId, SYSTEM_THEME } from "@/lib/theme"
 import { cn, plural } from "@/lib/utils"
 import { sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
+import { needsDocker } from "@/modules/registry"
 
 /**
  * What the app is doing, for the mascot: working while an agent runs,
@@ -19,9 +20,14 @@ import { sessionsPath, WORK_POLL_MS, type WorkSession } from "@/lib/work"
  * is asleep, else idle. Shares its polls with Overview and the pages.
  */
 export function useActivity(): { state: SpriteState; detail: string } {
+  const { dockerUp } = useApp()
+  const { prefs } = usePrefs()
   const work = usePoll<WorkSession[]>(sessionsPath, WORK_POLL_MS * 2)
   const council = usePoll<CouncilSummary[]>(SESSIONS_PATH, COUNCIL_POLL_MS)
-  const power = usePower(30_000)
+  // "Asleep" only means something while docker things are in use, and it is
+  // cosmetic: ask after the page has had its turn, never while docker is down.
+  const settled = useAfterSettle()
+  const power = usePower(30_000, settled && dockerUp === true && needsDocker(prefs))
   const running = work.data?.filter((s) => s.status === "running").length ?? 0
   const thinking = council.data?.filter((s) => s.status === "running").length ?? 0
   const items = allItems(power.data)

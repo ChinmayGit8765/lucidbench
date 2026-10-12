@@ -179,7 +179,7 @@ compose passes it through to the container.
 
 ## Board connectors (Linear and Trello)
 
-The Linear and Trello extensions (Settings › Extensions) read and write remote
+The Linear and Trello extensions (the Extensions gallery) read and write remote
 boards beside your native Boards. They are off until you add them, and each
 needs credentials.
 
@@ -220,7 +220,7 @@ messages Lucidbench shows never quote what the remote service answered.
 
 ## Payments (Stripe)
 
-The Payments extension (Settings › Extensions, category Business) reads a Stripe
+The Payments extension (the Extensions gallery, category Business) reads a Stripe
 account and, in test mode only, sets up a project's payments. It needs one key:
 
 ```yaml
@@ -271,7 +271,7 @@ code, such as `permission_error`).
   `GET /api/payments/project/{id}`, `POST /api/payments/plan` (builds a plan, writes
   nothing) and `POST /api/payments/plan/execute` (needs `X-Lucid-Confirm: yes`). `charges`
   takes `limit` and `days` (`days` also totals the succeeded payments of that window per
-  currency, which the Overview tile shows as seven-day volume).
+  currency, which the Home tile shows as seven-day volume).
 
 ## Projects
 
@@ -472,7 +472,7 @@ description?, tokens, fonts?, art?, labels? }`:
   web fonts.
 - `art` names files in the theme's folder for the header banner
   (`headerImage`), the sidebar mascot (`sidebarMascot`), empty states
-  (`emptyState`), the Overview sprite board (`spriteBoard`: up to 12
+  (`emptyState`), the sprite board on Home (`spriteBoard`: up to 12
   `{file, caption}`) and the state sprites (`sprites`, below). Files are
   lowercase `.svg`, `.png`, `.webp` or `.gif` names, at most 32 per theme. SVGs are sanitised on save: scripts, event handlers, external
   references, `<image>`, `<foreignObject>`, animations and DOCTYPEs are
@@ -554,7 +554,7 @@ the host.
 
 ## Sections
 
-Settings › Sections and the **Add section** button on the Overview (and on a
+Settings › Sections and the **Add section** button on Home (and on a
 project's Sections tab) manage widgets that show part of what Lucidbench
 already knows. Each section is one JSON file in `<data dir>/sections/<id>.json`:
 
@@ -646,7 +646,7 @@ whatever its team says. The format, the checks and the routes are in
 
 ## Next up
 
-Next up (Workspace, under Overview) works out what to work on next. It reads what Lucidbench
+Next up (on Home, under "Needs your move") works out what to work on next. It reads what Lucidbench
 already knows and gives each piece of work a score, the reasons for it, and one action. Listing it
 is free: it reads local records and the CI, Linear and Trello answers those modules already cache,
 and never runs a provider. Nothing starts by itself.
@@ -704,8 +704,8 @@ order is kept in `state.json` until the next ranking; items it did not rank foll
 call's cost is recorded in `<data dir>/nextup/runs/` and counts on the Usage page as source
 `nextup`.
 
-A schedule ("every N hours, while Lucidbench is open") re-ranks from the open page or the Overview
-tile; it is off by default and never runs without the app open.
+A schedule ("every N hours, while Lucidbench is open") re-ranks while Home is open
+(it is off by default and never runs without the app open).
 
 **Privacy.** Confidential projects (and cards whose project or Memory page is confidential) stay in
 the list on this machine, but reach the ranking agent as an alias and a score only: no title,
@@ -983,7 +983,7 @@ restart.
 
 The Cloud extension is a read-only inventory of what you have deployed. It runs the CLIs you are
 already signed in to, asks them for JSON, and keeps nothing: Lucidbench has no cloud settings and
-stores no cloud credential. Add it from Settings › Extensions.
+stores no cloud credential. Add it from the Extensions gallery.
 
 | Provider | CLI | What is read |
 |---|---|---|
@@ -1013,7 +1013,7 @@ Results are cached for five minutes and **Refresh** runs the CLIs again. Each CL
 (the Google Cloud project id; the active project by default) are for `gcloud` only. Invalid
 entries are reported and ignored. With the Cloud extension added, the project's card then shows
 each entry's status, last deploy time and links. A failed deploy also appears under Needs
-attention on Overview.
+attention on Home.
 
 API: `GET /api/cloud` (every provider), `GET /api/cloud/{provider}` and `GET /api/cloud/deploys`
 (project entries matched to the inventory). Add `?refresh=1` to skip the cache.
@@ -1023,7 +1023,7 @@ API: `GET /api/cloud` (every provider), `GET /api/cloud/{provider}` and `GET /ap
 The Databases extension finds database containers on your Docker engine, keeps connection profiles
 for the ones you choose, and reads them through their own Go drivers: PostgreSQL (pgx), MySQL and
 MariaDB (go-sql-driver), Redis (go-redis) and MongoDB (the official driver). It only reads. Add it
-from Settings › Extensions; Docker is needed for discovery and for the embedded managers, and the
+from the Extensions gallery; Docker is needed for discovery and for the embedded managers, and the
 native view works against any reachable host once a connection is saved.
 
 **Discovery** lists containers whose image is `postgres` (also `postgresql`, `postgis`,
@@ -1095,7 +1095,7 @@ password and cannot be read until they are saved.
 ## Live browser
 
 The Live browser extension is a browser your agents use that you can watch and, when you need to,
-take over. Add it from Settings › Extensions; it needs Docker (category: DevOps).
+take over. Add it from the Extensions gallery; it needs Docker (category: DevOps).
 
 **The container.** `chromedp/headless-shell` (a headless Chromium; its build scripts are MIT, Chromium is
 BSD-3-Clause with the licences of its bundled components), pinned to a Chromium version, runs as the container
@@ -1161,7 +1161,7 @@ API (every POST needs `X-Lucid-Confirm: yes`): `GET /api/browser` (state `sleepi
 ## Picture
 
 The Picture extension keeps a project's diagrams and design canvases next to its code. Add it from
-Settings › Extensions; it needs nothing else. A **diagram** is Mermaid text (`.mmd`) with a live
+the Extensions gallery; it needs nothing else. A **diagram** is Mermaid text (`.mmd`) with a live
 preview, for back-end schematics. A **canvas** is an Excalidraw drawing (`.excalidraw`, JSON) for
 front-end layouts, with PNG export. The Mermaid and Excalidraw libraries load only when you first
 preview a diagram or open a canvas. Excalidraw's drawing fonts are served from the app itself

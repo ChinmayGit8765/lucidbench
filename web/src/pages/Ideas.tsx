@@ -1,16 +1,15 @@
 import { useMemo, useState } from "react"
-import { ChevronDown, GitPullRequest, Lightbulb, PenLine, Search, SquareTerminal, Vote, WandSparkles, X } from "lucide-react"
+import { ChevronDown, GitPullRequest, Lightbulb, Search, SquareTerminal, Vote, WandSparkles, X } from "lucide-react"
 
-import { BraindumpParse } from "@/components/assistant/BraindumpParse"
+import { BraindumpComposer } from "@/components/BraindumpComposer"
 import { PageHeader, RefreshButton } from "@/components/Shell"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Sheet } from "@/components/ui/dialog"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
 import { usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { newBraindump } from "@/lib/council"
+import type { BraindumpMode } from "@/lib/council"
 import { IDEAS_PATH, IDEAS_POLL_MS, STAGE_INFO, STAGES, stageIndex, type IdeaSummary, type Stage } from "@/lib/ideas"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn, plural } from "@/lib/utils"
@@ -18,8 +17,13 @@ import { formatCost, PR_INFO } from "@/lib/work"
 import type { ModulePageProps } from "@/modules/types"
 import { IdeaView, StageIcon } from "@/pages/ideas/IdeaView"
 
-/** /ideas lists every idea; /ideas/<id> follows one (a card's id is card:<board>/<card>). */
+/**
+ * /ideas lists every idea under the braindump composer; /ideas/new focuses
+ * the composer (/ideas/new/split in its split mode); /ideas/<id> follows one
+ * idea (a card's id is card:<board>/<card>).
+ */
 export default function Ideas({ subpath }: ModulePageProps) {
+  if (subpath[0] === "new") return <IdeaList compose={subpath[1] === "split" ? "split" : "brief"} />
   const id = subpath.join("/")
   return id ? <IdeaView key={id} id={id} /> : <IdeaList />
 }
@@ -40,7 +44,7 @@ export function StageDots({ stage, className }: { stage: Stage; className?: stri
   )
 }
 
-function IdeaList() {
+function IdeaList({ compose }: { compose?: BraindumpMode }) {
   const { open } = useApp()
   const now = useNow(30000)
   const poll = usePoll<IdeaSummary[]>(IDEAS_PATH, IDEAS_POLL_MS)
@@ -58,37 +62,17 @@ function IdeaList() {
   )
   const spent = all.reduce((n, i) => n + i.cost_usd, 0)
   const filtered = !!(stage || project || q.trim())
-  const [parsing, setParsing] = useState(false)
 
   return (
     <div className="space-y-6">
-      <Sheet
-        open={parsing}
-        onClose={() => {
-          setParsing(false)
-          poll.refresh()
-        }}
-        title="Parse a braindump"
-        description="Split a messy dump into items, then keep each one as a card, an idea or a council braindump."
-      >
-        <BraindumpParse className="p-5" />
-      </Sheet>
       <PageHeader
         icon={<Lightbulb />}
         title="Ideas"
-        description="Every idea from braindump to merged PR: what the council decided, the card it became, the agent sessions and the pull requests."
-        actions={
-          <>
-            <RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />
-            <Button size="sm" variant="secondary" onClick={() => setParsing(true)} data-testid="ideas-parse-braindump">
-              <WandSparkles /> Parse a braindump
-            </Button>
-            <Button size="sm" onClick={() => newBraindump(open)}>
-              <PenLine /> New braindump
-            </Button>
-          </>
-        }
+        description="Dump what is on your mind, then follow each idea to a merged PR: the brief the council wrote, the card it became, the agent sessions and the pull requests."
+        actions={<RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />}
       />
+
+      <BraindumpComposer initialMode={compose ?? "brief"} autoFocus={!!compose} />
 
       {poll.error && !poll.data && <ErrorState title="Could not load the ideas" message={poll.error.message} onRetry={poll.refresh} />}
 
@@ -113,13 +97,10 @@ function IdeaList() {
               </span>,
             ]}
             title="No ideas yet"
-            description="An idea starts as a braindump the council turns into a brief, or as a card you add to a board. Follow it here all the way to the merged PR."
+            description="An idea starts as a braindump above, which the council turns into a brief, or as a card you add to a board. Follow it here all the way to the merged PR."
           >
-            <Button onClick={() => newBraindump(open)}>
-              <PenLine /> Write a braindump
-            </Button>
             <Button variant="secondary" onClick={() => open("studio", ["braindump"])}>
-              <WandSparkles /> Shape it in Prompt Studio
+              <WandSparkles /> Shape a big one in Prompt Studio
             </Button>
           </EmptyState>
         </Card>

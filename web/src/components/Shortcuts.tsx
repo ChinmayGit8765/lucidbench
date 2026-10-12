@@ -5,11 +5,11 @@ import { isMac } from "@/lib/utils"
 
 /** "g" then a letter: where it goes. */
 export const GO_KEYS: { key: string; module: string; label: string }[] = [
-  { key: "o", module: "overview", label: "Overview" },
+  { key: "o", module: "overview", label: "Home" },
   { key: "w", module: "work", label: "Work" },
-  { key: "b", module: "boards", label: "Boards" },
+  { key: "b", module: "boards", label: "Board" },
   { key: "m", module: "memory", label: "Memory" },
-  { key: "c", module: "council", label: "Council" },
+  { key: "p", module: "projects", label: "Projects" },
   { key: "i", module: "ideas", label: "Ideas" },
   { key: "s", module: "settings", label: "Settings" },
 ]

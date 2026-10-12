@@ -12,7 +12,7 @@ import { usePrefs } from "@/lib/prefs"
 import { assetURL, DARK_DEFAULT, LIGHT_DEFAULT, SYSTEM_THEME } from "@/lib/theme"
 import { relativeTime, useNow } from "@/lib/time"
 import { cn, isMac } from "@/lib/utils"
-import { SECTION_LABEL, sidebarGroups } from "@/modules/registry"
+import { breadcrumb, familyOf, sidebarGroups } from "@/modules/registry"
 import type { ModuleDef } from "@/modules/types"
 
 function useMedia(query: string): boolean {
@@ -36,18 +36,9 @@ export function useSidebar() {
   return { rail: collapsed || !wide, wide, toggle }
 }
 
-function SectionLabel({ rail, children }: { rail: boolean; children: ReactNode }) {
-  if (rail) return <div className="mx-auto my-2 h-px w-6 bg-border" />
-  return (
-    <div className="px-2.5 pb-1 pt-4 text-2xs font-medium uppercase tracking-[0.08em] text-subtle-foreground">
-      {children}
-    </div>
-  )
-}
-
 const ITEM = "group relative flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors"
 
-function NavItem({ m, active, rail }: { m: ModuleDef; active: boolean; rail: boolean }) {
+function NavItem({ m, active, rail, sub }: { m: ModuleDef; active: boolean; rail: boolean; sub?: boolean }) {
   const { open } = useApp()
   const Icon = m.icon
   if (m.status === "soon") {
@@ -80,15 +71,67 @@ function NavItem({ m, active, rail }: { m: ModuleDef; active: boolean; rail: boo
       aria-label={rail ? m.title : undefined}
       className={cn(
         ITEM,
-        rail ? "justify-center" : "px-2.5",
+        rail ? "justify-center" : sub ? "h-7 pl-9 pr-2.5 text-[0.8125rem]" : "px-2.5",
         active
           ? "bg-accent font-medium text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
-      <Icon className={cn("size-4 shrink-0", active ? "text-brand" : "text-subtle-foreground group-hover:text-foreground")} />
+      <Icon className={cn("shrink-0", sub && !rail ? "size-3.5" : "size-4", active ? "text-brand" : "text-subtle-foreground group-hover:text-foreground")} />
       {!rail && <span className="truncate">{m.title}</span>}
     </button>
+  )
+}
+
+const EXT_OPEN_KEY = "lucidbench.sidebar.extensions"
+
+/**
+ * The Extensions entry and the extensions added under it. The list folds
+ * away (remembered on this device); it starts open while it is short, and
+ * opens by itself when one of its pages is showing.
+ */
+function ExtensionsGroup({ entry, items, current, rail }: { entry: ModuleDef; items: ModuleDef[]; current?: string; rail: boolean }) {
+  const [saved, setSaved] = useState<boolean | null>(() => {
+    const v = localStorage.getItem(EXT_OPEN_KEY)
+    return v === null ? null : v === "1"
+  })
+  const inside = items.some((m) => m.id === current)
+  const open = inside || (saved ?? items.length <= 5)
+  const toggle = () => {
+    const next = !open
+    setSaved(next)
+    try {
+      localStorage.setItem(EXT_OPEN_KEY, next ? "1" : "0")
+    } catch {
+      // not remembered
+    }
+  }
+  return (
+    <div>
+      <div className="relative">
+        <NavItem m={entry} active={entry.id === current} rail={rail} />
+        {items.length > 0 && !rail && (
+          <button
+            onClick={toggle}
+            aria-expanded={open}
+            aria-label={open ? "Hide added extensions" : "Show added extensions"}
+            title={open ? "Hide added extensions" : `Show ${items.length} added ${items.length === 1 ? "extension" : "extensions"}`}
+            data-testid="sidebar-extensions-toggle"
+            className="absolute right-1 top-1 flex h-6 items-center gap-1 rounded px-1 text-2xs tabular-nums text-subtle-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {!open && items.length}
+            <ChevronRight className={cn("size-3.5 transition-transform duration-150", open && "rotate-90")} />
+          </button>
+        )}
+      </div>
+      {open && items.length > 0 && (
+        <div role="group" aria-label="Added extensions" className="mt-0.5 flex flex-col gap-0.5">
+          {items.map((m) => (
+            <NavItem key={m.id} m={m} active={m.id === current} rail={rail} sub />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -96,7 +139,7 @@ function NavItem({ m, active, rail }: { m: ModuleDef; active: boolean; rail: boo
 export function Sidebar({ current, version }: { current?: string; version?: string }) {
   const { prefs } = usePrefs()
   const { rail, wide, toggle } = useSidebar()
-  const { main, bottom } = sidebarGroups(prefs)
+  const { groups, extensions } = sidebarGroups(prefs)
   return (
     <aside
       className={cn(
@@ -110,22 +153,21 @@ export function Sidebar({ current, version }: { current?: string; version?: stri
         </Launcher>
       </div>
 
-      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {main.map((g) => (
+      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-2">
+        {groups.map((g, i) => (
           <div key={g.id}>
-            <SectionLabel rail={rail}>{g.label}</SectionLabel>
+            {i > 0 && <div role="separator" className={cn("my-3 h-px bg-border", rail ? "mx-auto w-6" : "mx-2.5")} />}
             <div className="flex flex-col gap-0.5">
-              {g.items.map((m) => (
-                <NavItem key={m.id} m={m} active={m.id === current} rail={rail} />
-              ))}
+              {g.items.map((m) =>
+                m.id === "extensions" ? (
+                  <ExtensionsGroup key={m.id} entry={m} items={extensions} current={current} rail={rail} />
+                ) : (
+                  <NavItem key={m.id} m={m} active={m.id === current} rail={rail} />
+                ),
+              )}
             </div>
           </div>
         ))}
-        <div className="mt-auto flex flex-col gap-0.5 pt-4">
-          {bottom.map((m) => (
-            <NavItem key={m.id} m={m} active={m.id === current} rail={rail} />
-          ))}
-        </div>
       </nav>
 
       {!rail && <SidebarMascot />}
@@ -182,14 +224,11 @@ function ThemeToggle() {
 }
 
 export function Header({ module, health }: { module?: ModuleDef; health: Health | null | undefined }) {
-  const { openPalette } = useApp()
+  const { openPalette, open } = useApp()
   const { active, inlineAssets } = usePrefs()
   const ok = health?.status === "ok"
-  const section = !module
-    ? "Lucidbench"
-    : module.kind === "extension"
-      ? SECTION_LABEL.extensions
-      : (SECTION_LABEL[module.section] ?? "Workspace")
+  const crumbs = breadcrumb(module)
+  const up = module?.parent ?? (module?.kind === "extension" ? "extensions" : undefined)
   const banner = active?.art?.headerImage
   return (
     <header className="relative flex h-14 shrink-0 items-center justify-between gap-4 overflow-hidden border-b bg-background/70 px-5 backdrop-blur-md md:px-6">
@@ -202,10 +241,16 @@ export function Header({ module, health }: { module?: ModuleDef; health: Health 
         />
       )}
       <nav aria-label="Breadcrumb" className="relative flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="text-subtle-foreground">{section}</span>
-        <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" />
+        {crumbs.length > 1 && (
+          <>
+            <button onClick={() => up && open(up)} className="shrink-0 text-subtle-foreground transition-colors hover:text-foreground">
+              {crumbs[0]}
+            </button>
+            <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" />
+          </>
+        )}
         <span aria-current="page" className="truncate font-medium">
-          {module?.title ?? "Not found"}
+          {crumbs[crumbs.length - 1]}
         </span>
       </nav>
       <div className="relative flex items-center gap-3">
@@ -229,6 +274,42 @@ export function Header({ module, health }: { module?: ModuleDef; health: Health 
         <ThemeToggle />
       </div>
     </header>
+  )
+}
+
+/**
+ * The tabs of a module family, above the page: Accounts · Usage · MCP
+ * servers, Sessions · Board, Settings · System · Prompt Studio. Each tab is
+ * its own page with its own address; the strip only shows they belong
+ * together. Nothing renders for a module without a family.
+ */
+export function FamilyTabs({ module }: { module?: ModuleDef }) {
+  const { open } = useApp()
+  const family = familyOf(module)
+  if (family.length === 0 || !module) return null
+  return (
+    <nav aria-label={`${family[0].title} pages`} className="mb-6 flex">
+      <div className="inline-flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5" data-testid="family-tabs">
+        {family.map((m) => {
+          const on = m.id === module.id
+          const Icon = m.icon
+          return (
+            <button
+              key={m.id}
+              onClick={() => !on && open(m.id)}
+              aria-current={on ? "page" : undefined}
+              className={cn(
+                "flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors",
+                on ? "bg-elevated font-medium text-foreground shadow-card" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className={cn("size-3.5", on ? "text-brand" : "text-subtle-foreground")} />
+              {m.tab}
+            </button>
+          )
+        })}
+      </div>
+    </nav>
   )
 }
 
