@@ -650,7 +650,19 @@ func Plan(in PlanInput) ([]PlannedItem, []WindowPlan) {
 		chosen := 0
 		if it.Provider == "" && len(opts) > 0 {
 			pref := opts[0]
+			if seat == nil || seat.Provider != pref.provider {
+				// No team preference: a provider with known room comes first.
+				for i, o := range opts {
+					if o.fits == "yes" {
+						opts[0], opts[i] = opts[i], opts[0]
+						pref = opts[0]
+						break
+					}
+				}
+			}
 			switch {
+			case pref.fits == "yes" && (seat == nil || seat.Provider != pref.provider):
+				pi.Reason = "has room before its reset"
 			case pref.fits != "no":
 				if seat != nil && seat.Provider == pref.provider {
 					pi.Reason = "your team's " + role

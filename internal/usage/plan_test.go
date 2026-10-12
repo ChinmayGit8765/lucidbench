@@ -329,6 +329,13 @@ func TestPlanSuggestsProviderFromHeadroomAndTeam(t *testing.T) {
 		t.Errorf("only claude: %+v", got[0])
 	}
 
+	// No team seat for the kind: a provider with known room beats one whose
+	// room is unknown, even when the unknown one is listed first.
+	got, _ = Plan(PlanInput{Items: []PlanItem{{ID: "r", Title: "Rank", Kind: PlanRank}}, Paces: testPaces()[1:], Runs: fixedRuns(PlanRank, "codex", 4000), Team: team, Available: []string{"claude", "codex"}, Now: now, Loc: zone})
+	if got[0].Use != "codex" || got[0].Verdict != "fits" || got[0].Reason != "has room before its reset" {
+		t.Errorf("known room first: %+v", got[0])
+	}
+
 	// A council warns against the sum of its seats' budgets, when all are set.
 	cb := 0.5
 	councilTeam := func(string) []TeamSeat {
