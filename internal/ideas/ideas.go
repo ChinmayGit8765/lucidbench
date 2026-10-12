@@ -366,7 +366,7 @@ func statusOf(stage string, sess *council.Session, c *cardRef, ses []work.Sessio
 		if c == nil {
 			return "Card missing"
 		}
-		return "In " + c.card.Column
+		return columnStatus(c.card.Column)
 	case StageBrief:
 		if sess.Status == council.StatusRunning {
 			return "Council revising"
@@ -377,6 +377,15 @@ func statusOf(stage string, sess *council.Session, c *cardRef, ses []work.Sessio
 		return "Council failed"
 	}
 	return "Council running"
+}
+
+// columnStatus says where a card sits: "In Ready", "In Review", but a
+// column already named "In progress" reads as itself, not "In In progress".
+func columnStatus(col string) string {
+	if strings.HasPrefix(strings.ToLower(col), "in ") {
+		return col
+	}
+	return "In " + col
 }
 
 func summarise(sess *council.Session, c *cardRef, ses []work.Session) Summary {
