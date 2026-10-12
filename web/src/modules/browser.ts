@@ -8,7 +8,6 @@ export const browser: ModuleDef = {
   title: "Live browser",
   icon: AppWindow,
   route: "/browser",
-  section: "infrastructure",
   kind: "extension",
   order: 14,
   defaultEnabled: false,

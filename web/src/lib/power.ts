@@ -66,10 +66,11 @@ export const POWER_POLL_MS = 10000
 /**
  * Polls /api/power. A daemon without the supervisor answers 404; callers
  * treat that as "power management not available" and show what they did
- * before.
+ * before. With enabled false it fetches nothing (nothing on demand is in
+ * use, or the docker engine is down).
  */
-export function usePower(intervalMs = POWER_POLL_MS): Polled<PowerState> & { unavailable: boolean } {
-  const p = usePoll<PowerState>("/api/power", intervalMs)
+export function usePower(intervalMs = POWER_POLL_MS, enabled = true): Polled<PowerState> & { unavailable: boolean } {
+  const p = usePoll<PowerState>(enabled ? "/api/power" : null, intervalMs, { cache: true })
   return { ...p, unavailable: p.error instanceof ApiError && p.error.status === 404 }
 }
 

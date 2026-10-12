@@ -60,8 +60,8 @@ export const boardsApi = {
  * first, so a visit that only looks (Overview) never creates the board
  * file. board stays null until the board exists and has loaded.
  */
-export function useWorkBoard(intervalMs = BOARDS_POLL_MS) {
-  const list = usePoll<BoardSummary[]>("/api/boards", intervalMs)
+export function useWorkBoard(intervalMs = BOARDS_POLL_MS, enabled = true) {
+  const list = usePoll<BoardSummary[]>(enabled ? "/api/boards" : null, intervalMs)
   const exists = list.data?.some((b) => b.id === DEFAULT_BOARD) ?? false
   const [board, setBoard] = useState<Board | null>(null)
   useEffect(() => {

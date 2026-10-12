@@ -78,14 +78,13 @@ function Group({ title, hint, items, removable }: { title: string; hint?: string
 export function SidebarLayout() {
   const { prefs, update } = usePrefs()
   const { open } = useApp()
-  const { main, bottom } = sidebarGroups(prefs)
-  const core = main.filter((g) => g.id !== "extensions")
-  const ext = main.find((g) => g.id === "extensions")
+  const { groups, extensions } = sidebarGroups(prefs)
+  const [workspace, tools] = groups
   const customised = Object.keys(prefs.modules).length > 0 || Object.values(prefs.extensions).some((e) => e.added)
   return (
     <Section
       title="Sidebar"
-      description="Core modules are always there; move them to suit you. Extensions appear here once you add them."
+      description="Core modules are always there; move them to suit you. Extensions appear under Extensions once you add them. Usage, MCP servers, the board, System and Prompt Studio open as tabs of their page."
       actions={
         customised ? (
           <Button
@@ -98,20 +97,18 @@ export function SidebarLayout() {
         ) : undefined
       }
     >
-      {core.map((g) => (
-        <Group key={g.id} title={g.label} items={g.items} />
-      ))}
-      {ext ? (
-        <Group title="Extensions" hint="added from the gallery" items={ext.items} removable />
+      <Group title="Workspace" items={workspace.items} />
+      <Group title="Below the divider" items={tools.items} />
+      {extensions.length > 0 ? (
+        <Group title="Extensions" hint="added from the gallery" items={extensions} removable />
       ) : (
         <div className="border-t px-5 py-4 text-sm text-muted-foreground">
           No extensions in the sidebar.{" "}
-          <button className="text-brand-fg underline-offset-2 hover:underline" onClick={() => open("settings", ["extensions"])}>
+          <button className="text-brand-fg underline-offset-2 hover:underline" onClick={() => open("extensions")}>
             Browse extensions
           </button>
         </div>
       )}
-      <Group title="Pinned to the bottom" items={bottom} />
     </Section>
   )
 }

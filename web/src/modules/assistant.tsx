@@ -1,5 +1,5 @@
 import { lazy, useEffect, useState } from "react"
-import { Bot as BotIcon, MessageCircle, Plus, WandSparkles } from "lucide-react"
+import { Bot as BotIcon, MessageCircle, Plus } from "lucide-react"
 
 import type { Command } from "@/components/CommandPalette"
 import { getJSON } from "@/lib/api"
@@ -7,7 +7,7 @@ import { useApp } from "@/lib/app"
 import { BOTS_PATH, type Bot } from "@/lib/assistant"
 import type { ModuleDef } from "@/modules/types"
 
-/** "Ask Lucid…", "Parse a braindump…", "New bot…", and a chat with each bot once the user types. */
+/** "Ask Lucid…", "New bot…", and a chat with each bot once the user types. (A braindump is the one "New braindump…".) */
 function useAssistantCommands(paletteOpen: boolean): Command[] {
   const { open } = useApp()
   const [bots, setBots] = useState<Bot[]>([])
@@ -23,7 +23,6 @@ function useAssistantCommands(paletteOpen: boolean): Command[] {
   }, [paletteOpen])
   return [
     { id: "assistant-ask", label: "Ask Lucid…", group: "Actions", icon: MessageCircle, keywords: "assistant chat ask talk agent", run: () => open("assistant") },
-    { id: "assistant-braindump", label: "Parse a braindump…", group: "Actions", icon: WandSparkles, keywords: "assistant braindump split items ideas", run: () => open("assistant", ["braindump"]) },
     { id: "assistant-new-bot", label: "New bot…", group: "Actions", icon: Plus, keywords: "assistant bot agent persona", run: () => open("assistant", ["bots"]) },
     ...bots.map((b) => ({
       id: `assistant-bot-${b.id}`,
@@ -43,12 +42,12 @@ export const assistant: ModuleDef = {
   title: "Assistant",
   icon: MessageCircle,
   route: "/assistant",
-  section: "ai",
+  group: "tools",
   kind: "core",
-  order: 1.5,
+  order: 0,
   defaultEnabled: true,
-  description: "Talk to Claude, Codex, Grok or your own bots. Answers come with proposed actions you apply with a click; it also splits braindumps into items.",
-  keywords: "assistant chat ask lucid bot agent persona braindump parse actions",
+  description: "Talk to Claude, Codex, Grok or your own bots. Answers come with proposed actions you apply with a click.",
+  keywords: "assistant chat ask lucid bot agent persona actions",
   component: lazy(() => import("@/pages/Assistant")),
   useCommands: useAssistantCommands,
 }

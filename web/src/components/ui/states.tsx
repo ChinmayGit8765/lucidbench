@@ -4,6 +4,7 @@ import { AlertTriangle, RotateCw } from "lucide-react"
 import { StateSprite } from "@/components/StateSprite"
 import { useEmptyArt } from "@/components/ThemeArt"
 import { Button } from "@/components/ui/button"
+import { plainError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 /**
@@ -99,7 +100,7 @@ export function ErrorState({
       </span>
       <div className="min-w-0 flex-1 text-sm">
         <div className="font-medium">{title}</div>
-        {message && <div className="mt-0.5 break-words text-muted-foreground">{message}</div>}
+        {message && <div className="mt-0.5 break-words text-muted-foreground">{plainError(message)}</div>}
       </div>
       {onRetry && (
         <Button variant="secondary" size="sm" onClick={onRetry}>

@@ -5,12 +5,15 @@ import { toast } from "sonner"
 import type { Command } from "@/components/CommandPalette"
 import { PowerTile } from "@/components/Power"
 import { Button } from "@/components/ui/button"
-import { getJSON, refreshAll } from "@/lib/api"
+import { getJSON, plainError, refreshAll } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import { runHelloJob } from "@/lib/jobs"
 import { isAsleep, powerAction, sleepIdle, usePower, type PowerState } from "@/lib/power"
+import { usePrefs } from "@/lib/prefs"
 import { relativeTime, useNow } from "@/lib/time"
 import { plural } from "@/lib/utils"
+import { MODULES } from "@/modules"
+import { isOpenable, needsDocker } from "@/modules/registry"
 import type { AttentionItem, ModuleDef } from "@/modules/types"
 
 function useSystemCommands(paletteOpen: boolean): Command[] {
@@ -94,10 +97,35 @@ function useSystemCommands(paletteOpen: boolean): Command[] {
 }
 
 /** Needs attention: something the power supervisor failed to start or stop. */
-function usePowerAttention(): AttentionItem[] | null {
-  const { open } = useApp()
+function usePowerAttention(live: boolean): AttentionItem[] | null {
+  const { open, dockerUp } = useApp()
+  const { prefs } = usePrefs()
   const now = useNow(5000)
-  const power = usePower()
+  // Everything power manages runs on docker: ask only while an extension
+  // that uses it is added and the engine answers.
+  const on = live && dockerUp === true && needsDocker(prefs)
+  const power = usePower(undefined, on)
+  if (live && dockerUp === false && needsDocker(prefs)) {
+    // One row for the whole engine, below every move: the docker pages are
+    // quiet until it is back, instead of each failing on its own.
+    const waiting = MODULES.filter((m) => m.kind === "extension" && m.requires?.docker && isOpenable(m, prefs)).map((m) => m.title)
+    return [
+      {
+        key: "docker-down",
+        kind: "infra",
+        severity: "warning",
+        icon: <TriangleAlert className="size-3.5 text-warning" />,
+        title: "Docker is not running",
+        meta: `${waiting.join(", ")} ${waiting.length === 1 ? "waits" : "wait"} for it. Start Docker Desktop (or the docker service) and they fill in by themselves.`,
+        action: (
+          <Button variant="ghost" size="sm" onClick={() => open("extensions")}>
+            Extensions <ArrowRight />
+          </Button>
+        ),
+      },
+    ]
+  }
+  if (!on) return []
   if (!power.data && !power.error) return null
   const p = power.data
   if (!p) return []
@@ -105,6 +133,7 @@ function usePowerAttention(): AttentionItem[] | null {
     .filter((it) => it.error)
     .map((it): AttentionItem => ({
       key: `power-${it.kind}-${it.name}`,
+      kind: "infra",
       severity: it.kind === "cluster" ? "danger" : "warning",
       icon: <TriangleAlert className="size-3.5 text-danger" />,
       title: (
@@ -115,7 +144,7 @@ function usePowerAttention(): AttentionItem[] | null {
       ),
       meta: (
         <>
-          {it.error}
+          {plainError(it.error)}
           {it.error_at && ` · ${relativeTime(it.error_at, now)}`}
         </>
       ),
@@ -145,9 +174,10 @@ export const system: ModuleDef = {
   title: "System",
   icon: Activity,
   route: "/system",
-  section: "infrastructure",
+  parent: "settings",
+  tab: "System",
   kind: "core",
-  order: 0,
+  order: 1,
   defaultEnabled: true,
   description: "Daemon, cluster and jobs health, and what runs on demand.",
   keywords: "health daemon cluster jobs kubeconfig power sleep wake on demand",

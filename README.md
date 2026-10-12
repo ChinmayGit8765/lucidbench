@@ -7,7 +7,7 @@ Lucidbench is an open-source, all-in-one AI workspace for building things with t
 ### The core loop
 
 ```
-braindump ─► Council ─► brief in Memory ─► card on a Board ─► Work session ─► draft PR ─► CI ─► Overview
+braindump ─► Council ─► brief in Memory ─► card on a Board ─► Work session ─► draft PR ─► CI ─► Home
 ```
 
 - **Council:** one model drafts a brief from your braindump, two others critique it in parallel, and the draft is revised for up to two rounds. You approve the result, and approving puts a card on your board.
@@ -15,7 +15,7 @@ braindump ─► Council ─► brief in Memory ─► card on a Board ─► Wo
 - **Boards:** native kanban boards stored as Markdown in Memory (Obsidian Kanban format).
 - **Work:** runs Claude Code, Codex or Grok on a card in its own git worktree, using your own logins. The steps read like a conversation, with the diff inline, the raw log one click away, and Stop that really stops. When you confirm, it opens a **draft** PR. Merging is always your call.
 - **Usage:** token use from your local Claude Code and Codex logs, Codex rate-limit windows, and what Lucidbench's own runs cost.
-- **Also here:** account detection (several accounts per provider), the MCP access matrix, a projects map, Runners & CI for self-hosted GitHub Actions runners, Containers, Kubernetes (local kind), themes you can describe in words, and a Windows desktop app.
+- **Also here:** account detection (several accounts per provider), the MCP access matrix, a projects map, themes you can describe in words, and a Windows desktop app. Runners & CI for self-hosted GitHub Actions runners, Containers and Kubernetes (local kind) are extensions you add when you use Docker.
 - **Extensions you add:** **Linear** (your issues as a board by state, promote a card to a new issue or link an existing one) and **Trello** (boards as lists of cards, add and move cards, link a card). Each needs credentials from your environment; see [Board connectors](docs/CONFIG.md#board-connectors-linear-and-trello). The remote owns the item: there is no two-way sync.
 - **Cloud:** a read-only inventory of your Google Cloud Run services, Cloudflare Pages and Workers and Vercel projects (plus Azure and AWS sign-ins) through the CLIs you are already signed in to. Lucidbench stores no cloud credentials, and a project's card shows its live deploy status.
 - **Databases:** finds Postgres, MySQL, MariaDB, Redis and Mongo containers (running or stopped), keeps connection profiles with `env:` passwords, and reads them read-only: health, tables and columns, and a query box. An optional pgweb (or Adminer for MySQL) opens in a frame and stops when idle. See [Databases](docs/CONFIG.md#databases).
@@ -154,7 +154,21 @@ go run ./cmd/lucid mcp                 # which MCP servers Claude Code, Codex, G
 
 ## Web UI
 
-The UI at <http://localhost:7420> opens on an Overview: AI accounts, runners, CI health with a pass rate and recent-run bars, the cluster, a "needs attention" list (failed runs with a re-run button, offline runners, stopped runner containers, expired sign-ins), recent activity and quick actions. Projects shows your projects by category as cards (status, visibility, repo, Linear id, builds-into links and a needs checklist) or as a "what needs what" dependency graph. MCP servers shows a matrix of servers against clients. Runners & CI shows the runner fleet with container controls (each asks before it acts) and every recent workflow run; Accounts groups every detected account by provider; System covers the daemon, cluster and jobs, with a log viewer. Press Ctrl+K (⌘K on macOS) for the command palette. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
+The UI at <http://localhost:7420> has nine sidebar entries:
+
+| Entry | What it holds |
+|---|---|
+| **Home** | "Needs your move" (briefs to approve, diffs to review, agents waiting for a reply, blocked needs, usage limits; what the machine needs, such as Docker being down, comes last), then Next up (every card, brief, session, PR and failing check, scored and explained, with one action each and the planning panel), then at most four tiles. |
+| **Ideas** | The one braindump composer (brief it with the council, or split it into items) and every idea from braindump to merged PR. A council session opens at `/council/<id>`. |
+| **Work** | Agent sessions, with the work board as its Board tab. |
+| **Projects** | Your projects by category as cards (status, visibility, repo, Linear id, builds-into links and a needs checklist) or as a "what needs what" dependency graph. |
+| **Memory** | The notes workspace over your Markdown vault. |
+| **Assistant** | Chat with Claude, Codex, Grok or your own bots. |
+| **Accounts** | Every detected account by provider, with Usage and MCP servers as tabs. |
+| **Extensions** | The gallery; the extensions you add sit under it (Runners & CI, Containers, Kubernetes, Cloud, Databases, Payments, Picture, Live browser, Linear, Trello). |
+| **Settings** | Appearance, sidebar, infrastructure, the phone remote and engine details, with System (daemon, cluster, jobs and what runs on demand) and Prompt Studio as tabs. |
+
+Old addresses (`/nextup`, `/council`, `/settings/extensions/…`, `/assistant/braindump`) redirect to where the page lives now. Press Ctrl+K (⌘K on macOS) for the command palette: it reaches every page, including those without a sidebar entry. Home asks only what it shows: an extension that is not added, or that needs Docker while Docker is down, is not called at all, and the daemon backs off while the engine is unreachable. Data refreshes every 10 to 15 seconds, or on demand with Refresh. It follows `ui.theme` from your config (`dark`, `light` or `system`); the toggle in the header overrides it and is remembered in the browser. Add `?theme=light` or `?theme=dark` to a URL to force a theme for one page view.
 
 Provider names and marks are trademarks of their owners and are used only to identify each service. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

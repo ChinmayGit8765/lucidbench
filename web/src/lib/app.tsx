@@ -5,12 +5,17 @@ import type { Health } from "@/lib/health"
 /** App-wide navigation and shared state, available to every module page. */
 export interface AppValue {
   health: Health | null | undefined
-  /** Goes to a URL path inside the app. */
-  navigate: (path: string) => void
+  /**
+   * Whether the docker engine answers: undefined until known, and never
+   * asked while no added extension needs docker.
+   */
+  dockerUp: boolean | undefined
+  /** Goes to a URL path inside the app; replace swaps the history entry instead of adding one. */
+  navigate: (path: string, replace?: boolean) => void
   /**
    * Opens a module by id. A roadmap module only says it is coming; an
-   * extension that is not in the sidebar opens its card in Settings ›
-   * Extensions instead, so no link is ever dead.
+   * extension that is not in the sidebar opens its card in the Extensions
+   * gallery instead, so no link is ever dead.
    */
   open: (id: string, subpath?: string[]) => void
   /** Opens the Projects page scrolled to one project. */

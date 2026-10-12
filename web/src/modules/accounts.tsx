@@ -12,7 +12,7 @@ import type { Account } from "@/pages/Accounts"
 
 function AccountsTile() {
   const { open } = useApp()
-  const poll = usePoll<Account[]>("/api/accounts", 15000)
+  const poll = usePoll<Account[]>("/api/accounts", 15000, { cache: true })
   const accs = poll.data ?? []
   const connected = PROVIDERS.filter((p) => accs.some((a) => a.provider === p.id && a.status === "logged_in"))
   const expired = accs.filter((a) => a.status === "expired")
@@ -62,7 +62,7 @@ function useAccountCommands(): Command[] {
 /** Needs attention: sign-ins that expired, so Council and Work cannot use them. */
 function useAccountAttention(): AttentionItem[] | null {
   const { open } = useApp()
-  const poll = usePoll<Account[]>("/api/accounts", 15000)
+  const poll = usePoll<Account[]>("/api/accounts", 15000, { cache: true })
   if (!poll.data) return poll.error ? [] : null
   return poll.data
     .filter((a) => a.status === "expired")
@@ -87,9 +87,11 @@ export const accounts: ModuleDef = {
   title: "Accounts",
   icon: Users,
   route: "/accounts",
-  section: "ai",
+  group: "tools",
+  tab: "Accounts",
   kind: "core",
-  order: 0,
+  order: 1,
+  tileRank: 50,
   defaultEnabled: true,
   description: "Your Claude, Codex, Grok and Cursor accounts, detected by presence only.",
   keywords: "login profiles subscriptions providers",

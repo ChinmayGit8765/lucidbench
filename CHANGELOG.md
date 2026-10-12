@@ -5,6 +5,35 @@ marked `-beta.N`.
 
 ## Unreleased
 
+- **One focused shell.** The sidebar is nine entries instead of 25: Home, Ideas, Work, Projects
+  and Memory, then Assistant, Accounts, Extensions and Settings. Pages without an entry of their
+  own are tabs of the one they belong to (Work › Board; Accounts › Usage and MCP servers;
+  Settings › System and Prompt Studio), the added extensions fold under Extensions, and the
+  breadcrumb reads "Parent › Page". Every old address still works: `/nextup`, `/council`,
+  `/settings/extensions/…` and `/assistant/braindump` redirect, `/boards` goes straight to the
+  board while there is one, and the palette reaches every page. Groups, parents, tabs and order
+  live in the module registry (see [Extending](docs/EXTENDING.md)).
+- **Home** replaces Overview and Next up: what needs your move first (the machine's trouble, such
+  as Docker being down, below your own moves), then the ranked Next up list with its planning
+  panel, then at most four tiles. Today's loop, recent activity, the fleet card and the Quick
+  actions card (with Run hello job) are gone; those live on their own pages.
+- **One braindump composer.** Home, Ideas, the palette (one action), the launcher, the `n` key,
+  the Assistant and the board all open the same composer at the top of Ideas, which briefs the dump
+  with the council or splits it into items.
+- **Quiet when Docker is off.** Runners & CI, Containers and Kubernetes are opt-in for new
+  installs (an existing `ui.json` keeps them). Home asks only what it shows: nothing of an
+  extension that is not added, and nothing of a docker extension while the engine is down, so
+  no 503s and no console errors. With ten extensions added and Docker stopped, loading Home went
+  from 32 requests (six of them 503s) to 12; cosmetic reads such as the update check now wait
+  until the page has settled, and `GET /api/health?docker=1` answers whether the engine is up.
+  The daemon backs off while Docker is unreachable (10 s, doubling to 2 min, one probe per
+  window): with Home open and Docker stopped, docker was spawned 56 times a minute and now 3.
+- **Next up** lists a project need and the card that covers it ("Tide needs Release pipeline"
+  and "Release pipeline for Tide") as one item.
+- **Smaller fixes:** a card in "In progress" reads "In progress" on Ideas, not "In In progress";
+  errors that only mean Docker is not running read as one plain sentence instead of `docker ps …
+  exit status 1`; every page shows its title as its h1 while its code loads; the Add account
+  dialog loads on first use, so the Accounts page gets its own chunk.
 - **Usage: pace and plan.** For each provider account, the current window's use, its reset and
   the burn rate over the last 1, 2 or 6 hours, with the run-out time in plain words ("at this pace
   codex hits its 5h limit at 14:20, 40 min before it resets"). Codex windows come from its logs;

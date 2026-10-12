@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
+import { plainError } from "@/lib/api"
 import { useApp } from "@/lib/app"
 import {
   allItems,
@@ -255,7 +256,7 @@ export function PowerCard({ focus, inSettings }: { focus?: boolean; inSettings?:
         <>
           {p.errors.map((e) => (
             <div key={e} className="flex items-center gap-2 border-t px-5 py-2 text-xs text-danger-fg">
-              <TriangleAlert className="size-3.5" /> {e}
+              <TriangleAlert className="size-3.5" /> {plainError(e)}
             </div>
           ))}
           {items.length === 0 ? (

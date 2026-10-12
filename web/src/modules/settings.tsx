@@ -64,7 +64,7 @@ function useSettingsCommands(paletteOpen: boolean): Command[] {
       label: "Describe a feature…",
       group: "Customise",
       icon: Lightbulb,
-      keywords: "feature request idea lucidbench customise council braindump",
+      keywords: "feature request idea lucidbench customise",
       run: () => open("settings", ["customise", "feature"]),
     },
     {
@@ -123,7 +123,7 @@ function useSettingsCommands(paletteOpen: boolean): Command[] {
       group: "Extensions",
       icon: Blocks,
       keywords: "extension gallery",
-      run: () => open("settings", ["extensions"]),
+      run: () => open("extensions"),
     },
   ]
   if (hasArt(active) && active?.art?.spriteBoard?.length) {
@@ -144,11 +144,12 @@ export const settings: ModuleDef = {
   title: "Settings",
   icon: SettingsIcon,
   route: "/settings",
-  section: "settings",
+  group: "tools",
+  tab: "Settings",
   kind: "core",
-  order: 1,
+  order: 3,
   defaultEnabled: true,
-  description: "Appearance, sidebar, extensions and engine details.",
+  description: "Appearance, sidebar, infrastructure, the phone remote and engine details; System and Prompt Studio are its tabs.",
   keywords: "preferences appearance theme extensions sidebar",
   component: lazy(() => import("@/pages/Settings")),
   useCommands: useSettingsCommands,

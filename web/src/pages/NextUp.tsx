@@ -11,6 +11,7 @@ import {
   GitPullRequest,
   KanbanSquare,
   Lock,
+  PenLine,
   Pin,
   Play,
   RotateCcw,
@@ -20,16 +21,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { PageHeader, RefreshButton } from "@/components/Shell"
 import { Badge, StatusPill, type Tone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { Menu } from "@/components/ui/menu"
-import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states"
+import { EmptyState, ErrorState, LoadingArt } from "@/components/ui/states"
 import { errorMessage, usePoll } from "@/lib/api"
 import { useApp } from "@/lib/app"
-import { startCouncil } from "@/lib/council"
+import { newBraindump, startCouncil } from "@/lib/council"
 import {
   dismiss,
   FACTOR_LABEL,
@@ -53,7 +53,6 @@ import type { ProjectList } from "@/lib/projects"
 import { relativeTime, useNow } from "@/lib/time"
 import { cn, plural } from "@/lib/utils"
 import { defaultHarness, formatCost, startSession, type WorkProvider } from "@/lib/work"
-import type { ModulePageProps } from "@/modules/types"
 
 const FACTOR_TONE: Record<Part["factor"], Tone> = {
   urgency: "warning",
@@ -198,8 +197,13 @@ function PromptBox({ item, value, onChange }: { item: NextItem; value: string; o
   )
 }
 
-export default function NextUp({ subpath }: ModulePageProps) {
-  const { navigate } = useApp()
+/**
+ * Next up, as a section of Home: the top pick, the ranked list after it,
+ * and the planning panel. startId (from /nextup/start/<id>, a Start button
+ * elsewhere) opens that item's confirm dialog once the list is in.
+ */
+export function NextUpSection({ startId }: { startId: string }) {
+  const { navigate, open: openModule } = useApp()
   const now = useNow(30000)
   const poll = usePoll<NextView>(NEXTUP_PATH, NEXTUP_POLL_MS)
   const projects = usePoll<ProjectList>("/api/projects", 60000)
@@ -272,12 +276,11 @@ export default function NextUp({ subpath }: ModulePageProps) {
     })
   }
 
-  // /nextup/start/<id> (the Overview tile's Start) opens that item's confirm dialog.
-  const startId = subpath[0] === "start" ? subpath.slice(1).join("/") : ""
+  // /nextup/start/<id> opens that item's confirm dialog, then the address goes back to Home.
   useEffect(() => {
     if (!startId || !v) return
     const it = v.items.find((i) => i.id === startId)
-    navigate("/nextup")
+    navigate("/", true)
     if (it) take(it)
   }, [startId, v?.generated_at])
 
@@ -312,20 +315,18 @@ export default function NextUp({ subpath }: ModulePageProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={<Compass />}
-        title="Next up"
-        description="What to work on next, from your boards, briefs, sessions, pull requests and checks. Each item says why, and nothing starts until you confirm."
-        actions={
-          <>
-            <RefreshButton refreshing={poll.refreshing} updatedAt={poll.updatedAt} />
-            <Button size="sm" variant="secondary" onClick={askAgent} disabled={all.length === 0 || ranking} data-testid="nextup-rank">
-              <Bot /> {ranking ? "Ranking" : "Ask an agent to rank"}
-            </Button>
-          </>
-        }
-      />
+    <section className="space-y-4" aria-labelledby="nextup-heading" data-testid="nextup-section">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="nextup-heading" className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <Compass className="size-4 text-brand" /> Next up
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">From your boards, briefs, sessions, pull requests and checks. Each says why; nothing starts until you confirm.</p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={askAgent} disabled={all.length === 0 || ranking} data-testid="nextup-rank">
+          <Bot /> {ranking ? "Ranking" : "Ask an agent to rank"}
+        </Button>
+      </div>
 
       {poll.error && !v && <ErrorState title="Could not work out what is next" message={poll.error.message} onRetry={poll.refresh} />}
       {v && v.errors.length > 0 && (
@@ -338,10 +339,9 @@ export default function NextUp({ subpath }: ModulePageProps) {
       )}
 
       {poll.loading && !v ? (
-        <div className="space-y-3">
-          <Skeleton className="h-44 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
+        <Card className="overflow-hidden">
+          <LoadingArt label="Working out what is next…" className="h-56" />
+        </Card>
       ) : v && all.length === 0 ? (
         <Card>
           <EmptyState
@@ -363,8 +363,8 @@ export default function NextUp({ subpath }: ModulePageProps) {
             <Button onClick={() => navigate("/boards/work")}>
               <KanbanSquare /> Open the work board
             </Button>
-            <Button variant="secondary" onClick={() => navigate("/council")}>
-              <Vote /> Write a braindump
+            <Button variant="secondary" onClick={() => newBraindump(openModule)}>
+              <PenLine /> Write a braindump
             </Button>
           </EmptyState>
         </Card>
@@ -466,7 +466,7 @@ export default function NextUp({ subpath }: ModulePageProps) {
       ) : null}
 
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
-    </div>
+    </section>
   )
 }
 
