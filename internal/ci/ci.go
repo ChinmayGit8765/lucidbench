@@ -36,7 +36,9 @@ func New(c config.CIConfig) *Service {
 	return &Service{
 		Repos:  slices.Clone(c.GitHub.Repos),
 		Filter: Filter{ComposeProject: c.Runners.ComposeProject, ImageMatch: c.Runners.ImageMatch},
-		GitHub: &GitHub{Tokens: &TokenSource{Ref: c.GitHub.Token, Getenv: os.Getenv, GH: GHAuthToken}},
+		// LUCID_CI_GITHUB_API_URL points the client at a fake GitHub API. It is
+		// for the end-to-end tests only and is not a supported setting.
+		GitHub: &GitHub{BaseURL: os.Getenv("LUCID_CI_GITHUB_API_URL"), Tokens: &TokenSource{Ref: c.GitHub.Token, Getenv: os.Getenv, GH: GHAuthToken}},
 		Docker: ExecDocker,
 		Now:    time.Now,
 	}

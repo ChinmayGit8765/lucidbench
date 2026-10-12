@@ -102,6 +102,9 @@ The secret settings are `ci.github.token`, `integrations.linear.token`,
 
 ## Runners & CI
 
+The environment variable `LUCID_CI_GITHUB_API_URL` swaps the GitHub API base URL for a fake. It
+exists for the end-to-end tests only and is not a supported setting.
+
 The Runners & CI page, `lucid ci` and `/api/ci/*` show your self-hosted GitHub
 Actions runners: the local runner containers (any `github-runner` image, or
 every container of one compose project) and, for each repository in
