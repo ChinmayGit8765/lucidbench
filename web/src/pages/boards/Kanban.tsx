@@ -37,9 +37,9 @@ import {
   type Card as CardT,
 } from "@/lib/boards"
 import { newBraindump } from "@/lib/council"
+import { STATUS_TONE, toneColor } from "@/lib/status"
 import { cn } from "@/lib/utils"
 import { CardSheet } from "@/pages/boards/CardSheet"
-import { STATUS_TONE, toneColor } from "@/lib/status"
 
 const COLUMN_TONE: Record<string, string> = {
   Inbox: toneColor(STATUS_TONE.idle),

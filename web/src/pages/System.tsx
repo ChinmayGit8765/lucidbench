@@ -27,10 +27,10 @@ import { useApp } from "@/lib/app"
 import type { Health } from "@/lib/health"
 import { runHelloJob, type ClusterInfo, type Job } from "@/lib/jobs"
 import { isAsleep, usePower } from "@/lib/power"
+import { STATUS_TONE } from "@/lib/status"
 import { absoluteTime, relativeTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import type { ModulePageProps } from "@/modules/types"
-import { STATUS_TONE } from "@/lib/status"
 
 const JOB_TONE: Record<string, Tone> = {
   Completed: STATUS_TONE.merged,

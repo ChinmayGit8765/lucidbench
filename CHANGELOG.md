@@ -74,7 +74,7 @@ marked `-beta.N`.
   with edge fades and a "2 more" button.
 - **Settings save for real.** Infrastructure (power modes, idle times, poll interval), the
   vault folder and the update check write `config.yaml` after showing the diff: a backup first,
-  only the keys you changed, comments and unknown keys kept, and a clear "restart Lucidbench to
+  only the keys you changed, comments and unknown keys kept, and a clear "Restart the engine to
   apply". Linear, Trello and Payments let you name the env var a secret lives in; only the
   `env:` reference is saved (see [Saving settings from the UI](docs/CONFIG.md#saving-settings-from-the-ui)).
 - **Fixes:** Live browser no longer offers Start while Docker is down; Kubernetes says why Hello
