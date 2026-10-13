@@ -3,7 +3,7 @@
 All notable changes to Lucidbench. Versions follow [semver](https://semver.org); pre-releases are
 marked `-beta.N`.
 
-## Unreleased
+## 0.3.0-beta.5 (2026-10-13)
 
 - **Restart engine.** A setting saved to `config.yaml` that waits for a restart now says so next
   to a **Restart engine** button, which replaces the engine with a fresh copy of itself and
