@@ -94,9 +94,9 @@ test("a session waits, takes a follow-up as turn 2, opens a PR and ends", async 
   await page.screenshot({ path: shot("work-session-turn-2") })
 
   // Open PR while it waits: the fake gh opens it, and the session keeps waiting.
-  await page.getByTestId("composer-open-pr").click()
+  await page.getByTestId("open-pr").click()
   await page.getByRole("dialog").getByRole("button", { name: "Push and open PR" }).click()
-  await expect(page.getByRole("link", { name: /View PR/ })).toBeVisible()
+  await expect(page.getByRole("link", { name: /View draft PR/ })).toBeVisible()
   expect(calls(d)).toMatch(/^gh pr create --draft/m)
   expect((await getSession(id)).status).toBe("waiting")
 

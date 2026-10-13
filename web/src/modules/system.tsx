@@ -183,6 +183,7 @@ export const system: ModuleDef = {
   keywords: "health daemon cluster jobs kubeconfig power sleep wake on demand",
   component: lazy(() => import("@/pages/System")),
   useCommands: useSystemCommands,
+  checksDocker: true,
   overviewTile: PowerTile,
   useAttention: usePowerAttention,
 }

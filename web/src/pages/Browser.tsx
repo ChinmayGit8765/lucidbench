@@ -434,7 +434,7 @@ export default function Browser() {
       <PageHeader
         icon={<AppWindow />}
         title="Live browser"
-        description="A browser your agents use, in a container with its own profile. Watch it live, take over when you need to."
+        description="A browser your agents use, in its own container. Watch it live and take over when you need to."
         actions={
           <div className="flex items-center gap-2">
             {st && (

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { BookOpen, ExternalLink, RefreshCw, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
-import { PendingRestart, SaveButton, useConfigFile, useConfigSave } from "@/components/ConfigSave"
+import { PendingRestart, RestartEngineButton, SaveButton, useConfigFile, useConfigSave } from "@/components/ConfigSave"
 import { copyText } from "@/components/CopyCommand"
 import { StatusPill } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -70,7 +70,7 @@ function VaultSection({ dataDir, focus }: { dataDir?: string; focus: boolean }) 
     <section ref={ref} id="vault" className={cn("scroll-mt-6 rounded-xl", focus && "ring-2 ring-brand/40")}>
       <Section
         title="Memory vault"
-        description="The folder of Markdown pages behind Memory and Boards. Any Obsidian vault works; Lucidbench never picks one by itself. Saved to config.yaml; applies when Lucidbench restarts."
+        description="The folder of Markdown pages behind Memory and Boards. Any Obsidian vault works; Lucidbench never picks one by itself. Saved to config.yaml; applies when the engine restarts."
       >
         <div className="flex flex-wrap items-center gap-2 border-t px-5 py-3">
           {file.error && !f ? (
@@ -118,8 +118,9 @@ function UpdateToggle() {
       <span className="text-xs text-muted-foreground">
         {on ? "On" : "Off"}
         {src.startsWith("env:") ? ` · ${src.slice(4)} overrides the file` : ""}
-        {f.pending.includes("update_check") ? " · restart to apply" : ""}
+        {f.pending.includes("update_check") ? " · saved, the engine uses it after a restart" : ""}
       </span>
+      {f.pending.includes("update_check") && <RestartEngineButton />}
       {dialog}
     </>
   )

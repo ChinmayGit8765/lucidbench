@@ -194,7 +194,7 @@ func (s *Supervisor) tickRepo(ctx context.Context, repo string, cs []ci.Containe
 		}
 		return
 	}
-	idleFor := time.Duration(s.Cfg.RunnerIdleMinutes) * time.Minute
+	_, idleFor := s.idleTimes()
 	active := len(queued) + len(inProgress)
 	for _, c := range running {
 		r, found := findRunner(ghRunners, c)

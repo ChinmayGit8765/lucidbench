@@ -55,14 +55,30 @@ Payments). Everything else stays a hand edit.
   five are kept. The new file replaces the old one atomically.
 - **Secrets.** A connector field takes a variable name and saves `env:NAME`. The value is never
   sent, saved or echoed.
-- **When it applies.** The engine reads its config when it starts, and there is no restart
-  button yet: a saved change applies after you quit Lucidbench (or stop `lucidd`) and start it
-  again. Until then the page says "Saved. Restart Lucidbench to apply". A key an environment
-  variable sets (`LUCID_POWER_CLUSTER`, `LUCID_VAULT_PATH`, …) still wins over the file, and the
-  save says so.
+- **When it applies.** Three keys apply the moment they are saved: `power.poll_seconds` (from
+  the next check), `power.cluster_idle_minutes` and `power.runner_idle_minutes`. Every other key
+  (the power modes, `vault.path`, `update_check`, the connector variables) is read when the
+  engine starts: the page says "Saved. Restart the engine to apply" next to a **Restart engine**
+  button. A key an environment variable sets (`LUCID_POWER_CLUSTER`, `LUCID_VAULT_PATH`, …)
+  still wins over the file, and the save says so.
+- **Restart engine.** The button asks first (a running agent turn or council is interrupted;
+  Work marks the turn and the session waits for you again), then the engine replaces itself with a
+  fresh copy that reads `config.yaml` again, and the page reconnects once `/api/health` reports a
+  new `started` time, usually within two seconds. On Windows the new `lucidd` starts first and
+  waits for the port while the old one closes it and exits; on Linux and macOS the engine execs
+  itself in place and keeps its PID (in the Docker image it stays PID 1). The new engine keeps
+  the old one's environment: a variable you set since Lucidbench started (a connector key, say)
+  needs a full quit and start of the app.
+- **Restart in the desktop app.** The app does not respawn its engine when it exits, so the
+  engine restarts itself in both cases. The new process inherits the app's kill-on-close job
+  (a child joins its parent's job on Windows), so it still stops when you quit the app. One gap:
+  the app keeps the handle of the engine it first started, so if the job could not be set up at
+  launch, an engine restarted from the UI outlives the app; and if the engine does not come back
+  within 20 seconds, the page says "Close and reopen Lucidbench" instead.
 - **Routes.** `GET /api/config/file` returns the saved values and which ones wait for a restart;
   `POST /api/config/preview {set: {key: value}}` returns the diff without writing;
-  `POST /api/config/save` writes it (it needs `X-Lucid-Confirm: yes`).
+  `POST /api/config/save` writes it (it needs `X-Lucid-Confirm: yes`); `POST /api/engine/restart`
+  (also confirmed) answers `202` and restarts the engine.
 
 ## Work sessions
 
@@ -97,7 +113,7 @@ is an error that names the file and the key, for example
 | `providers.<p>.extra_dirs` | `[]` | `LUCID_PROVIDERS_<P>_EXTRA_DIRS` | Extra config directories to scan, for example a second Claude profile. The variable is a path list (`;` on Windows, `:` elsewhere) and replaces the file value. |
 | `cluster.name` | `lucidbench` | `LUCID_CLUSTER_NAME` | Local kind cluster name. Lowercase letters, digits and dashes. |
 | `agent.image` | `lucidbench/agent:dev` | `LUCID_AGENT_IMAGE` | Image used to run provider CLIs. |
-| `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault, the folder behind Memory and Boards (any Obsidian vault works). Empty means `<data dir>/memory`. A leading `~` is expanded. Settings › General shows the folder in use; the UI does not write the config file, so change this key and restart. |
+| `vault.path` | empty (not configured) | `LUCID_VAULT_PATH` | Your notes vault, the folder behind Memory and Boards (any Obsidian vault works). Empty means `<data dir>/memory`. A leading `~` is expanded. Settings › General shows the folder in use and saves it to the config file; it applies after Restart engine. |
 | `ui.theme` | `dark` | `LUCID_UI_THEME` | `dark`, `light` or `system`: the starting theme until you pick one in Settings (dark is Midnight, light is Daylight). Afterwards `ui.json` wins. |
 | `ci.github.repos` | `[]` | `LUCID_CI_GITHUB_REPOS` | GitHub repositories (`owner/name`) whose self-hosted runners and recent workflow runs appear under Runners & CI. The variable is a comma-separated list. |
 | `ci.github.token` | `env:GITHUB_TOKEN` | `LUCID_CI_GITHUB_TOKEN` | Secret reference for the GitHub API token. If the variable it names is empty, Lucidbench runs `gh auth token` when the GitHub CLI is installed. See [Runners & CI](#runners--ci). |

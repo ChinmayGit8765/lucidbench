@@ -458,23 +458,6 @@ function Composer({
         }
       },
     })
-  const d = session.diff
-  const prReady = !session.pr_url && !!d && d.commits.length > 0
-  const pr = () =>
-    setConfirm({
-      title: "Push and open a draft PR?",
-      description: `Pushes ${session.branch} to origin and runs gh pr create --draft against ${session.base_ref.replace(/^origin\//, "")}. Nothing is merged, and the session keeps waiting for you.`,
-      confirmLabel: "Push and open PR",
-      run: async () => {
-        try {
-          const s = await openPR(session.id)
-          onChange(s)
-          toast.success("Draft PR opened", { description: s.pr_url })
-        } catch (e) {
-          toast.error("Could not open the PR", { description: errorMessage(e) })
-        }
-      },
-    })
 
   return (
     <div className="sticky bottom-0 z-20 -mx-5 border-t bg-background/90 px-5 pb-2.5 pt-2 backdrop-blur-md md:-mx-8 md:px-8" data-testid="composer">
@@ -540,23 +523,11 @@ function Composer({
           <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line{running && <> · <Kbd>Esc</Kbd> stop</>}
         </span>
         <span className="flex-1" />
+        {/* Open PR lives on the Changes card, next to the diff it pushes. */}
         {waiting && (
-          <>
-            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={end} data-testid="end-session">
-              <SquareCheck /> End session
-            </Button>
-            {session.pr_url ? (
-              <Button asChild variant="ghost" size="sm" className="h-6 px-2">
-                <a href={session.pr_url} target="_blank" rel="noreferrer">
-                  <GitPullRequest className="text-success" /> View PR
-                </a>
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" className="h-6 px-2" onClick={pr} disabled={!prReady} title={prReady ? "Push the branch and open a draft PR" : "No commits yet: nothing to open a PR with"} data-testid="composer-open-pr">
-                <GitPullRequest /> Open PR
-              </Button>
-            )}
-          </>
+          <Button variant="ghost" size="sm" className="h-6 px-2" onClick={end} data-testid="end-session">
+            <SquareCheck /> End session
+          </Button>
         )}
       </div>
     </div>

@@ -160,7 +160,9 @@ test("Settings › Infrastructure saves to config.yaml, keeps its comments, and 
   await expect(dialog.getByTestId("config-diff")).toContainText('runners: "off"')
   await page.screenshot({ path: shot("settings-save-diff") })
   await dialog.getByRole("button", { name: "Save to config.yaml" }).click()
-  await expect(page.getByTestId("config-pending")).toContainText("Restart Lucidbench to apply")
+  // A mode waits for a restart, and the notice carries the button that does it.
+  await expect(page.getByTestId("config-pending")).toContainText("Restart the engine to apply")
+  await expect(page.getByTestId("config-pending").getByTestId("restart-engine")).toBeVisible()
 
   const saved = readFileSync(file, "utf8")
   expect(saved).toContain("# My config: this comment stays.")
@@ -176,4 +178,13 @@ test("Settings › Infrastructure saves to config.yaml, keeps its comments, and 
   await expect(page.getByRole("radiogroup", { name: "Runner mode" }).getByRole("radio", { name: "Manual" })).toHaveAttribute("aria-checked", "true")
   await expect(page.getByTestId("config-pending")).toBeVisible()
   expect(existsSync(file + ".tmp")).toBe(false)
+
+  // An idle time applies on save: it never joins the restart notice.
+  await page.getByLabel("Runner idle minutes").fill("12")
+  await page.getByTestId("config-save").click()
+  await page.getByRole("dialog").getByRole("button", { name: "Save to config.yaml" }).click()
+  await expect(page.getByText("The engine uses it now.")).toBeVisible()
+  expect(readFileSync(file, "utf8")).toContain("runner_idle_minutes: 12")
+  await expect(page.getByTestId("config-pending")).toContainText("power.runners")
+  await expect(page.getByTestId("config-pending")).not.toContainText("runner_idle_minutes")
 })

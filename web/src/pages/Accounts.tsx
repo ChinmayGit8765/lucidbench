@@ -377,7 +377,7 @@ export default function Accounts() {
       <PageHeader
         icon={<Users />}
         title="Accounts"
-        description="Your Claude, Codex, Grok and Cursor accounts in one place. Detected by presence only; tokens are never read."
+        description="Your Claude, Codex, Grok and Cursor accounts. Detected by presence; tokens are never read."
         actions={
           <Button onClick={onAdd}>
             <Plus /> Add account

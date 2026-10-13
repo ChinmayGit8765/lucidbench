@@ -237,7 +237,7 @@ export default function Cloud() {
       <PageHeader
         icon={<CloudIcon />}
         title="Cloud"
-        description="What you have deployed on Google Cloud, Cloudflare and Vercel, read through the CLIs you are already signed in to."
+        description="What you have deployed on Google Cloud, Cloudflare and Vercel, through the CLIs you use."
         actions={
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 text-xs text-subtle-foreground max-[1100px]:hidden">

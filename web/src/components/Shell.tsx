@@ -170,7 +170,12 @@ export function Sidebar({ current, version }: { current?: string; version?: stri
         ))}
       </nav>
 
-      {!rail && <SidebarMascot />}
+      {/* A short window keeps its room for the nav: Settings stays in view with the extensions open. */}
+      {!rail && (
+        <div className="[@media(max-height:760px)]:hidden">
+          <SidebarMascot />
+        </div>
+      )}
 
       <div className={cn("flex items-center border-t py-3", rail ? "justify-center" : "justify-between px-1")}>
         {!rail && version && <span className="font-mono text-2xs text-subtle-foreground">lucidd {version}</span>}
@@ -331,8 +336,10 @@ export function PageHeader({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-6">
-      <div className="flex min-w-0 items-start gap-3.5">
+    // The actions wrap under the title only when the title block would get
+    // narrower than 20rem (Memory's home in its panel at 1024 px).
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+      <div className="flex min-w-0 flex-1 basis-80 items-start gap-3.5">
         {icon && (
           <span className="relative mt-0.5 flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border-strong bg-elevated text-brand shadow-card [&_svg]:size-[18px]">
             <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-brand-soft to-transparent" />

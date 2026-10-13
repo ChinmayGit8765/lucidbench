@@ -59,6 +59,30 @@ func TestRunnerStopsAfterIdle(t *testing.T) {
 	}
 }
 
+// Saved timings apply to a running supervisor: a shorter runner idle time
+// stops an idle runner on the next tick, and the state reports the new
+// values, poll interval included.
+func TestSetTimingsAppliesLive(t *testing.T) {
+	r := newRig(t, powerCfg("off", "on-demand"))
+	r.s.Tick(ctx) // first idle sighting
+	r.clk.Add(3 * time.Minute)
+	r.s.Tick(ctx)
+	if got := r.d.acted(); len(got) != 0 {
+		t.Fatalf("stopped before the idle timeout: %v", got)
+	}
+	r.s.SetTimings(config.PowerConfig{PollSeconds: 30, ClusterIdleMinutes: 5, RunnerIdleMinutes: 2})
+	if r.s.poll() != 30*time.Second {
+		t.Errorf("poll %s", r.s.poll())
+	}
+	if st := r.s.State(ctx); st.PollSeconds != 30 || st.Modes.ClusterIdleMinutes != 5 || st.Modes.RunnerIdleMinutes != 2 {
+		t.Errorf("state %d %d %d", st.PollSeconds, st.Modes.ClusterIdleMinutes, st.Modes.RunnerIdleMinutes)
+	}
+	r.s.Tick(ctx)
+	if got := r.d.acted(); !slices.Equal(got, []string{"stop runner-app"}) {
+		t.Fatalf("acted %v", got)
+	}
+}
+
 func TestActiveRunsKeepRunnerAwake(t *testing.T) {
 	r := newRig(t, powerCfg("off", "on-demand"))
 	r.gh.set(func(g *fakeGitHub) { g.progress["you/app"] = []int64{7} })

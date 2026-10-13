@@ -297,7 +297,7 @@ export default function Usage() {
       <PageHeader
         icon={<Gauge />}
         title={title}
-        description="Tokens and limit windows for each subscription, read from the logs your CLIs already keep on this machine."
+        description="Tokens and limit windows per subscription, from the logs your CLIs already keep."
         actions={
           <>
             <div role="group" aria-label="Range" className="flex items-center gap-1">

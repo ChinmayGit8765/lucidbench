@@ -69,6 +69,11 @@ type Supervisor struct {
 	clusterMu sync.Mutex // one cluster start or stop at a time
 	extras    extras
 
+	// tmu guards the three timings in Cfg (poll_seconds and the two idle
+	// times), which SetTimings changes while the supervisor runs. The rest
+	// of Cfg is fixed once Run starts.
+	tmu sync.Mutex
+
 	mu        sync.Mutex // guards the fields below
 	begun     bool
 	cl        clusterState
@@ -127,10 +132,31 @@ func (s *Supervisor) wait(ctx context.Context, d time.Duration) error {
 }
 
 func (s *Supervisor) poll() time.Duration {
-	if s.Cfg.PollSeconds < config.MinPowerPollSeconds {
+	s.tmu.Lock()
+	n := s.Cfg.PollSeconds
+	s.tmu.Unlock()
+	if n < config.MinPowerPollSeconds {
 		return config.DefaultPowerPollSeconds * time.Second
 	}
-	return time.Duration(s.Cfg.PollSeconds) * time.Second
+	return time.Duration(n) * time.Second
+}
+
+// SetTimings applies saved timings to the running supervisor: poll_seconds
+// from the next check on, and the idle times at once. Modes and stacks
+// still need a restart.
+func (s *Supervisor) SetTimings(p config.PowerConfig) {
+	s.tmu.Lock()
+	defer s.tmu.Unlock()
+	s.Cfg.PollSeconds = p.PollSeconds
+	s.Cfg.ClusterIdleMinutes = p.ClusterIdleMinutes
+	s.Cfg.RunnerIdleMinutes = p.RunnerIdleMinutes
+}
+
+// idleTimes are the cluster's and the runners' idle times now.
+func (s *Supervisor) idleTimes() (cluster, runner time.Duration) {
+	s.tmu.Lock()
+	defer s.tmu.Unlock()
+	return time.Duration(s.Cfg.ClusterIdleMinutes) * time.Minute, time.Duration(s.Cfg.RunnerIdleMinutes) * time.Minute
 }
 
 // begin sets up state on first use. The cluster counts as active from the
@@ -157,10 +183,16 @@ func (s *Supervisor) record(e Entry) {
 
 // Run checks the cluster and the runners every poll_seconds until ctx ends.
 func (s *Supervisor) Run(ctx context.Context) {
-	t := time.NewTicker(s.poll())
+	every := s.poll()
+	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		s.Tick(ctx)
+		// A saved poll_seconds applies from here, without a restart.
+		if d := s.poll(); d != every {
+			every = d
+			t.Reset(every)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -450,7 +482,8 @@ func (s *Supervisor) StopCluster(ctx context.Context, auto bool, reason string) 
 }
 
 func (s *Supervisor) clusterIdle() time.Duration {
-	return time.Duration(s.Cfg.ClusterIdleMinutes) * time.Minute
+	c, _ := s.idleTimes()
+	return c
 }
 
 // tickCluster tracks cluster activity and stops an idle on-demand cluster.

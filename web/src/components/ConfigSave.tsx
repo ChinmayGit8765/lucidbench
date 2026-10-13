@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog, type ConfirmRequest } from "@/components/ui/confirm"
 import { errorMessage, sendJSON, usePoll } from "@/lib/api"
+import { restartEngine } from "@/lib/engine"
 import { cn, plural } from "@/lib/utils"
 
 /* Mirrors internal/config (write.go, http.go): keep these in step with the Go structs. */
@@ -92,7 +93,7 @@ export function useConfigSave(onSaved?: (e: ConfigEdit) => void) {
           try {
             const done = await sendJSON<ConfigEdit>("/api/config/save", "POST", { set })
             toast.success("Saved to config.yaml", {
-              description: done.restart.length ? "Restart Lucidbench to apply it." : undefined,
+              description: done.restart.length ? "The engine uses it after a restart." : "The engine uses it now.",
             })
             onSaved?.(done)
           } catch (e) {
@@ -109,19 +110,54 @@ export function useConfigSave(onSaved?: (e: ConfigEdit) => void) {
   return { save, busy, dialog: <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} /> }
 }
 
-/** Saved settings the running engine does not use yet. There is no restart from the UI, so it says how. */
+/**
+ * Restarts the engine after a confirm, then waits for the new one. When it
+ * does not come back (a desktop app whose engine could not be replaced, or
+ * a lucidd that refused), it says how to restart by hand.
+ */
+export function RestartEngineButton({ size = "sm", variant = "secondary" }: { size?: "sm" | "default"; variant?: "secondary" | "default" }) {
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ask = () =>
+    setConfirm({
+      title: "Restart the engine?",
+      description: "Lucidbench starts a fresh engine that reads config.yaml again. A running agent turn or council is interrupted; the page reconnects by itself in a few seconds.",
+      confirmLabel: "Restart engine",
+      run: async () => {
+        setBusy(true)
+        const id = toast.loading("Restarting the engine…")
+        try {
+          if (await restartEngine()) toast.success("The engine restarted with the saved settings.", { id })
+          else toast.error("The engine did not come back.", { id, description: "Close and reopen Lucidbench (or start lucidd again).", duration: 15000 })
+        } catch (e) {
+          toast.error("Could not restart the engine", { id, description: `${errorMessage(e)} Close and reopen Lucidbench instead.` })
+        } finally {
+          setBusy(false)
+        }
+      },
+    })
+  return (
+    <>
+      <Button size={size} variant={variant} onClick={ask} disabled={busy} data-testid="restart-engine">
+        <RotateCw className={cn(busy && "animate-spin")} /> {busy ? "Restarting…" : "Restart engine"}
+      </Button>
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+    </>
+  )
+}
+
+/** Saved settings the running engine does not use yet, with the restart that applies them. */
 export function PendingRestart({ file, keys }: { file?: ConfigFile | null; keys?: string[] }) {
   const pending = (file?.pending ?? []).filter((k) => !keys || keys.includes(k))
   if (pending.length === 0) return null
   return (
-    <div className="flex items-start gap-2.5 border-t bg-info-soft/60 px-5 py-3 text-sm text-info-fg" role="status" data-testid="config-pending">
-      <RotateCw className="mt-0.5 size-4 shrink-0" />
-      <div className="min-w-0">
-        <span className="font-medium">Saved. Restart Lucidbench to apply {plural(pending.length, "change")}.</span>{" "}
-        <span className="opacity-90">
-          Quit the app (or stop <code className="font-mono text-xs">lucidd</code>) and start it again; until then it runs with the old values ({pending.join(", ")}).
-        </span>
+    <div className="flex items-center gap-3 border-t bg-info-soft/60 px-5 py-3 text-sm text-info-fg" role="status" data-testid="config-pending">
+      <RotateCw className="size-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <span className="font-medium">Saved. Restart the engine to apply {plural(pending.length, "change")}.</span>{" "}
+        <span className="opacity-90">Until then it runs with the old values ({pending.join(", ")}).</span>
       </div>
+      <RestartEngineButton />
     </div>
   )
 }
@@ -152,7 +188,12 @@ export function EnvVarField({ configKey, current, label }: { configKey: string; 
         <Save /> Save
       </Button>
       {!valid && name !== "" && <span className="text-xs text-danger-fg">A variable name: letters, digits and _.</span>}
-      {pending && <span className="text-xs text-info-fg">Saved · restart Lucidbench to use it</span>}
+      {pending && (
+        <>
+          <span className="text-xs text-info-fg">Saved · the engine uses it after a restart</span>
+          <RestartEngineButton />
+        </>
+      )}
       {dialog}
     </span>
   )

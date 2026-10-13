@@ -47,11 +47,12 @@ export function Tabs({
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(id)}
             className={cn(
-              "relative -mb-px flex h-9 items-center gap-1.5 border-b-2 px-2.5 text-sm transition-colors",
+              "relative -mb-px flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 text-sm transition-colors",
               on ? "border-brand font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {Icon && <Icon className={cn("size-3.5", on ? "text-brand" : "text-subtle-foreground")} />}
+            {/* On a narrow window the labels keep to one line and the icons step aside. */}
+            {Icon && <Icon className={cn("size-3.5 @max-4xl:hidden", on ? "text-brand" : "text-subtle-foreground")} />}
             {l}
             {count !== undefined && (
               <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">{count}</span>

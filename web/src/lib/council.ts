@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 
 import type { Tone } from "@/components/ui/badge"
 import { ApiError, errorMessage, getJSON, sendJSON } from "@/lib/api"
+import { STATUS_TONE } from "@/lib/status"
 
 /* Mirrors internal/council: keep these in step with the Go structs. */
 
@@ -148,10 +149,10 @@ export function newBraindump(open: (id: string, sub?: string[]) => void, mode: B
 }
 
 export const STATUS: Record<CouncilStatus, { tone: Tone; label: string }> = {
-  running: { tone: "info", label: "Running" },
-  draft: { tone: "warning", label: "Waiting for approval" },
-  approved: { tone: "success", label: "Approved" },
-  failed: { tone: "danger", label: "Failed" },
+  running: { tone: STATUS_TONE.running, label: "Running" },
+  draft: { tone: STATUS_TONE.waiting, label: "Waiting for approval" },
+  approved: { tone: STATUS_TONE.merged, label: "Approved" },
+  failed: { tone: STATUS_TONE.failed, label: "Failed" },
 }
 
 export const VERDICT: Record<Verdict, { tone: Tone; label: string }> = {

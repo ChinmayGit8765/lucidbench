@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -49,11 +51,31 @@ func main() {
 	// The phone remote: off unless the operator turned it on in Settings.
 	// Start binds its own listener only then; lucidd stays on addr.
 	rem := remote.NewManager(filepath.Join(server.DataDir(), "remote"))
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           server.NewWith(cfg, server.Deps{Usage: use, Power: pwr, Remote: rem}),
-		ReadHeaderTimeout: 10 * time.Second,
+	srv := &http.Server{Addr: addr, ReadHeaderTimeout: 10 * time.Second}
+	// Settings › Restart engine: a fresh copy of this daemon takes over.
+	restart := &server.Restarter{
+		Exe:  os.Executable,
+		Args: os.Args[1:],
+		Env:  os.Environ(),
+		Shutdown: func(ctx context.Context) error {
+			rem.Close()
+			err := srv.Shutdown(ctx)
+			_ = srv.Close() // ends open event streams
+			return err
+		},
+		Start:   startProcess,
+		Exec:    execProcess,
+		Exit:    os.Exit,
+		InPlace: inPlace,
+		Delay:   300 * time.Millisecond,
 	}
+	srv.Handler = server.NewWith(cfg, server.Deps{Usage: use, Power: pwr, Remote: rem, Restart: restart.Restart})
+	ln, err := listen(addr, os.Getenv(server.RestartEnv) != "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	// After the main port: a restarted daemon binds the remote's port only
+	// once the old one has let go of both.
 	if err := rem.Start(); err != nil {
 		log.Print("remote: not listening: ", err)
 	}
@@ -61,7 +83,23 @@ func main() {
 		go cluster.KeepJoined(30 * time.Second)
 	}
 	log.Printf("lucidd %s listening on %s", version.Version, addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
+	}
+}
+
+// listen binds addr. A daemon started by a restart waits up to 15 seconds
+// for the one it replaces to close the port.
+func listen(addr string, restarted bool) (net.Listener, error) {
+	if addr == "" {
+		addr = ":http"
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil || !restarted || time.Now().After(deadline) {
+			return ln, err
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

@@ -68,6 +68,12 @@ export interface ModuleDef {
   /** Extensions only. */
   category?: ExtensionCategory
   requires?: Requirements
+  /**
+   * A core page that shows docker state of its own (System): the shell asks
+   * whether the engine is up while it is open, as it does for an added
+   * docker extension.
+   */
+  checksDocker?: boolean
   component?: LazyExoticComponent<ComponentType<ModulePageProps>>
   /**
    * Palette commands. A hook, so it may fetch while the palette is open; it

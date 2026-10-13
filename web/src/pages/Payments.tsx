@@ -46,7 +46,7 @@ export default function Payments({ subpath }: { subpath: string[] }) {
       <PageHeader
         icon={<CreditCard />}
         title="Payments"
-        description="Your Stripe account at a glance, and a test-mode setup for a project: products, prices, a payment link and a webhook. Nothing here moves money."
+        description="Your Stripe account at a glance, and a test-mode setup for a project. Nothing here moves money."
         actions={<RefreshButton refreshing={status.refreshing} updatedAt={status.updatedAt} />}
       />
       {status.error && !status.data ? (

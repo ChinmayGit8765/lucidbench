@@ -34,7 +34,7 @@ export default function Trello({ subpath }: { subpath: string[] }) {
       <PageHeader
         icon={<LayoutList />}
         title="Trello"
-        description="Your Trello boards as lists of cards. Trello owns them: add a card or move one between lists here, and every card opens in Trello."
+        description="Your Trello boards as lists of cards. Add or move a card here; each one opens in Trello."
         actions={<RefreshButton refreshing={status.refreshing} updatedAt={status.updatedAt} />}
       />
       {status.error && !status.data ? (

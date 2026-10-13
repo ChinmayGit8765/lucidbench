@@ -32,7 +32,7 @@ export default function Settings({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<SettingsIcon />}
         title="Settings"
-        description="How Lucidbench looks, what is in your sidebar, and how the engine runs. Appearance and the sidebar apply at once; engine settings are saved to config.yaml, and some take effect after a restart."
+        description="How Lucidbench looks, what is in your sidebar, and how the engine runs."
       />
       <Tabs label="Settings" items={TABS} value={tab} onChange={(t) => navigate(`/settings/${t}`)} />
       {tab === "appearance" && <Appearance focus={subpath[1]} />}

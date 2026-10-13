@@ -274,7 +274,7 @@ export default function Studio({ subpath }: ModulePageProps) {
       <PageHeader
         icon={<WandSparkles />}
         title="Prompt Studio"
-        description="Build the big prompts in sections, give them context from your projects and Memory, and see exactly what will be sent before you send it."
+        description="Build big prompts in sections, with context from your projects and Memory, and see what is sent."
         actions={
           <>
             <Button variant="secondary" size="sm" disabled={!draft || readOnly} onClick={() => setImproving(true)}>
